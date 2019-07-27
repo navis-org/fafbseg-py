@@ -31,8 +31,8 @@ auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14seg-
                               'API_TOKEN')
 
 # Fetch the autoseg neuron to transfer to manual
-x = pymaid.get_neuron(267355161, remote_instance=auto)              
+x = pymaid.get_neuron(267355161, remote_instance=auto)
 
 # Start the commit process (see video below for more)
-resp = fafbseg.commit_neuron(x, target_instance=manual)   
+resp = fafbseg.merge_neuron(x, target_instance=manual)
 ```
