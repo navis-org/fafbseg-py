@@ -68,7 +68,7 @@ x.get_annotations(remote_instance=auto)
 resp = fafbseg.merge_neuron(x, target_instance=manual)
 ```
 
-![merge example](https://files.slack.com/files-pri/T28A9UNDT-FLLC9M55Y/screencast.gif?pub_secret=ac4ee547ab)
+![merge example](https://github.com/flyconnectome/fafbseg-py/blob/master/media/screencast.gif?raw=true)
 
 ## Merge finished - What now?
 Success! The neuron has now been merged into existing manual tracings - what now?
