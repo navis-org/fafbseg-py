@@ -16,7 +16,6 @@
 import itertools
 import networkx as nx
 import numpy as np
-import pandas as pd
 import pymaid
 
 from tqdm import tqdm
@@ -24,10 +23,13 @@ from pymaid.cache import never_cache
 
 from .search import find_fragments
 
+import inquirer
+from inquirer.themes import GreenPassion
+
 
 @never_cache
-def merge_neuron(x, target_instance, merge_limit=1, update_radii=True,
-                 overlapping=None):
+def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
+                 merge_limit=1, update_radii=True, label_joins=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
@@ -41,10 +43,19 @@ def merge_neuron(x, target_instance, merge_limit=1, update_radii=True,
 
     Parameters
     ----------
-    x :                 pymaid.CatmaidNeuron
-                        Neuron/Fragment to commit to ``target_instance``.
+    x :                 pymaid.CatmaidNeuron/List
+                        Neuron(s)/fragment(s) to commit to ``target_instance``.
     target_instance :   pymaid.CatmaidInstance
                         Target Catmaid instance to commit the neuron to.
+    min_node_overlap :  int, optional
+                        Minimal overlap between `x` and a potentially
+                        overlapping neuron in ``target_instance``. If
+                        the fragment has less total nodes than `min_overlap`,
+                        the threshold will be lowered to:
+                        ``min_overlap = min(min_overlap, fragment.n_nodes)
+    min_nodes :         int, optional
+                        Minimum node count for potentially overlapping neurons
+                        in ``target_instance``.
     merge_limit :       int, optional
                         Distance threshold [um] for generating union of ``x``
                         and overlapping fragments in target instance.
@@ -52,11 +63,10 @@ def merge_neuron(x, target_instance, merge_limit=1, update_radii=True,
                         If True, will use radii in ``x`` to update radii of
                         overlapping fragments if (and only if) the nodes
                         do not currently have a radius (i.e. radius<=0).
-    overlapping :       list of skeleton IDs | CatmaidNeuronList, optional
-                        If you already know which neurons in the target
-                        instance are overlapping with ``x`` you can pass them
-                        explicitly and we can skip the step of searching for
-                        and confirming overlapping fragments.
+    label_joins :       If True, will label nodes at which old and new
+                        tracings have been joined with tags ("Joined from..."
+                        and "Joined with ...") and with a lower confidence of
+                        1.
 
     Returns
     -------
@@ -67,220 +77,191 @@ def merge_neuron(x, target_instance, merge_limit=1, update_radii=True,
                         error logs.
 
     """
-    if not isinstance(x, pymaid.CatmaidNeuron):
-        raise TypeError('Expected pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
+    if not isinstance(x, pymaid.CatmaidNeuronList):
+        if not isinstance(x, pymaid.CatmaidNeuron):
+            raise TypeError('Expected pymaid.CatmaidNeuron/List, got "{}"'.format(type(x)))
+        x = pymaid.CatmaidNeuronList(x)
 
-    # If overlapping fragments are provided by user
-    if overlapping:
-        if not isinstance(overlapping, pymaid.CatmaidNeuronList):
-            overlapping = pymaid.get_neurons(overlapping,
-                                             remote_instance=target_instance)
-        ol = overlapping
-    else:
-        # First get potential overlapping fragments in target_instance
-        ol = find_fragments(x, remote_instance=target_instance)
+    pymaid.set_loggers('WARNING')
 
+    # Throttle requests just to play it safe
+    # On a bad connection one might have to decrease max_threads further
+    target_instance.max_threads = min(target_instance.max_threads, 50)
+
+    # For user convenience, we will do all the stuff that needs user interaction
+    # first and then run the automatic merge:
+
+    # Start by find all overlapping fragments
+    overlapping = []
+    for n in tqdm(x, desc='Pre-processing neuron(s)'):
+        ol = find_fragments(n,
+                            min_node_overlap=min_node_overlap,
+                            min_nodes=min_nodes,
+                            remote_instance=target_instance)
+        overlapping.append(ol)
+
+    # Now have the user confirm merges before we actually make them
+    viewer = pymaid.Viewer(title='Confirm merges')
+    viewer.clear()
+    overlap_cnf = []
+    base_neurons = []
+    for n, ol in zip(x, overlapping):
+        # This asks user a bunch of questions prior to merge and upload
+        ol, bn = _confirm_overlap(n, ol, viewer=viewer)
+        overlap_cnf.append(ol)
+        base_neurons.append(bn)
+    viewer.close()
+
+    for i, (n, ol, bn) in enumerate(zip(x, overlap_cnf, base_neurons)):
+        print('Processing neuron "{}" [{}/{}]'.format(n.neuron_name, i, len(x)),
+              flush=True)
         # If no overlapping neurons proceed with just uploading.
         if not ol:
-            q = 'No overlapping fragments found in target instance. Proceed with ' \
-                'simply uploading the input neuron? [Y/N]'
-            answer = ''
-            while answer.lower() not in ['y', 'n']:
-                answer = input(q)
-
-            if answer.lower() == 'n':
-                return
-
-            resp = pymaid.upload_neuron(x,
+            print('No overlapping fragments to merge. Uploading...',
+                  end='', flush=True)
+            resp = pymaid.upload_neuron(n,
                                         import_tags=True,
                                         import_annotations=False,
                                         import_connectors=True,
                                         remote_instance=target_instance)
+            if 'error' in resp:
+                return resp
+            print('Done', flush=True)
+            continue
 
+        # Check if there are any duplicate node IDs between neuron ``x`` and the
+        # overlapping fragments and create new IDs for ``x`` if necessary
+        duplicated = n.nodes[n.nodes.treenode_id.isin(ol.nodes.treenode_id.values)]
+        if not duplicated.empty:
+            print('Duplicate node IDs found. Regenerating node tables... ',
+                  end='', flush=True)
+            max_ix = max(ol.nodes.treenode_id.max(), n.nodes.treenode_id.max()) + 1
+            new_ids = range(max_ix, max_ix + duplicated.shape[0])
+            id_map = {old: new for old, new in zip(duplicated.treenode_id, new_ids)}
+            n.nodes['treenode_id'] = n.nodes.treenode_id.map(lambda n: id_map.get(n, n))
+            n.nodes['parent_id'] = n.nodes.parent_id.map(lambda n: id_map.get(n, n))
+            n.connectors['treenode_id'] = n.connectors.treenode_id.map(lambda n: id_map.get(n, n))
+            print('Done.', flush=True)
+
+        # Combining the fragments into a single neuron is actually non-trivial:
+        # 1. Collapse nodes of our input neuron `x` into within-distance nodes
+        #    in the overlapping fragments (never the other way around!)
+        # 2. At the same time keep connectivity (i.e. edges) of the input-neuron
+        # 3. Keep track of the nodes' provenance (i.e. the contractions)
+        #
+        # In addition there are a lot of edge-cases to consider. For example:
+        # - multiple nodes collapsing onto the same node
+        # - nodes of overlapping fragments that are close enough to be collapsed
+        #   (e.g. orphan synapse nodes)
+
+        # Keep track of original skeleton IDs
+        for a in ol + n:
+            # Original skeleton of each node
+            a.nodes['origin_skeletons'] = a.skeleton_id
+            # Original skeleton of each connector
+            a.connectors['origin_skeletons'] = a.skeleton_id
+
+        print('Generating union of all fragments... ', end='', flush=True)
+        union, new_edges, collapsed_into = collapse_nodes2(n, ol,
+                                                           limit=merge_limit,
+                                                           base_neuron=bn)
+        print('Done.', flush=True)
+
+        print('Extracting new nodes to upload... ', end='', flush=True)
+        # Now we have to break the neuron into "new" fragments that we can upload
+        # First get the new and old nodes
+        new_nodes = union.nodes[union.nodes.origin_skeletons == n.skeleton_id].treenode_id.values
+        old_nodes = union.nodes[union.nodes.origin_skeletons != n.skeleton_id].treenode_id.values
+
+        # Now remove the already existing nodes from the union
+        only_new = pymaid.subset_neuron(union, new_nodes)
+
+        # And then break into continuous fragments for upload
+        frags = pymaid.break_fragments(only_new)
+        print('Done.', flush=True)
+
+        # Also get the new edges we need to generate
+        to_stitch = new_edges[~new_edges.parent_id.isnull()]
+
+        # We need this later -> no need to compute this for every uploaded fragment
+        cond1b = to_stitch.treenode_id.isin(old_nodes)
+        cond2b = to_stitch.parent_id.isin(old_nodes)
+
+        # Now upload each fragment and keep track of new node IDs
+        tn_map = {}
+        for f in tqdm(frags, desc='Uploading new tracings', leave=False):
+            # In cases of complete merging into existing neurons, the fragment
+            # will have no nodes
+            if f.n_nodes < 1:
+                continue
+            resp = pymaid.upload_neuron(f,
+                                        import_tags=True,
+                                        import_annotations=True,
+                                        import_connectors=True,
+                                        remote_instance=target_instance)
+
+            # Stop if there was any error while uploading
             if 'error' in resp:
                 return resp
 
-            return
+            # Collect old -> new node IDs
+            tn_map.update(resp['node_id_map'])
 
-        # Have user inspect larger fragments
-        ol.sort_values('n_nodes')
-        q = str(ol.summary()[['neuron_name', 'skeleton_id', 'n_nodes', 'n_connectors']])
-        print('{} overlapping fragments found:'.format(len(ol)))
-        print(q)
-        if any(ol.n_nodes > 1):
-            # Show and let user decide which ones to merge
-            v = pymaid.Viewer(title='Commit check')
-            v.add(x, color='w')
-            v.add(ol[ol.n_nodes > 10])
-            v.toggle_picking()
-            v.show_legend = True
+            # Now check if we can create any of the new edges by joining nodes
+            # Both treenode and parent ID have to be either existing nodes or
+            # newly uploaded
+            cond1a = to_stitch.treenode_id.isin(tn_map)
+            cond2a = to_stitch.parent_id.isin(tn_map)
 
-            # Ask user which neuron should survive
-            q = "Please check the fragments that potentially overlap with the input " \
-                "neuron (white).\nDeselect those that should not be merged by clicking " \
-                "on their names in the legend. Only neurons with >10 nodes are shown." \
-                "\nHit ENTER when ready to proceed or 'Q' to cancel."
+            to_gen = to_stitch.loc[(cond1a | cond1b) & (cond2a | cond2b)]
 
-            answer = input(q)
+            # Join nodes
+            for node in to_gen.itertuples():
+                # Make sure our base_neuron always come out as winner on top
+                if node.treenode_id in bn.nodes.treenode_id.values:
+                    winner, looser = node.treenode_id, node.parent_id
+                else:
+                    winner, looser = node.parent_id, node.treenode_id
 
-            v.close()
+                # We need to map winner and looser to the new node IDs
+                winner = tn_map.get(winner, winner)
+                looser = tn_map.get(looser, looser)
 
-            if 'q' in answer.lower():
-                return
+                # And now do the join
+                resp = pymaid.join_nodes(winner,
+                                         looser,
+                                         no_prompt=True,
+                                         tag_nodes=label_joins,
+                                         remote_instance=target_instance)
 
-            # Remove those that are not selected (keep in mind that some neurons
-            # won't even be in the viewer)
-            ol = pymaid.CatmaidNeuronList([n for n in ol if n.skeleton_id not in v.invisible])
+                # See if there was any error while uploading
+                if 'error' in resp:
+                    print('Error automatically joining nodes {} and {}: {}'.format(node.treenode_id, node.parent_id, resp['error']))
+                    # Skip changing confidences
+                    continue
 
-    # If no overlapping fragments remain, proceed to upload
-    if not ol:
-        q = 'It appears you do not want any overlapping fragments to be merged' \
-            'Proceed with simply uploading the input neuron? [Y/N]'
-        answer = ''
-        while answer.lower() not in ['y', 'n']:
-            answer = input(q)
+                # Pop this edge from new_edges and from condition
+                new_edges.drop(node.Index, inplace=True)
+                cond1b.drop(node.Index, inplace=True)
+                cond2b.drop(node.Index, inplace=True)
 
-        if answer.lower() == 'n':
-            return
+                # Change node confidences at new join
+                if label_joins:
+                    new_conf = {looser: 1}
+                    resp = pymaid.update_node_confidence(new_conf,
+                                                         remote_instance=target_instance)
 
-        resp = pymaid.upload_neuron(x,
-                                    import_tags=True,
-                                    import_annotations=False,
-                                    import_connectors=True,
-                                    remote_instance=target_instance)
+        # Update node radii
+        if update_radii:
+            print('Updating radii of existing nodes... ', end='', flush=True)
+            resp = update_node_radii(source=n, target=ol,
+                                     remote_instance=target_instance,
+                                     limit=merge_limit,
+                                     skip_existing=True)
+            print('Done.', flush=True)
 
-        return resp
-
-    # Check if there are any duplicate node IDs between neuron ``x`` and the
-    # overlapping fragments and create new IDs for ``x`` if necessary
-    duplicated = x.nodes[x.nodes.treenode_id.isin(ol.nodes.treenode_id.values)]
-    if not duplicated.empty:
-        print('Duplicate node IDs found. Regenerating node tables... ',
-              end='', flush=True)
-        max_ix = max(ol.nodes.treenode_id.max(), x.nodes.treenode_id.max()) + 1
-        new_ids = range(max_ix, max_ix + duplicated.shape[0])
-        id_map = {old: new for old, new in zip(duplicated.treenode_id, new_ids)}
-        x.nodes['treenode_id'] = x.nodes.treenode_id.map(lambda n: id_map.get(n, n))
-        x.nodes['parent_id'] = x.nodes.parent_id.map(lambda n: id_map.get(n, n))
-        x.connectors['treenode_id'] = x.connectors.treenode_id.map(lambda n: id_map.get(n, n))
-        print('Done.', flush=True)
-
-    # Some safeguards
-    if sum([not isinstance(s, type(None)) for s in ol.soma]):
-        q = 'Merging the selected fragments would generate a neuron with two ' \
-            'somas! Proceed anyway? [Y/N]'
-        answer = ''
-        while answer.lower() not in ['y', 'n']:
-            answer = input(q)
-
-        if answer.lower() == 'n':
-            return
-
-    # Ask user which neuron should survive
-    s = str(ol.summary()[['neuron_name', 'skeleton_id', 'n_nodes', 'n_connectors']])
-    print('Remaining fragments:')
-    print(s)
-    q = "\nAbove fragments and your input neuron will be merged into a " \
-        "single neuron.\nAll annotations will be preserved but only the neuron " \
-        "used as merge target will keep its name and skeleton ID.\nPlease enter " \
-        "the index of the neuron you would like to use as merge target! [0] "
-    inp = input(q)
-
-    # Now make union of these fragments
-    if not inp:
-        base_neuron = ol[0]
-    else:
-        base_neuron = ol[int(inp)]
-
-    # Combining the fragments into a single neuron is actually non-trivial:
-    # 1. Collapse nodes of our input neuron `x` into within-distance nodes
-    #    in the overlapping fragments (never the other way around!)
-    # 2. At the same time keep connectivity (i.e. edges) of the input-neuron
-    # 3. Keep track of the nodes' provenance (i.e. the contractions)
-    #
-    # In addition there are a lot of edge-cases to consider. For example:
-    # - multiple nodes collapsing onto the same node
-    # - nodes of overlapping fragments that are close enough to be collapsed
-    #   (e.g. orphan synapse nodes)
-
-    # Keep track of original skeleton IDs
-    for n in ol + x:
-        # Original skeleton of each node
-        n.nodes['origin_skeletons'] = n.skeleton_id
-        # Original skeleton of each connector
-        n.connectors['origin_skeletons'] = n.skeleton_id
-
-    print('Generating union of all fragments... ', end='', flush=True)
-    union, new_edges, collapsed_into = collapse_nodes2(x, ol,
-                                                       limit=merge_limit,
-                                                       base_neuron=base_neuron)
-    print('Done.', flush=True)
-
-    print('Extracting new nodes to upload... ', end='', flush=True)
-    # Now we have to break the neuron into "new" fragments that we can upload
-    # First remove the already existing nodes from the union
-    new_nodes = union.nodes[union.nodes.origin_skeletons == x.skeleton_id].treenode_id.values
-    only_new = pymaid.subset_neuron(union, new_nodes)
-
-    # Break into continuous fragments for upload
-    frags = pymaid.break_fragments(only_new)
-    print('Done.', flush=True)
-
-    # Rename them (helps with debugging if something went wrong)
-    for i, f in enumerate(frags):
-        f.neuron_name = '{} (upload fragment {})'.format(x.neuron_name, i)
-
-    # Now upload each fragment and keep track of new node IDs
-    tn_map = {}
-    for n in tqdm(frags, desc='Uploading new tracings', leave=False):
-        resp = pymaid.upload_neuron(n,
-                                    import_tags=True,
-                                    import_annotations=False,
-                                    import_connectors=True,
-                                    remote_instance=target_instance)
-
-        # Stop if there was any error while uploading
-        if 'error' in resp:
-            return resp
-
-        # Collect old -> new node IDs
-        tn_map.update(resp['node_id_map'])
-
-    # Join nodes
-    to_stitch = new_edges[~new_edges.parent_id.isnull()]
-    for n in tqdm(to_stitch.itertuples(),
-                  desc='Stitching',
-                  total=to_stitch.shape[0],
-                  leave=False):
-        # Make sure our base_neuron always come out as winner on top
-        if n.treenode_id in base_neuron.nodes.treenode_id.values:
-            winner, looser = n.treenode_id, n.parent_id
-        else:
-            winner, looser = n.parent_id, n.treenode_id
-
-        # We need to map winner and looser to the new node IDs
-        winner = tn_map.get(winner, winner)
-        looser = tn_map.get(looser, looser)
-
-        resp = pymaid.join_nodes(winner,
-                                 looser,
-                                 no_prompt=True,
-                                 remote_instance=target_instance)
-
-        # Stop if there was any error while uploading
-        if 'error' in resp:
-            print('Error automatically joining nodes {} and {}: {}'.format(n.treenode_id, n.parent_id, resp['error']))
-
-    # Update node radii
-    if update_radii:
-        print('Updating radii of existing nodes... ', end='', flush=True)
-        resp = update_node_radii(source=x, target=ol,
-                                 remote_instance=target_instance,
-                                 limit=merge_limit,
-                                 skip_existing=True)
-        print('Done.', flush=True)
-
-    print('Success!')
+        print('Neuron "{}" successfully merged into target instance as "{}" #{}'.format(n.neuron_name, bn.neuron_name, bn.skeleton_id),
+              flush=True)
 
     return
 
@@ -449,10 +430,10 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
 
 
 def collapse_nodes2(A, B, limit=2, base_neuron=None):
-    """Merge neuron A into neuron(s) B creating a union.
+    """Merge neuron A into neuron(s) B creating a union of both.
 
     This implementation uses edge contraction on the neurons' graph to ensure
-    maximum connectivity. Only works if the neurons collectively form a
+    maximum connectivity. Only works if the fragments collectively form a
     continuous tree (i.e. you must be certain that they partially overlap).
 
     Parameters
@@ -575,7 +556,7 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
 
     # Add connectors back on
     union.connectors = union_simple.connectors.drop_duplicates(subset='connector_id')
-    union.connectors['treenode_id'] = union.connectors.treenode_id.map(lambda x: clps_map.get(x, x))
+    union.connectors.loc[:, 'treenode_id'] = union.connectors.treenode_id.map(lambda x: clps_map.get(x, x))
 
     # Find the newly added edges (existing edges should not have been modified
     # - except for changing direction due to reroot)
@@ -644,3 +625,117 @@ def update_node_radii(source, target, remote_instance, limit=2, skip_existing=Tr
     return pymaid.update_radii(dict(zip(tn_ids, new_radii)),
                                remote_instance=remote_instance)
 
+
+def _confirm_overlap(x, fragments, viewer=None):
+    """Show dialogs to confirm overlapping fragments."""
+    print('{}: {} overlapping fragments found'.format(x.neuron_name, len(fragments)))
+    if fragments:
+        # Have user inspect fragments
+        # Show larger fragments in 3d viewer
+        if any(fragments.n_nodes > 10):
+            # Show and let user decide which ones to merge
+            if not viewer:
+                viewer = pymaid.Viewer(title='Check overlap')
+            # Make sure viewer is actually visible and cleared
+            viewer.show()
+            viewer.clear()
+            # Add original skeleton
+            viewer.add(x, color='w')
+            viewer.add(fragments[fragments.n_nodes > 10].downsample(10, inplace=False))
+            viewer.picking = True
+            viewer._picking_text.visible = True
+            viewer.show_legend = True
+
+        msg = '\nPlease check these large fragments for overlap and deselect ' \
+              'neurons that you DO NOT want to have merged by clicking on ' \
+              'their names in the legend.\nHit ENTER when you are ready to ' \
+              'proceed or CTRL-C to cancel.'
+
+        try:
+            _ = input(msg)
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt('Merge process aborted by user.')
+        except BaseException:
+            raise
+
+        # Remove deselected fragments (mind you not all fragments are on viewer)
+        fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
+
+        # Now ask for smaller fragments via CLI
+        fragments.sort_values('n_nodes')
+        s = fragments.summary(add_cols=['overlap_score'])[['neuron_name',
+                                                           'skeleton_id',
+                                                           'n_nodes',
+                                                           'n_connectors',
+                                                           'overlap_score']]
+
+        # Ask user which neuron should be merged
+        print("\nPlease check the fragments that potentially overlap with the "
+              "input neuron (white).\nDeselect those that should NOT be "
+              "merged using the arrows keys.\nHit ENTER when you are ready "
+              "to proceed or CTRL-C to abort")
+        msg = str(s).split('\n')[0]
+        choices = [(v, i) for i, v in enumerate(str(s).split('\n')[1:])]
+        q = [inquirer.Checkbox(name='selection',
+                               message=msg,
+                               choices=choices,
+                               default=list(range(len(choices))))]
+
+        # Ask the question
+        selection = inquirer.prompt(q, theme=GreenPassion()).get('selection')
+
+        if isinstance(selection, type(None)):
+            raise SystemExit('Merge process aborted by user.')
+
+        # Remove fragments that are not selected
+        fragments = fragments[selection]
+
+    # If no overlapping fragments (either non from the start or all removed
+    # during filtering) ask if just proceed with upload
+    if not fragments:
+        msg = '\nNo overlapping fragments to be merged found in target instance. ' \
+              'Proceed with uploading this neuron?'
+        q = [inquirer.Confirm(name='confirm', message=msg)]
+        confirm = inquirer.prompt(q, theme=GreenPassion()).get('confirm')
+
+        if not confirm:
+            raise SystemExit('Merge process aborted by user.')
+
+        base_neuron = None
+    # If any fragments left, ask for base neuron
+    else:
+        # Ask user which neuron to use as merge target
+        s = fragments.summary(add_cols=['overlap_score'])[['neuron_name',
+                                                           'skeleton_id',
+                                                           'n_nodes',
+                                                           'n_connectors',
+                                                           'overlap_score']]
+        print("\nAbove fragments and your input neuron will be merged into a "
+              "single neuron.\nAll annotations will be preserved but only the "
+              "neuron used as merge target will keep its name and skeleton ID."
+              "\nPlease select the neuron you would like to use as merge target!"
+              "\n                  " + str(s).split('\n')[0])
+        msg = 'Merge target'
+        choices = [(v, i) for i, v in enumerate(str(s).split('\n')[1:])]
+        q = [inquirer.List(name='base_neuron',
+                           message=msg,
+                           choices=choices)]
+        # Ask the question
+        bn = inquirer.prompt(q, theme=GreenPassion()).get('base_neuron')
+
+        if isinstance(bn, type(None)):
+            raise ValueError("Merge aborted by user")
+
+        base_neuron = fragments[bn]
+
+    # Some safeguards
+    if sum([not isinstance(s, type(None)) for s in fragments.soma]) > 1:
+        msg = '\nMerging the selected fragments would generate a neuron with ' \
+              'two somas! Proceed anyway?'
+        q = [inquirer.Confirm(name='confirm', message=msg)]
+        confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
+
+        if not confirm:
+            raise SystemExit('Merge process aborted by user.')
+
+    return fragments, base_neuron
