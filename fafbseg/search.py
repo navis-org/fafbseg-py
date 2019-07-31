@@ -160,6 +160,11 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
 
     if ol:
         ol = pymaid.get_neurons(ol, remote_instance=remote_instance)
+
+        # Make sure it's a neuronlist
+        if not isinstance(ol, pymaid.CatmaidNeuronList):
+            ol = pymaid.CatmaidNeuronList(ol)
+
         for n, s in zip(ol, scores):
             n.overlap_score = s
     else:
