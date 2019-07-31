@@ -73,12 +73,14 @@ resp = fafbseg.merge_neuron(x, target_instance=manual)
 ## Merge finished - What now?
 Success! The neuron has now been merged into existing manual tracings - what now?
 
-*Minimally* you should have a look at the sites where existing and new
+**Minimally** you should have a look at the sites where existing and new
 tracings were joined. The respective nodes will both be tagged
-(`Joined from/into {SKELETON_ID}`) and have a confidence of 1 so that they are
-easy to find in the treenode table.
+with `Joined from/into {SKELETON_ID}` and have a confidence of 1 so that they are
+easy to find in the treenode table:
 
-Depending on how much you care about the neuron, you want do a full review
+![screeshot1](https://github.com/flyconnectome/fafbseg-py/blob/master/media/screenshot1.png?raw=true)
+
+Depending on how much you care about the neuron, you want do a **full review**
 to make sure that nothing was missed during the merge process.
 
 ## Caveats
