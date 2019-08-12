@@ -3,16 +3,19 @@ Tools to work with manually generated and auto-segmented data in FAFB.
 
 ## Install
 Because this is a private repository, installation is a bit more complicated
-than usual. The easiest way is to first clone the repository:
+than usual. The easiest way to:
+
+1. Install Github's [Large File Storage](https://git-lfs.github.com)
+2. Clone the repository:
 
 ```
 git clone https://github.com/flyconnectome/fafbseg-py.git
 ```
 
-Then CD into the directory and install the package in "edit" mode:
+3. Then ``cd`` into the directory and install the package in "edit" mode:
 
 ```
-pip install -e .
+pip3 install -e .
 ```
 
 This will simply create a pointer for Python to this repository. To update you
