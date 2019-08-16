@@ -21,15 +21,137 @@ import pymaid
 from tqdm import tqdm
 from pymaid.cache import never_cache
 
-from .search import find_fragments
+from .search import find_fragments, neuron_to_segments, segments_to_neuron
 
 import inquirer
 from inquirer.themes import GreenPassion
 
 
 @never_cache
+def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
+                         min_node_overlap=4, **kwargs):
+    """Use autoseg to find and annotate potential missed branches.
+
+    Parameters
+    ----------
+    x :                 pymaid.CatmaidNeuron/List
+                        Neuron(s) to search for missed branches.
+    autoseg_instance :  pymaid.CatmaidInstance
+                        CATMAID instance containing the autoseg skeletons.
+    tag :               bool, optional
+                        If True, will tag nodes of x that might have missed
+                        branches with "missed branch?".
+    tag_size_thresh :   int, optional
+                        Size threshold in microns of cable for tagging
+                        potentially missed branches.
+    min_node_overlap :  int, optional
+                        Minimum number of nodes that input neuron(s) x must
+                        overlap with given segmentation ID for it to be
+                        included.
+    **kwargs
+                        Keyword arguments passed to
+                        ``fafbseg.neuron_from_segments``.
+
+    Returns
+    -------
+    summary :           pandas.DataFrame
+                        DataFrame containing a summary of potentially missed
+                        branches.
+
+    Examples
+    --------
+    Setup
+
+    >>> import fafbseg
+    >>> import brainmaps as bm
+    >>> import pymaid
+
+    >>> # Set up connections to manual and autoseg CATMAID
+    >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
+    >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
+
+    >>> # Initialise brainmaps
+    >>> session = bm.acquire_credentials()
+    >>> bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
+
+    Find missed branches and tag them
+
+    >>> # Fetch a neuron
+    >>> x = pymaid.get_neuron(16, remote_instance=manual)
+    >>> # Find and tag missed branches
+    >>> summary = fafbseg.find_missed_branches(x, autoseg_instance=auto)
+    >>> summary.head()
+       n_nodes  cable_length   node_id
+    0      110     28.297424   3306395
+    1       90     23.976504  20676047
+    2       64     15.851333  23419997
+    3       29      7.494350   6298769
+    4       16      3.509739  15307841
+
+    """
+    if isinstance(x, pymaid.CatmaidNeuronList):
+        to_concat = []
+        for n in tqdm(x, 'Processing neurons'):
+            res = find_missed_branches(n, autoseg_instance=autoseg_instance,
+                                       tag=tag, tag_size_thresh=tag_size_thresh,
+                                       **kwargs)
+            res['skeleton_id'] = n.skeleton_id
+            to_concat.append(res)
+
+        return pd.concat(to_concat, ignore_index=True)
+    elif not isinstance(x, pymaid.CatmaidNeuron):
+        raise TypeError('Input must be CatmaidNeuron/List, got "{}"'.format(type(x)))
+
+    # First collect segments constituting this neuron
+    overlap_matrix = neuron_to_segments(x)
+
+    # Filter
+    seg_ids = overlap_matrix.loc[overlap_matrix[x.skeleton_id] >= min_node_overlap].index.tolist()
+
+    # Now try finding the corresponding skeletons
+    nl = segments_to_neuron(seg_ids, autoseg_instance=autoseg_instance, verbose=False)
+
+    # Next create a union
+    for n in nl:
+        n.nodes['origin'] = 'autoseg'
+    x.nodes['origin'] = 'query'
+    union = pymaid.union_neurons(x, nl, base_neuron=x)
+
+    # Subset to autoseg nodes
+    autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
+    autoseg = pymaid.subset_neuron(union, autoseg_nodes)
+
+    # Split into fragments
+    frags = pymaid.break_fragments(autoseg)
+
+    # Generate summary
+    data = []
+    nodes = union.nodes.set_index('treenode_id')
+    for n in frags:
+        # Find parent node in union
+        pn = nodes.loc[n.root[0], 'parent_id']
+        data.append([n.n_nodes, n.cable_length, pn])
+    df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id'])
+    df.sort_values('cable_length', ascending=False, inplace=True)
+
+    if tag:
+        to_tag = df[df.cable_length >= tag_size_thresh].node_id.values
+
+        resp = pymaid.add_tags(to_tag,
+                               tags='missed branch?',
+                               node_type='TREENODE',
+                               remote_instance=x._remote_instance)
+
+        if 'error' in resp:
+            return df, resp
+
+    return df
+
+
+@never_cache
 def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
-                 merge_limit=1, update_radii=True, label_joins=True):
+                 merge_limit=1, prevent_bristles=False, update_radii=True,
+                 label_joins=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
