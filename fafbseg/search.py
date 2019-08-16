@@ -227,7 +227,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
 
     # Get segment IDs for the input neuron
     x.nodes['seg_id'] = bm.get_seg_at_location(x.nodes[['x', 'y', 'z']].values,
-                                               chunksize=remote_instance.max_threads*10)
+                                               chunksize=remote_instance.max_threads * 100)
 
     # Count segment IDs
     x_seg_counts = x.nodes.groupby('seg_id').treenode_id.count().reset_index(drop=False)
@@ -246,7 +246,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
 
     # Add segment IDs
     tn_table['seg_id'] = bm.get_seg_at_location(tn_table[['x', 'y', 'z']].values,
-                                                chunksize=remote_instance.max_threads*10)
+                                                chunksize=remote_instance.max_threads * 100)
 
     # Now group by neuron and by segment
     seg_counts = tn_table.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
