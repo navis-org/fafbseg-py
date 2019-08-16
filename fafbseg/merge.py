@@ -584,10 +584,17 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
                             NodeA -collapsed-into-> NodeB
 
     """
-    if not isinstance(A, pymaid.CatmaidNeuron):
+    if isinstance(A, pymaid.CatmaidNeuronList):
+        if len(A) == 1:
+            A = A[0]
+        else:
+            A = pymaid.stitch_neurons(A, method="NONE")
+    elif not isinstance(A, pymaid.CatmaidNeuron):
         raise TypeError('`A` must be a CatmaidNeuron, got "{}"'.format(type(A)))
 
-    if not isinstance(B, pymaid.CatmaidNeuronList):
+    if isinstance(B, pymaid.CatmaidNeuron):
+        B = pymaid.CatmaidNeuronList(B)
+    elif not isinstance(B, pymaid.CatmaidNeuronList):
         raise TypeError('`B` must be a CatmaidNeuronList, got "{}"'.format(type(B)))
 
     # This is just check on the off-chance that skeleton IDs are not unique
