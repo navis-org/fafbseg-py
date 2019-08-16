@@ -16,6 +16,7 @@
 import itertools
 import networkx as nx
 import numpy as np
+import pandas as pd
 import pymaid
 
 from tqdm import tqdm
@@ -149,9 +150,9 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 
 
 @never_cache
-def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
-                 merge_limit=1, prevent_bristles=False, update_radii=True,
-                 label_joins=True):
+def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
+                 merge_limit=1, min_upload_size=0, min_upload_nodes=1,
+                 update_radii=True, label_joins=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
@@ -175,12 +176,26 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
                         the fragment has less total nodes than `min_overlap`,
                         the threshold will be lowered to:
                         ``min_overlap = min(min_overlap, fragment.n_nodes)
-    min_nodes :         int, optional
+    min_overlap_size :  int, optional
                         Minimum node count for potentially overlapping neurons
-                        in ``target_instance``.
+                        in ``target_instance``. Use this to e.g. exclude
+                        single-node synapse orphans.
     merge_limit :       int, optional
-                        Distance threshold [um] for generating union of ``x``
-                        and overlapping fragments in target instance.
+                        Distance threshold [um] for collapsing nodes of ``x``
+                        into overlapping fragments in target instance. Decreasing
+                        this will help if your neuron has complicated branching
+                        patterns (e.g. uPN dendrites) at the cost of potentially
+                        creating duplicate parallel tracings in the neuron's
+                        backbone.
+    min_upload_size :   float, optional
+                        Minimum size in microns for upload of new branches:
+                        branches found in ``x`` but not in the overlapping
+                        neuron(s) in ``target_instance`` are uploaded in
+                        fragments. Use this parameter to exclude small branches
+                        that might not be worth the additional review time.
+    min_upload_nodes :  int, optional
+                        As ``min_upload_size`` but for number of nodes instead
+                        of cable length.
     update_radii :      bool, optional
                         If True, will use radii in ``x`` to update radii of
                         overlapping fragments if (and only if) the nodes
@@ -197,6 +212,33 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
     dict
                         If something failed, returns server responses with
                         error logs.
+
+    Examples
+    --------
+    Setup
+
+    >>> import fafbseg
+    >>> import brainmaps as bm
+    >>> import pymaid
+
+    >>> # Set up connections to manual and autoseg CATMAID
+    >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
+    >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
+
+    >>> # Initialise brainmaps
+    >>> session = bm.acquire_credentials()
+    >>> bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
+
+    Merge a neuron from autoseg into v14
+
+    >>> # Fetch the autoseg neuron to transfer to v14
+    >>> x = pymaid.get_neuron(267355161, remote_instance=auto)
+
+    >>> # Get the neuron's annotations so that they can be merged too
+    >>> x.get_annotations(remote_instance=auto)
+
+    >>> # Start the commit process (see on Github repository below for a demonstration)
+    >>> resp = fafbseg.merge_neuron(x, target_instance=manual)
 
     """
     if not isinstance(x, pymaid.CatmaidNeuronList):
@@ -218,7 +260,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
     for n in tqdm(x, desc='Pre-processing neuron(s)'):
         ol = find_fragments(n,
                             min_node_overlap=min_node_overlap,
-                            min_nodes=min_nodes,
+                            min_nodes=min_overlap_size,
                             remote_instance=target_instance)
         overlapping.append(ol)
 
@@ -316,6 +358,11 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_nodes=1,
             # will have no nodes
             if f.n_nodes < 1:
                 continue
+            if f.cable_length < min_upload_size:
+                continue
+            if f.n_nodes < min_upload_nodes:
+                continue
+
             resp = pymaid.upload_neuron(f,
                                         import_tags=True,
                                         import_annotations=True,
