@@ -23,13 +23,136 @@ from pymaid.cache import never_cache
 from tqdm import tqdm
 
 
-@never_cache
+def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
+                       verbose=True):
+    """Retrieve autoseg neurons of given segmentation ID(s).
+
+    If a given segmentation ID has been merged into another fragment, will try
+    retrieving by annotation.
+
+    Parameters
+    ----------
+    seg_ids :           int | list of int
+                        Segmentation ID(s) of autoseg skeletons to retrieve.
+    autoseg_instance :  pymaid.CatmaidInstance
+                        Instance with autoseg skeletons.
+    name_pattern :      str, optional
+                        Segmentation IDs are encoded in the name. Use parameter
+                        this to define that pattern.
+
+
+    Returns
+    -------
+    CatmaidNeuronList
+
+    """
+    assert isinstance(autoseg_instance, pymaid.CatmaidInstance)
+
+    seg_ids = pymaid.utils._make_iterable(seg_ids)
+
+    # First find neurons by name
+    names = [name_pattern.format(id=i) for i in seg_ids]
+    by_name = pymaid.get_skids_by_name(names,
+                                       allow_partial=False,
+                                       remote_instance=autoseg_instance)
+
+    # Look for missing IDs
+    missing = [n for n in names if n not in by_name.name.values]
+
+    # Try finding by annotation (temporarily raise logger level)
+    old_lvl = pymaid.logger.level
+    pymaid.set_loggers('ERROR')
+    by_annotation = pymaid.get_skids_by_annotation(missing,
+                                                   raise_not_found=False,
+                                                   remote_instance=autoseg_instance)
+    pymaid.set_loggers(old_lvl)
+
+    # Get those neurons
+    to_fetch = by_annotation + by_name.skeleton_id.tolist()
+
+    if not to_fetch:
+        raise ValueError("None of the provided segmentation IDs could be found")
+
+    nl = pymaid.get_neurons(to_fetch,
+                            remote_instance=autoseg_instance)
+
+    # Figure out which we are still missing
+    if verbose:
+        nl.get_annotations()
+        all_annotations = set([a for an in nl.annotations for a in an])
+
+        missing = [s for n, s in zip(names, seg_ids) if n not in nl.neuron_name and n not in all_annotations]
+
+        if missing:
+            print("{} (of {}) segmentation ID(s) could not be found: {}".format(len(missing),
+                                                                                len(seg_ids),
+                                                                                ", ".join(missing)))
+
+    return nl
+
+
+def neuron_to_segments(x, **kwargs):
+    """Use brainmaps API to return segment IDs overlapping with a given neuron.
+
+    This is in essence a higher-level function of brainmappy's
+    get_seg_at_location.
+
+    Parameters
+    ----------
+    x :                 CatmaidNeuron/List
+                        Neurons for which to return segment IDs.
+    **kwargs
+                        Keyword arguments passed to
+                        `brainmappy.get_seg_at_location`. Use this to set a
+                        lower `chunksize` (default 10e3) if you are
+                        experiencing "Service Unavailable" errors.
+
+    Returns
+    -------
+    overlap_matrix :    pandas.DataFrame
+                        DataFrame of segment IDs (rows) and skeleton IDs
+                        (columns) with overlap in nodes as values::
+
+                            skeleton_id  16  3245
+                            seg_id
+                            10336680915   5     0
+                            10336682132   0     1
+
+    """
+    if isinstance(x, pymaid.CatmaidNeuron):
+        x = pymaid.CatmaidNeuronList(x)
+
+    assert isinstance(x, pymaid.CatmaidNeuronList)
+
+    # We must not perform this on x.nodes as this is a temporary property
+    nodes = x.nodes
+
+    # Get segmentation IDs
+    nodes['seg_id'] = bm.get_seg_at_location(nodes[['x', 'y', 'z']].values,
+                                             chunksize=kwargs.get('chunksize', 1e3))
+
+    # Count segment IDs
+    seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
+    seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
+
+    # Remove seg IDs 0 (glia?)
+    seg_counts = seg_counts[seg_counts.seg_id != '0']
+
+    # Turn into matrix where columns are skeleton IDs, segment IDs are rows
+    # and values are the overlap counts
+    matrix = seg_counts.pivot(index='seg_id', columns='skeleton_id', values='counts')
+
+    return matrix
+
+
 def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     """Find fragments constituting a neuron in another CatmaidInstance,
     e.g. manual tracings for an autoseg neuron.
 
-    This function works by:
-        1. Traverse neurites of ``x`` and find neurons within 2.5 microns radius.
+    This function is designed to not require overlapping neurons to have
+    references (e.g. in their name) to segmentation IDs:
+        1. Traverse neurites of ``x`` search within 2.5 microns radius for
+           potentially overlapping fragments.
         2. Collect segmentation IDs for the input neuron and all potentially
            overlapping fragments using the brainmaps API.
         3. Return fragments that overlap with at least ``min_overlap`` nodes
