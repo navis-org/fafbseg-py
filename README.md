@@ -21,7 +21,13 @@ pip3 install -e .
 This will simply create a pointer for Python to this repository. To update you
 can now simply `git pull`.
 
-## Dependencies
+## Requirements
+You will need brainmaps API access. See [brainmappy](https://github.com/schlegelp/brainmappy)
+for details.
+
+On top of that, you need to install below dependencies.
+
+### Dependencies
 Make sure you have the *most_recent* version of the following libraries:
 
 - [pymaid](https://pymaid.readthedocs.io/en/latest/): `pip3 install git+git://github.com/schlegelp/pymaid@master`
