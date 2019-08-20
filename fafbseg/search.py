@@ -22,6 +22,9 @@ from pymaid.cache import never_cache
 
 from tqdm import tqdm
 
+from . import utils
+use_pbars = utils.use_pbars
+
 
 def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
                        verbose=True):
