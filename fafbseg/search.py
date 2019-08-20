@@ -51,12 +51,15 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     """
     assert isinstance(autoseg_instance, pymaid.CatmaidInstance)
 
+    assert isinstance(seg_ids, (list, np.ndarray, set, tuple, pd.Index))
+
     seg_ids = pymaid.utils._make_iterable(seg_ids)
 
     # First find neurons by name
     names = [name_pattern.format(id=i) for i in seg_ids]
     by_name = pymaid.get_skids_by_name(names,
                                        allow_partial=False,
+                                       raise_not_found=False,
                                        remote_instance=autoseg_instance)
 
     to_fetch = by_name.skeleton_id.tolist()
@@ -86,12 +89,12 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
         nl.get_annotations()
         all_annotations = set([a for an in nl.annotations for a in an])
 
-        missing = [s for n, s in zip(names, seg_ids) if n not in nl.neuron_name and n not in all_annotations]
+        missing = [str(s) for n, s in zip(names, seg_ids) if n not in nl.neuron_name and n not in all_annotations]
 
         if missing:
-            print("{} (of {}) segmentation ID(s) could not be found: {}".format(len(missing),
-                                                                                len(seg_ids),
-                                                                                ", ".join(missing)))
+            msg = "{} out of of {} segmentation IDs could not be found: {}"
+            msg = msg.format(len(missing), len(seg_ids), ", ".join(missing))
+            print(msg)
 
     return nl
 
