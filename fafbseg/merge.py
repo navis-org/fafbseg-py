@@ -131,7 +131,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     for n in nl:
         n.nodes['origin'] = 'autoseg'
     x.nodes['origin'] = 'query'
-    union = pymaid.union_neurons(x, nl, base_neuron=x)
+    union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
 
     # Subset to autoseg nodes
     autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
