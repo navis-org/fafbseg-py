@@ -62,6 +62,14 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
                         DataFrame containing a summary of potentially missed
                         branches.
 
+    If input is a single neuron
+
+    fragments :         pymaid.CatmaidNeuronList
+                        Fragments found to be potentially overlapping with input
+                        neuron.
+    branches :          pymaid.CatmaidNeuronList
+                        Potentially missed branches extracted from ``fragments``.
+
     Examples
     --------
     Setup
@@ -95,12 +103,16 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     """
     if isinstance(x, pymaid.CatmaidNeuronList):
         to_concat = []
-        for n in tqdm(x, 'Processing neurons'):
-            res = find_missed_branches(n, autoseg_instance=autoseg_instance,
-                                       tag=tag, tag_size_thresh=tag_size_thresh,
-                                       **kwargs)
-            res['skeleton_id'] = n.skeleton_id
-            to_concat.append(res)
+        for n in tqdm(x, desc='Processing neurons', disable=use_pbars, leave=False):
+            (summary,
+             frags,
+             branches) = find_missed_branches(n,
+                                              autoseg_instance=autoseg_instance,
+                                              tag=tag,
+                                              tag_size_thresh=tag_size_thresh,
+                                              **kwargs)
+            summary['skeleton_id'] = n.skeleton_id
+            to_concat.append(summary)
 
         return pd.concat(to_concat, ignore_index=True)
     elif not isinstance(x, pymaid.CatmaidNeuron):
@@ -123,22 +135,30 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 
     # Subset to autoseg nodes
     autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
-    autoseg = pymaid.subset_neuron(union, autoseg_nodes)
 
-    # Split into fragments
-    frags = pymaid.break_fragments(autoseg)
+    # Process fragments if any autoseg nodes left
+    if autoseg_nodes.shape[0]:
+        autoseg = pymaid.subset_neuron(union, autoseg_nodes)
 
-    # Generate summary
-    data = []
-    nodes = union.nodes.set_index('treenode_id')
-    for n in frags:
-        # Find parent node in union
-        pn = nodes.loc[n.root[0], 'parent_id']
-        data.append([n.n_nodes, n.cable_length, pn])
-    df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id'])
+        # Split into fragments
+        frags = pymaid.break_fragments(autoseg)
+
+        # Generate summary
+        data = []
+        nodes = union.nodes.set_index('treenode_id')
+        for n in frags:
+            # Find parent node in union
+            pn = nodes.loc[n.root[0], 'parent_id']
+            pn_co = nodes.loc[pn, ['x', 'y', 'z']].values
+            data.append([n.n_nodes, n.cable_length, pn, pn_co])
+    else:
+        data = []
+        frags = pymaid.CatmaidNeuronList([])
+
+    df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id', 'node_loc'])
     df.sort_values('cable_length', ascending=False, inplace=True)
 
-    if tag:
+    if tag and not df.empty:
         to_tag = df[df.cable_length >= tag_size_thresh].node_id.values
 
         resp = pymaid.add_tags(to_tag,
@@ -149,7 +169,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
         if 'error' in resp:
             return df, resp
 
-    return df
+    return df, nl, frags
 
 
 @never_cache
