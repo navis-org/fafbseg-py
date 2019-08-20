@@ -103,7 +103,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     """
     if isinstance(x, pymaid.CatmaidNeuronList):
         to_concat = []
-        for n in tqdm(x, desc='Processing neurons', disable=use_pbars, leave=False):
+        for n in tqdm(x, desc='Processing neurons', disable=not use_pbars, leave=False):
             (summary,
              frags,
              branches) = find_missed_branches(n,
@@ -280,7 +280,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
 
     # Start by find all overlapping fragments
     overlapping = []
-    for n in tqdm(x, desc='Pre-processing neuron(s)', leave=False, disable=use_pbars):
+    for n in tqdm(x, desc='Pre-processing neuron(s)', leave=False, disable=not use_pbars):
         ol = find_fragments(n,
                             min_node_overlap=min_node_overlap,
                             min_nodes=min_overlap_size,
@@ -376,7 +376,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
 
         # Now upload each fragment and keep track of new node IDs
         tn_map = {}
-        for f in tqdm(frags, desc='Uploading new tracings', leave=False, disable=use_pbars):
+        for f in tqdm(frags, desc='Uploading new tracings', leave=False, disable=not use_pbars):
             # In cases of complete merging into existing neurons, the fragment
             # will have no nodes
             if f.n_nodes < 1:
