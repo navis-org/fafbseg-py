@@ -59,19 +59,21 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
                                        allow_partial=False,
                                        remote_instance=autoseg_instance)
 
+    to_fetch = by_name.skeleton_id.tolist()
+
     # Look for missing IDs
     missing = [n for n in names if n not in by_name.name.values]
 
     # Try finding by annotation (temporarily raise logger level)
-    old_lvl = pymaid.logger.level
-    pymaid.set_loggers('ERROR')
-    by_annotation = pymaid.get_skids_by_annotation(missing,
-                                                   raise_not_found=False,
-                                                   remote_instance=autoseg_instance)
-    pymaid.set_loggers(old_lvl)
+    if missing:
+        old_lvl = pymaid.logger.level
+        pymaid.set_loggers('ERROR')
+        by_annotation = pymaid.get_skids_by_annotation(missing,
+                                                       raise_not_found=False,
+                                                       remote_instance=autoseg_instance)
+        pymaid.set_loggers(old_lvl)
 
-    # Get those neurons
-    to_fetch = by_annotation + by_name.skeleton_id.tolist()
+        to_fetch += by_annotation
 
     if not to_fetch:
         raise ValueError("None of the provided segmentation IDs could be found")
@@ -139,7 +141,7 @@ def neuron_to_segments(x, **kwargs):
     seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
 
     # Remove seg IDs 0 (glia?)
-    seg_counts = seg_counts[seg_counts.seg_id != '0']
+    seg_counts = seg_counts[seg_counts.seg_id != 0]
 
     # Turn into matrix where columns are skeleton IDs, segment IDs are rows
     # and values are the overlap counts
