@@ -239,7 +239,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     x_seg_counts.columns = ['seg_id', 'counts']
 
     # Remove seg IDs 0
-    x_seg_counts = x_seg_counts[x_seg_counts.seg_id != '0']
+    x_seg_counts = x_seg_counts[x_seg_counts.seg_id != 0]
 
     # Generate KDTree for nearest neighbor calculations
     tree = pymaid.neuron2KDTree(x)
@@ -259,7 +259,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
 
     # Remove seg IDs 0
-    seg_counts = seg_counts[seg_counts.seg_id != '0']
+    seg_counts = seg_counts[seg_counts.seg_id != 0]
 
     # Remove segments IDs that are not overlapping with input neuron
     seg_counts = seg_counts[np.isin(seg_counts.seg_id.values,
