@@ -22,7 +22,8 @@ import pymaid
 from tqdm import tqdm
 from pymaid.cache import never_cache
 
-from .search import find_fragments, neuron_to_segments, segments_to_neuron
+from .search import (find_fragments, find_autoseg_fragments, neuron_to_segments,
+                     segments_to_neuron)
 
 import inquirer
 from inquirer.themes import GreenPassion
@@ -118,18 +119,16 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     elif not isinstance(x, pymaid.CatmaidNeuron):
         raise TypeError('Input must be CatmaidNeuron/List, got "{}"'.format(type(x)))
 
-    # First collect segments constituting this neuron
-    overlap_matrix = neuron_to_segments(x)
-
-    # Filter
-    seg_ids = overlap_matrix.loc[overlap_matrix[x.skeleton_id] >= min_node_overlap].index.tolist()
-
-    # Now try finding the corresponding skeletons
-    nl = segments_to_neuron(seg_ids, autoseg_instance=autoseg_instance, verbose=False)
+    # Find autoseg neurons overlapping with input neuron
+    nl = find_autoseg_fragments(x,
+                                autoseg_instance=autoseg_instance,
+                                min_node_overlap=min_node_overlap,
+                                verbose=False)
 
     # Next create a union
     for n in nl:
         n.nodes['origin'] = 'autoseg'
+        n.nodes['origin_skid'] = n.skeleton_id
     x.nodes['origin'] = 'query'
     union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
 
@@ -150,12 +149,14 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
             # Find parent node in union
             pn = nodes.loc[n.root[0], 'parent_id']
             pn_co = nodes.loc[pn, ['x', 'y', 'z']].values
-            data.append([n.n_nodes, n.cable_length, pn, pn_co])
+            org_skids = n.nodes.skeleton_id.unique().tolist()
+            data.append([n.n_nodes, n.cable_length, pn, pn_co, org_skids])
     else:
         data = []
         frags = pymaid.CatmaidNeuronList([])
 
-    df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id', 'node_loc'])
+    df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id',
+                                     'node_loc', 'autoseg_skids'])
     df.sort_values('cable_length', ascending=False, inplace=True)
 
     if tag and not df.empty:
