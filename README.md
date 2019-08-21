@@ -3,23 +3,17 @@ Tools to work with manually generated and auto-segmented data in FAFB.
 
 ## Install
 Because this is a private repository, installation is a bit more complicated
-than usual. The easiest way to:
-
-1. Install Github's [Large File Storage](https://git-lfs.github.com)
-2. Clone the repository:
+than usual. The easiest way to run this in a terminal:
 
 ```
-git clone https://github.com/flyconnectome/fafbseg-py.git
+pip3 install git+git://github.com/flyconnectome/fafbseg-py.git
 ```
 
-3. Then ``cd`` into the directory and install the package in "edit" mode:
+To update an existing installation run this:
 
 ```
-pip3 install -e .
+pip3 install git+git://github.com/flyconnectome/fafbseg-py.git --upgrade
 ```
-
-This will simply create a pointer for Python to this repository. To update you
-can now simply `git pull`.
 
 ## Requirements
 You will need brainmaps API access. See [brainmappy](https://github.com/schlegelp/brainmappy)
@@ -54,14 +48,14 @@ session = bm.acquire_credentials()
 bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
 
 # Set up connections to the Catmaid instances
-manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',
-                                'HTTP_PW',
+manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',                               
                                 'HTTP_USER',
+                                'HTTP_PW',
                                 'API_TOKEN')
 
-auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14seg-Li-190411.0',
-                              'HTTP_PW',
+auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14seg-Li-190411.0',                              
                               'HTTP_USER',
+                              'HTTP_PW',
                               'API_TOKEN')
 
 # Fetch the autoseg neuron to transfer to v14
