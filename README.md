@@ -45,7 +45,7 @@ import brainmappy as bm
 session = bm.acquire_credentials()
 
 # Set the volume ID - make sure this is always the most recent/ best one
-bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
+bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190805')
 
 # Set up connections to the Catmaid instances
 manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',                               
@@ -53,7 +53,10 @@ manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',
                                 'HTTP_PW',
                                 'API_TOKEN')
 
-auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14seg-Li-190411.0',                              
+# Please note that in almost all situations you would want to have the global
+# volume ID set above to be the same as used for skeletons in this autoseg
+# CATMAID instance
+auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14-seg-Li-190805.0',                              
                               'HTTP_USER',
                               'HTTP_PW',
                               'API_TOKEN')
