@@ -180,6 +180,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
     """Merge neuron into target instance.
 
     This function will attempt to:
+    
         1. Find fragments in ``target_instance`` that overlap with ``x``
            using the brainmaps API.
         2. Generate a union of these fragments and ``x``.
@@ -199,7 +200,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                         overlapping neuron in ``target_instance``. If
                         the fragment has less total nodes than `min_overlap`,
                         the threshold will be lowered to:
-                        ``min_overlap = min(min_overlap, fragment.n_nodes)
+                        ``min_overlap = min(min_overlap, fragment.n_nodes)``
     min_overlap_size :  int, optional
                         Minimum node count for potentially overlapping neurons
                         in ``target_instance``. Use this to e.g. exclude
@@ -239,6 +240,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
 
     Examples
     --------
+
     Setup
 
     >>> import fafbseg
