@@ -1,0 +1,5 @@
+###### Requirements without Version Specifiers ######
+ipykernel
+nbsphinx
+numpydoc
+sphinx_materialdesign_theme
