@@ -55,6 +55,8 @@ html_logo = '_static/logo.png'
 autosummary_generate = True
 autoclass_content = 'both'
 
+master_doc = 'index'
+
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
