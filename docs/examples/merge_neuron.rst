@@ -8,8 +8,7 @@ manual tracing:
 
 .. note::
 
-    For this to work, you will have to have permissions in CATMAID to import
-    neurons.
+    For this to work, you need to have CATMAID API write and import access.
 
 First fire up a terminal and start your interactive Python session:
 
