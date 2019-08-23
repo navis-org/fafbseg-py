@@ -8,7 +8,7 @@ import mock
 import sys
 import os
 
-MOCK_MODULES = ['numpy', 'scipy', 'pandas',
+MOCK_MODULES = ['numpy', 'scipy', 'pandas', 'itertools',
                 'pymaid', 'pymaid.cache', 'pymaid.cache.never_cache',
                 'brainmappy',
                 'networkx', 'tqdm',
@@ -26,7 +26,6 @@ sys.path.insert(0, os.path.abspath('../'))
 
 import fafbseg
 
-
 # -- Project information -----------------------------------------------------
 
 project = 'fafbseg-py'
@@ -34,7 +33,7 @@ copyright = '2019, Philipp Schlegel'
 author = 'Philipp Schlegel'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.4'
+release = str(fafbseg.__version__)
 
 
 # -- General configuration ---------------------------------------------------
