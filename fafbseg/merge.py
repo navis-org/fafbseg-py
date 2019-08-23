@@ -61,7 +61,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
                         DataFrame containing a summary of potentially missed
                         branches.
 
-    If input is a single neuron
+                        If input is a single neuron:
 
     fragments :         pymaid.CatmaidNeuronList
                         Fragments found to be potentially overlapping with input
