@@ -49,7 +49,7 @@ extensions = [
     'sphinx.ext.viewcode',  # This will add links to source code to autodoc
     'sphinx.ext.napoleon',
     'sphinx.ext.imgmath',
-    'matplotlib.sphinxext.plot_directive',
+    #'matplotlib.sphinxext.plot_directive',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
