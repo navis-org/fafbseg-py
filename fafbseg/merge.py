@@ -174,7 +174,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 @utils.never_cache
 def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                  merge_limit=1, min_upload_size=0, min_upload_nodes=1,
-                 update_radii=True, label_joins=True):
+                 update_radii=True, import_tags=False, label_joins=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
@@ -223,6 +223,10 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                         If True, will use radii in ``x`` to update radii of
                         overlapping fragments if (and only if) the nodes
                         do not currently have a radius (i.e. radius<=0).
+    import_tags :       bool, optional
+                        If True, will import node tags. Please note that this
+                        will NOT import tags of nodes that have been collapsed
+                        into manual tracings.
     label_joins :       bool, optional
                         If True, will label nodes at which old and new
                         tracings have been joined with tags ("Joined from ..."
@@ -310,7 +314,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
             print('No overlapping fragments to merge. Uploading...',
                   end='', flush=True)
             resp = pymaid.upload_neuron(n,
-                                        import_tags=True,
+                                        import_tags=import_tags,
                                         import_annotations=True,
                                         import_connectors=True,
                                         remote_instance=target_instance)
@@ -390,7 +394,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                 continue
 
             resp = pymaid.upload_neuron(f,
-                                        import_tags=False,
+                                        import_tags=import_tags,
                                         import_annotations=False,
                                         import_connectors=True,
                                         remote_instance=target_instance)
