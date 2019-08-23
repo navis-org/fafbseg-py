@@ -6,6 +6,11 @@ Merging
 This example will illustrate how to merge a neuron from v14 autoseg into
 manual tracing:
 
+.. note::
+
+    For this to work, you will have to have permissions in CATMAID to import
+    neurons.
+
 First fire up a terminal and start your interactive Python session:
 
 .. code-block:: bat
