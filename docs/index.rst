@@ -29,6 +29,9 @@ Then make sure to install required dependencies
     pip3 install inquirer
     pip3 install ipython
 
+You will need brainmaps API access. See
+[brainmappy](https://github.com/schlegelp/brainmappy) for details.
+
 Now have a look at the examples or the API to get started.
 
 Contents
