@@ -8,7 +8,7 @@ import mock
 import sys
 import os
 
-MOCK_MODULES = ['numpy', 'scipy', 'pandas', 'itertools',
+MOCK_MODULES = ['numpy', 'scipy', 'pandas',
                 'pymaid', 'pymaid.cache', 'pymaid.cache.never_cache',
                 'brainmappy',
                 'networkx', 'tqdm',
