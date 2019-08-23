@@ -184,8 +184,8 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
         2. Generate a union of these fragments and ``x``.
         3. Make a differential upload of the union leaving existing nodes
            untouched.
-        4. Join uploaded and existing fragments into a single continuous
-           neuron.
+        4. Join uploaded and existing tracings into a single continuous
+           neuron. This will also upload connectors but no node tags.
 
     Parameters
     ----------
@@ -223,8 +223,9 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                         If True, will use radii in ``x`` to update radii of
                         overlapping fragments if (and only if) the nodes
                         do not currently have a radius (i.e. radius<=0).
-    label_joins :       If True, will label nodes at which old and new
-                        tracings have been joined with tags ("Joined from..."
+    label_joins :       bool, optional
+                        If True, will label nodes at which old and new
+                        tracings have been joined with tags ("Joined from ..."
                         and "Joined with ...") and with a lower confidence of
                         1.
 
@@ -261,7 +262,8 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
     >>> # Get the neuron's annotations so that they can be merged too
     >>> x.get_annotations(remote_instance=auto)
 
-    >>> # Start the commit process (see on Github repository below for a demonstration)
+    >>> # Start the commit
+    >>> # See online documentation for video of merge process
     >>> resp = fafbseg.merge_neuron(x, target_instance=manual)
 
     """
@@ -309,7 +311,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                   end='', flush=True)
             resp = pymaid.upload_neuron(n,
                                         import_tags=True,
-                                        import_annotations=False,
+                                        import_annotations=True,
                                         import_connectors=True,
                                         remote_instance=target_instance)
             if 'error' in resp:
@@ -388,8 +390,8 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                 continue
 
             resp = pymaid.upload_neuron(f,
-                                        import_tags=True,
-                                        import_annotations=True,
+                                        import_tags=False,
+                                        import_annotations=False,
                                         import_connectors=True,
                                         remote_instance=target_instance)
 
@@ -443,6 +445,12 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                     new_conf = {looser: 1}
                     resp = pymaid.update_node_confidence(new_conf,
                                                          remote_instance=target_instance)
+
+        # Add annotations (the individual fragments would not have inherited them)
+        if n.__dict__.get('annotations', []):
+            resp = pymaid.add_annotations(bn,
+                                          n.annotations,
+                                          remote_instance=target_instance)
 
         # Update node radii
         if update_radii:
