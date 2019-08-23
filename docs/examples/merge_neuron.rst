@@ -36,7 +36,7 @@ Now we need to run some setup:
   # Please note that in almost all situations you would want to have the global
   # volume ID set above to be the same as used for skeletons in this autoseg
   # CATMAID instance
-  auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14-seg-Li-190805.0',
+  auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14-seg-li-190805.0',
                                 'HTTP_USER',
                                 'HTTP_PW',
                                 'API_TOKEN')
@@ -45,7 +45,7 @@ Now we need to run some setup:
 
     Make sure that the volume ID set via ``bm.acquire_credentials`` matches
     the segmentation used to generate the skeletons in your ``auto``
-    CATMAID instance.                           
+    CATMAID instance.
 
 OK, we're all set. Now we can start the actual merging process:
 
