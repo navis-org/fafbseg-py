@@ -8,8 +8,8 @@ import mock
 import sys
 import os
 
-MOCK_MODULES = ['numpy', 'scipy', 'pandas',
-                'pymaid', 'pymaid.cache', 'pymaid.cache.never_cache',
+MOCK_MODULES = ['numpy', 'pandas',
+                'pymaid', 
                 'brainmappy',
                 'networkx', 'tqdm',
                 'inquirer', 'inquirer.themes', 'inquirer.themes.GreenPassion']
