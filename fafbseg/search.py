@@ -18,10 +18,6 @@ import numpy as np
 import pandas as pd
 import pymaid
 
-from pymaid.cache import never_cache
-
-from tqdm import tqdm
-
 from . import utils
 use_pbars = utils.use_pbars
 

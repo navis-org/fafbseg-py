@@ -20,10 +20,8 @@ import pandas as pd
 import pymaid
 
 from tqdm import tqdm
-from pymaid.cache import never_cache
 
-from .search import (find_fragments, find_autoseg_fragments, neuron_to_segments,
-                     segments_to_neuron)
+from .search import find_fragments, find_autoseg_fragments
 
 import inquirer
 from inquirer.themes import GreenPassion
@@ -32,7 +30,7 @@ from . import utils
 use_pbars = utils.use_pbars
 
 
-@never_cache
+@utils.never_cache
 def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
                          min_node_overlap=4, **kwargs):
     """Use autoseg to find (and annotate) potential missed branches.
@@ -173,14 +171,14 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     return df, nl, frags
 
 
-@never_cache
+@utils.never_cache
 def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                  merge_limit=1, min_upload_size=0, min_upload_nodes=1,
                  update_radii=True, label_joins=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
-    
+
         1. Find fragments in ``target_instance`` that overlap with ``x``
            using the brainmaps API.
         2. Generate a union of these fragments and ``x``.
