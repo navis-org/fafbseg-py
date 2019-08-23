@@ -7,7 +7,7 @@ Examples
 
     * - **Name**
       - **Description**
-    * - `Merging <examples/merge_neuron>`_
+    * - `Merging <merge_neuron>`_
       - How to merge an autoseg neuron into ``v14``
 
 
