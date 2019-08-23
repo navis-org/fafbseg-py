@@ -223,9 +223,6 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     ------
     pymaid.CatmaidNeuronList
                         CatmaidNeurons of the overlapping fragments.
-    list
-                        List with number of nodes that each fragment overlaps
-                        with input neuron.
 
     Examples
     --------
@@ -252,7 +249,9 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     fafbseg.find_fragments
                         Generalization of this function that can find neurons
                         independent of whether they have a reference to the
-                        segmentation ID in e.g. their name or annotations.
+                        segmentation ID in e.g. their name or annotations. Use
+                        this to find manual tracings overlapping with a given
+                        neuron e.g. from autoseg.
 
     """
 
@@ -284,7 +283,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     This function is a generalization of ``find_autoseg_fragments`` and is
     designed to not require overlapping neurons to have references (e.g.
     in their name) to segmentation IDs:
-    
+
         1. Traverse neurites of ``x`` search within 2.5 microns radius for
            potentially overlapping fragments.
         2. Collect segmentation IDs for the input neuron and all potentially
@@ -336,9 +335,11 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     See Also
     --------
     fafbseg.find_autoseg_fragments
-                        Use this function if you are looking to collect autoseg
-                        fragments that have a reference (e.g. in the name:
-                        "Google: {SEGID}").
+                        Use this function if you are looking for autoseg
+                        fragments overlapping with a given neuron. Because we
+                        can use the reference to segment IDs (via names &
+                        annotations), this function is much faster than
+                        ``find_fragments``.
 
     """
     if not isinstance(x, pymaid.CatmaidNeuron):
