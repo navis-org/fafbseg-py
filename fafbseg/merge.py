@@ -858,9 +858,17 @@ def _confirm_overlap(x, fragments, viewer=None):
     """Show dialogs to confirm overlapping fragments."""
     print('{}: {} overlapping fragments found'.format(x.neuron_name, len(fragments)))
     if fragments:
+        fragments.sort_values('n_nodes')
         # Have user inspect fragments
         # Show larger fragments in 3d viewer
         if any(fragments.n_nodes > 10):
+            # Generate a summary
+            large_frags = fragments[fragments.n_nodes > 10]
+            s = large_frags.summary(add_cols=['overlap_score'])[['neuron_name',
+                                                                 'skeleton_id',
+                                                                 'n_nodes',
+                                                                 'n_connectors',
+                                                                 'overlap_score']]
             # Show and let user decide which ones to merge
             if not viewer:
                 viewer = pymaid.Viewer(title='Check overlap')
@@ -869,28 +877,33 @@ def _confirm_overlap(x, fragments, viewer=None):
             viewer.clear()
             # Add original skeleton
             viewer.add(x, color='w')
-            viewer.add(fragments[fragments.n_nodes > 10].downsample(10, inplace=False))
+            viewer.add(large_frags.downsample(10, inplace=False))
             viewer.picking = True
             viewer._picking_text.visible = True
             viewer.show_legend = True
 
-        msg = '\nPlease check these large fragments for overlap and deselect ' \
-              'neurons that you DO NOT want to have merged by clicking on ' \
-              'their names in the legend.\nHit ENTER when you are ready to ' \
-              'proceed or CTRL-C to cancel.'
+            # Print summary
+            print('Large (>10 nodes) overlapping fragments:')
+            print(s.to_string(index=False, show_dimensions=False))
 
-        try:
-            _ = input(msg)
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt('Merge process aborted by user.')
-        except BaseException:
-            raise
+            msg = '\nPlease check these large fragments for overlap and deselect ' \
+                  'neurons that you DO NOT want to have merged by clicking on ' \
+                  'their names in the legend.\nHit ENTER when you are ready to ' \
+                  'proceed or CTRL-C to cancel.'
 
-        # Remove deselected fragments (mind you not all fragments are on viewer)
-        fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
+            try:
+                _ = input(msg)
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt('Merge process aborted by user.')
+            except BaseException:
+                raise
+
+            # Remove deselected fragments
+            # Mind you not all fragments are on viewer - this is why we remove
+            # neurons that has been hidden
+            fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
 
         # Now ask for smaller fragments via CLI
-        fragments.sort_values('n_nodes')
         s = fragments.summary(add_cols=['overlap_score'])[['neuron_name',
                                                            'skeleton_id',
                                                            'n_nodes',
@@ -902,8 +915,10 @@ def _confirm_overlap(x, fragments, viewer=None):
               "input neuron (white).\nDeselect those that should NOT be "
               "merged using the arrows keys.\nHit ENTER when you are ready "
               "to proceed or CTRL-C to abort")
-        msg = str(s).split('\n')[0]
-        choices = [(v, i) for i, v in enumerate(str(s).split('\n')[1:])]
+        msg = s.to_string(index=False).split('\n')[0]
+
+        s_str = s.to_string(index=False, show_dimensions=False, header=False)
+        choices = [(v, i) for i, v in enumerate(s_str.split('\n'))]
         q = [inquirer.Checkbox(name='selection',
                                message=msg,
                                choices=choices,
@@ -938,13 +953,17 @@ def _confirm_overlap(x, fragments, viewer=None):
                                                            'n_nodes',
                                                            'n_connectors',
                                                            'overlap_score']]
+
         print("\nAbove fragments and your input neuron will be merged into a "
               "single neuron.\nAll annotations will be preserved but only the "
               "neuron used as merge target will keep its name and skeleton ID."
               "\nPlease select the neuron you would like to use as merge target!"
-              "\n                  " + str(s).split('\n')[0])
-        msg = 'Merge target'
-        choices = [(v, i) for i, v in enumerate(str(s).split('\n')[1:])]
+              "\n                  " + s.to_string(index=False).split('\n')[0])
+
+        msg = 'Choose merge target'
+
+        s_str = s.to_string(index=False, show_dimensions=False, header=False)
+        choices = [(v, i) for i, v in enumerate(s_str.split('\n'))]
         q = [inquirer.List(name='base_neuron',
                            message=msg,
                            choices=choices)]
