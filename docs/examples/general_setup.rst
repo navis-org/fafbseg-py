@@ -53,6 +53,15 @@ Get your CATMAID instances with manual and autoseg skeletons set up.
     the segmentation used to generate the skeletons in your ``auto``
     CATMAID instance.
 
+By default, pymaid caches data it receives from the CATMAID server. In this use
+case, however, we do not want to lag behind the server if at all possible. Let's
+disable caching
+
+.. code-block:: python
+
+  manual.caching = False
+  auto.caching = False
+
 Depending on your internet connection and the performances of the servers,
 you encounter ``HTTPErrors`` of various kinds. In that case, you will have
 to lower the number of parallel queries before running your code
