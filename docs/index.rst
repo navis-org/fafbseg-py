@@ -32,7 +32,8 @@ Then make sure to install required dependencies
 You will need brainmaps API access. See
 `brainmappy <https://github.com/schlegelp/brainmappy>`_ for details.
 
-Now have a look at the examples or the API to get started.
+Now have a look at the :doc:`examles<examples/index>` or the :doc:`API<api>`
+to get started.
 
 Contents
 =========

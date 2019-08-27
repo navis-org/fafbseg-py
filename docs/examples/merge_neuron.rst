@@ -1,4 +1,4 @@
-.. _merging:
+.. _merge_example:
 
 Merging
 =======
@@ -10,70 +10,38 @@ manual tracing:
 
     For this to work, you need to have CATMAID API write and import access.
 
-First fire up a terminal and start your interactive Python session:
+Please first see and follow the instructions in the
+:doc:`General Setup<general_setup>`
 
-.. code-block:: bat
+OK now that we're all set, we can start the actual merging process:
 
-  ipython
-
-Now we need to run some setup:
-
-.. code-block:: python
-
-  # Import relevant libraries
-  import fafbseg
-  import pymaid
-  import brainmappy as bm
-
-  # First connect to brainmaps (see brainmappy on how to get your credentials)
-  session = bm.acquire_credentials()
-
-  # Set the volume ID - make sure this is always the most recent/ best one
-  bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190805')
-
-  # Set up connections to the Catmaid instances
-  manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',
-                                  'HTTP_USER',
-                                  'HTTP_PW',
-                                  'API_TOKEN')
-
-  # Please note that in almost all situations you would want to have the global
-  # volume ID set above to be the same as used for skeletons in this autoseg
-  # CATMAID instance
-  auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14-seg-li-190805.0',
-                                'HTTP_USER',
-                                'HTTP_PW',
-                                'API_TOKEN')
-
-.. tip::
-
-    Make sure that the volume ID set via ``bm.acquire_credentials`` matches
-    the segmentation used to generate the skeletons in your ``auto``
-    CATMAID instance.
-
-OK, we're all set. Now we can start the actual merging process:
+Fetch the autoseg neuron to transfer to v14
 
 .. code-block:: python
 
-  # Fetch the autoseg neuron to transfer to v14
   x = pymaid.get_neuron(267355161, remote_instance=auto)
 
-  # Get the neuron's annotations so that they can be merged too
+Get the neuron's annotations so that they can be merged too
+
+.. code-block:: python
+
   x.get_annotations(remote_instance=auto)
 
-  """
-  At this point you could make changes to your neuron like:
+At this point you could make changes to your neuron like:
    - remove some parts e.g. if you only want to import the axon
    - prune twigs to get rid of those annoying "bristles"
-   - etc
-  """
+   - ...
 
-  # Start the commit process (see video below for a demonstration)
+Next, start the actual commit process (see video below for a demonstration).
+See :func:`fafbseg.merge_neuron` for additional parameters.
+
+.. code-block:: python
+
   resp = fafbseg.merge_neuron(x, target_instance=manual)
-
 
 .. image:: https://github.com/flyconnectome/fafbseg-py/blob/master/media/screencast.gif?raw=true
    :width: 100%
+
 
 Merge finished - What now?
 --------------------------
