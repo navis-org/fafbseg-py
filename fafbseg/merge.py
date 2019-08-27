@@ -64,8 +64,8 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
                         If input is a single neuron:
 
     fragments :         pymaid.CatmaidNeuronList
-                        Fragments found to be potentially overlapping with input
-                        neuron.
+                        Fragments found to be potentially overlapping with the
+                        input neuron.
     branches :          pymaid.CatmaidNeuronList
                         Potentially missed branches extracted from ``fragments``.
 
@@ -90,7 +90,11 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     >>> # Fetch a neuron
     >>> x = pymaid.get_neuron(16, remote_instance=manual)
     >>> # Find and tag missed branches
-    >>> summary = fafbseg.find_missed_branches(x, autoseg_instance=auto)
+    >>> (summary,
+    ...  fragments,
+    ...  branches) = fafbseg.find_missed_branches(x, autoseg_instance=auto)
+
+    >>> # Show summary of missed branches
     >>> summary.head()
        n_nodes  cable_length   node_id
     0      110     28.297424   3306395
@@ -98,6 +102,15 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     2       64     15.851333  23419997
     3       29      7.494350   6298769
     4       16      3.509739  15307841
+
+    >>> # Co-visualize your neuron and potentially overlapping autoseg fragments
+    >>> x.plot3d(color='w')
+    >>> fragments.plot3d()
+
+    >>> # Visualize the potentially missed branches
+    >>> pymaid.clear3d()
+    >>> x.plot3d(color='w')
+    >>> branches.plot3d(color='r')
 
     """
     if isinstance(x, pymaid.CatmaidNeuronList):
@@ -435,7 +448,10 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
 
                 # See if there was any error while uploading
                 if 'error' in resp:
-                    print('Error automatically joining nodes {} and {}: {}'.format(node.treenode_id, node.parent_id, resp['error']))
+                    print('Skipping joining nodes '
+                          '{} and {}: {} - '.format(node.treenode_id,
+                                                    node.parent_id,
+                                                    resp['error']))
                     # Skip changing confidences
                     continue
 
