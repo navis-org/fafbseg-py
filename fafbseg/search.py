@@ -96,7 +96,7 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     """
     assert isinstance(autoseg_instance, pymaid.CatmaidInstance)
 
-    assert isinstance(seg_ids, (list, np.ndarray, set, tuple, pd.Index))
+    assert isinstance(seg_ids, (list, np.ndarray, set, tuple, pd.Index, int, str))
 
     seg_ids = pymaid.utils._make_iterable(seg_ids)
 
@@ -104,7 +104,8 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     seg2skid = {int(i): None for i in seg_ids}
 
     # First find neurons by name
-    names = list(set([name_pattern.format(id=i) for i in seg_ids]))
+    # Do NOT change the order of "names"!
+    names = [name_pattern.format(id=i) for i in seg_ids]
     by_name = pymaid.get_skids_by_name(names,
                                        allow_partial=False,
                                        raise_not_found=False,
