@@ -9,8 +9,8 @@ hosted on a `CATMAID <https://catmaid.readthedocs.io/en/stable/>`_ server.
 
 Quick Start
 ===========
-
-Install the latest version of fafbseg-py with :code:`pip`.
+First install `Github Large File Storage <https://git-lfs.github.com`_ then
+install the latest version of :code:`fafbseg-py` with :code:`pip`.
 
 .. code-block:: bat
 
