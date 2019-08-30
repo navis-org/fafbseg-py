@@ -59,6 +59,10 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     nl = pymaid.get_neurons(to_fetch,
                             remote_instance=autoseg_instance)
 
+    # Make sure we're dealing with a list of neurons
+    if isinstance(nl, pymaid.CatmaidNeuron):
+        nl = pymaid.CatmaidNeuronList(nl)
+
     # Invert seg2skid
     skid2seg = {}
     for k, v in seg2skid.items():
