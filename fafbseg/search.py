@@ -71,6 +71,7 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
 
 
 def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
+                      merge_annotation_pattern="Merged: {name}",
                       verbose=True):
     """Retrieve skeleton IDs of neurons corresponding to given segmentation ID(s).
 
@@ -79,13 +80,17 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
 
     Parameters
     ----------
-    seg_ids :           int | list of int
-                        Segmentation ID(s) of autoseg skeletons to retrieve.
-    autoseg_instance :  pymaid.CatmaidInstance
-                        Instance with autoseg skeletons.
-    name_pattern :      str, optional
-                        Segmentation IDs are encoded in the name. Use parameter
-                        this to define that pattern.
+    seg_ids :                   int | list of int
+                                Segmentation ID(s) of autoseg skeletons to retrieve.
+    autoseg_instance :          pymaid.CatmaidInstance
+                                Instance with autoseg skeletons.
+    name_pattern :              str, optional
+                                Segmentation IDs are encoded in the name. Use
+                                this parameter to define that pattern.
+    merge_annotation_pattern :  str, optional
+                                When neurons are merged, a reference to the
+                                loosing skeleton's name is kept as annotation.
+                                Use this parameter to define that pattern.
 
     Returns
     -------
@@ -114,26 +119,33 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
 
     # Update map by those that could be found by name
     name2skid = by_name.set_index('name').skeleton_id.to_dict()
-    seg2skid.update({int(i): name2skid[n] for i, n in zip(seg_ids, names) if n in by_name.name.values})
+    seg2skid.update({int(i): int(name2skid[n]) for i, n in zip(seg_ids, names) if n in by_name.name.values})
 
     # Look for missing IDs
-    not_found = [n for n in names if n not in by_name.name.values]
+    not_found = [s for s in seg_ids if not seg2skid[int(s)]]
 
     # Try finding by annotation (temporarily raise logger level)
     if not_found:
+        map = merge_annotation_pattern
+        an = [map.format(name=name_pattern.format(id=n)) for n in not_found]
         old_lvl = pymaid.logger.level
         pymaid.set_loggers('ERROR')
-        by_annotation = pymaid.get_skids_by_annotation(not_found,
+        by_annotation = pymaid.get_skids_by_annotation(an,
                                                        raise_not_found=False,
+                                                       allow_partial=False,
+                                                       intersect=False,
                                                        remote_instance=autoseg_instance)
         pymaid.set_loggers(old_lvl)
 
         if by_annotation:
-            an = pymaid.get_annotations(by_annotation, remote_instance=autoseg_instance)
+            annotations = pymaid.get_annotations(by_annotation,
+                                                 remote_instance=autoseg_instance)
 
-            for s in an:
-                seg2skid.update({int(i): int(s) for i, n in zip(seg_ids, names)
-                                 if n in an[s]})
+            for seg, a in zip(not_found, an):
+                for skid in annotations:
+                    if a in annotations[skid]:
+                        seg2skid[int(seg)] = int(skid)
+                        break
 
     # Figure out which we are still missing
     if verbose:
