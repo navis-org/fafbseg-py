@@ -475,10 +475,18 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                     resp = pymaid.update_node_confidence(new_conf,
                                                          remote_instance=target_instance)
 
-        # Add annotations (the individual fragments would not have inherited them)
+        # Add annotations
+        to_add = []
+        # Add generic "XY upload annotation"
+        if not isinstance(getattr(n, '_remote_instance'), type(None)):
+            to_add.append(n._remote_instance.server.split('/')[-1] + ' upload')
+        # Existing annotation (the individual fragments would not have inherited them)
         if n.__dict__.get('annotations', []):
+            to_add += n.annotations
+        # If anything to add
+        if to_add:
             resp = pymaid.add_annotations(bn,
-                                          n.annotations,
+                                          to_add,
                                           remote_instance=target_instance)
 
         # Update node radii
