@@ -394,6 +394,14 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
         cond1b = to_stitch.treenode_id.isin(old_nodes)
         cond2b = to_stitch.parent_id.isin(old_nodes)
 
+        # Collect origin info for this neuron
+        source_info = {'source_type': 'segmentation',
+                       'source_id': int(n.skeleton_id)}
+
+        if not isinstance(getattr(n, '_remote_instance'), type(None)):
+            source_info['source_project_id'] = n._remote_instance.project_id
+            source_info['source_url'] = n._remote_instance.server
+
         # Now upload each fragment and keep track of new node IDs
         tn_map = {}
         for f in tqdm(frags, desc='Uploading new tracings', leave=False, disable=not use_pbars):
@@ -410,7 +418,8 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                                         import_tags=import_tags,
                                         import_annotations=False,
                                         import_connectors=True,
-                                        remote_instance=target_instance)
+                                        remote_instance=target_instance,
+                                        **source_info)
 
             # Stop if there was any error while uploading
             if 'error' in resp:
