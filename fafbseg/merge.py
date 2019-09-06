@@ -187,7 +187,8 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 @utils.never_cache
 def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                  merge_limit=1, min_upload_size=0, min_upload_nodes=1,
-                 update_radii=True, import_tags=False, label_joins=True):
+                 update_radii=True, import_tags=False, label_joins=True,
+                 sid_from_nodes=True):
     """Merge neuron into target instance.
 
     This function will attempt to:
@@ -245,6 +246,14 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                         tracings have been joined with tags ("Joined from ..."
                         and "Joined with ...") and with a lower confidence of
                         1.
+    sid_from_nodes :    bool, optional
+                        If True and the to-be-merged neuron has a "skeleton_id"
+                        column it will be used to set the ``source_id`` upon
+                        uploading new branches. This is relevant if your neuron
+                        is a virtual chimera of several neurons: in order to
+                        preserve provenance (i.e. correctly associating each
+                        node with a ``source_id`` origin) you should make
+                        sure that your neuron is
 
     Returns
     -------
@@ -394,14 +403,6 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
         cond1b = to_stitch.treenode_id.isin(old_nodes)
         cond2b = to_stitch.parent_id.isin(old_nodes)
 
-        # Collect origin info for this neuron
-        source_info = {'source_type': 'segmentation',
-                       'source_id': int(n.skeleton_id)}
-
-        if not isinstance(getattr(n, '_remote_instance'), type(None)):
-            source_info['source_project_id'] = n._remote_instance.project_id
-            source_info['source_url'] = n._remote_instance.server
-
         # Now upload each fragment and keep track of new node IDs
         tn_map = {}
         for f in tqdm(frags, desc='Uploading new tracings', leave=False, disable=not use_pbars):
@@ -413,6 +414,27 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                 continue
             if f.n_nodes < min_upload_nodes:
                 continue
+
+            # Collect origin info for this neuron
+            source_info = {'source_type': 'segmentation'}
+
+            if not sid_from_nodes or 'skeleton_id' not in f.nodes.columns:
+                source_info['source_id'] = int(n.skeleton_id)
+            else:
+                if f.nodes.skeleton_id.unique().shape[0] == 1:
+                    skid = f.nodes.skeleton_id.unique()[0]
+                else:
+                    print('Warning: uploading chimera fragment with multiple '
+                          'skeleton IDs! Using largest contributor ID.')
+                    # Use the skeleton ID that has the most nodes
+                    by_skid = f.nodes.groupby('skeleton_id').x.count()                    
+                    skid = by_skid.sort_values(ascending=False).index.values[0]
+
+                source_info['source_id'] = int(skid)
+
+            if not isinstance(getattr(n, '_remote_instance'), type(None)):
+                source_info['source_project_id'] = n._remote_instance.project_id
+                source_info['source_url'] = n._remote_instance.server
 
             resp = pymaid.upload_neuron(f,
                                         import_tags=import_tags,
