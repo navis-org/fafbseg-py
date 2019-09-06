@@ -724,6 +724,11 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     # Convert distance threshold from microns to nanometres
     limit *= 1000
 
+    # Before we start messing around, let's make sure we can keep track of
+    # the origin of each node
+    for n in B + A:
+        n.nodes['origin_skeletons'] = n.skeleton_id
+
     # First make a weak union by simply combining the node tables
     union_simple = pymaid.stitch_neurons(B + A, method='NONE', master=base_neuron)
 
@@ -800,7 +805,7 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     union.tags.update(union_simple.tags)
 
     # Add connectors back on
-    union.connectors = union_simple.connectors.drop_duplicates(subset='connector_id')
+    union.connectors = union_simple.connectors.drop_duplicates(subset='connector_id').copy()
     union.connectors.loc[:, 'treenode_id'] = union.connectors.treenode_id.map(lambda x: clps_map.get(x, x))
 
     # Find the newly added edges (existing edges should not have been modified
@@ -810,7 +815,7 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     # parent and child node
     node2skid = union_simple.nodes.set_index('treenode_id').skeleton_id.to_dict()
     union.nodes['parent_skeleton'] = union.nodes.parent_id.map(node2skid)
-    new_edges = union.nodes[union.nodes.skeleton_id != union.nodes.parent_skeleton]
+    new_edges = union.nodes[union.nodes.origin_skeletons != union.nodes.parent_skeleton]
     # Remove root edges
     new_edges = new_edges[~new_edges.parent_id.isnull()]
 
