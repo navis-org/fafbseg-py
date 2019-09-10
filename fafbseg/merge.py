@@ -930,7 +930,7 @@ def _confirm_overlap(x, fragments, viewer=None):
             viewer.clear()
             # Add original skeleton
             viewer.add(x, color='w')
-            viewer.add(large_frags.downsample(10, inplace=False))
+            viewer.add(large_frags)
             viewer.picking = True
             viewer._picking_text.visible = True
             viewer.show_legend = True
