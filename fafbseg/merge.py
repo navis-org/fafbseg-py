@@ -185,7 +185,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 
 
 @utils.never_cache
-def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
+def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1,
                  merge_limit=1, min_upload_size=0, min_upload_nodes=1,
                  update_radii=True, import_tags=False, label_joins=True,
                  sid_from_nodes=True):
@@ -207,6 +207,11 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                         Neuron(s)/fragment(s) to commit to ``target_instance``.
     target_instance :   pymaid.CatmaidInstance
                         Target Catmaid instance to commit the neuron to.
+    tag :               str
+                        A tag to be added as part of a ``{URL} upload {tag}``
+                        annotation. This should be something identifying your
+                        group - e.g. ``tag='WTCam'`` for the Cambridge Wellcome
+                        Trust group.
     min_node_overlap :  int, optional
                         Minimal overlap between `x` and a potentially
                         overlapping neuron in ``target_instance``. If
@@ -297,6 +302,9 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
         if not isinstance(x, pymaid.CatmaidNeuron):
             raise TypeError('Expected pymaid.CatmaidNeuron/List, got "{}"'.format(type(x)))
         x = pymaid.CatmaidNeuronList(x)
+
+    if not isinstance(tag, (str, type(None))):
+        raise TypeError('Tag must be string, got "{}"'.format(type(tag)))
 
     pymaid.set_loggers('WARNING')
 
@@ -508,9 +516,12 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
 
         # Add annotations
         to_add = []
-        # Add generic "XY upload annotation"
+        # Add "{URL} upload {tag} annotation"
         if not isinstance(getattr(n, '_remote_instance'), type(None)):
-            to_add.append(n._remote_instance.server.split('/')[-1] + ' upload')
+            u = n._remote_instance.server.split('/')[-1] + ' upload'
+            if isinstance(tag, str):
+                u += " {}".format(tag)
+            to_add.append(u)
         # Existing annotation (the individual fragments would not have inherited them)
         if n.__dict__.get('annotations', []):
             to_add += n.annotations
