@@ -65,3 +65,24 @@ Now we can start the upload process as described in :doc:`Merging<merge_neuron>`
 .. code-block:: python
 
   resp = fafbseg.merge_neuron(y, target_instance=manual)
+
+
+Gotchas
+-------
+
+When looking for overlapping autoseg fragments, you can end up finding the
+autoseg version of your original neuron - ``x`` in above example. This happens
+if somebody has merged a Google skeleton into ``x``.
+
+This is problematic because ``fafbseg`` uses the skeleton ID to identify where
+new and old nodes originate from but now we have two neurons with the same
+skeleton ID. :func:`~fafbseg.merge_neuron` will throw in error::
+
+  ValueError: Duplicate skeleton IDs found. Try manually assigning unique skeleton IDs.
+
+To resolve this, you need to manually change the skeleton ID of ``y`` - ideally
+to that of the Google fragment that got merged into it: look for an annotation
+like ``Merged: Google: 5819659900`` and then change the skeleton ID::
+
+  y.skeleton_id = '5819659900'
+  y._clear_temp_attributes()
