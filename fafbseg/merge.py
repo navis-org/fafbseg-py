@@ -410,10 +410,19 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
             # will have no nodes
             if f.n_nodes < 1:
                 continue
-            if f.cable_length < min_upload_size:
-                continue
-            if f.n_nodes < min_upload_nodes:
-                continue
+
+            # Check if fragment is a "linker" and as such can not be skipped
+            lcond1 = np.isin(f.nodes.treenode_id.values,
+                             new_edges.treenode_id.values)
+            lcond2 = np.isin(f.nodes.treenode_id.values,
+                             new_edges.parent_id.values)
+
+            # If not linker, check skip conditions
+            if sum(lcond1 | lcond2) <= 1:
+                if f.cable_length < min_upload_size:
+                    continue
+                if f.n_nodes < min_upload_nodes:
+                    continue
 
             # Collect origin info for this neuron
             source_info = {'source_type': 'segmentation'}
@@ -427,7 +436,7 @@ def merge_neuron(x, target_instance, min_node_overlap=4, min_overlap_size=1,
                     print('Warning: uploading chimera fragment with multiple '
                           'skeleton IDs! Using largest contributor ID.')
                     # Use the skeleton ID that has the most nodes
-                    by_skid = f.nodes.groupby('skeleton_id').x.count()                    
+                    by_skid = f.nodes.groupby('skeleton_id').x.count()
                     skid = by_skid.sort_values(ascending=False).index.values[0]
 
                 source_info['source_id'] = int(skid)
