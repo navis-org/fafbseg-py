@@ -64,7 +64,7 @@ Now we can start the upload process as described in :doc:`Merging<merge_neuron>`
 
 .. code-block:: python
 
-  resp = fafbseg.merge_neuron(y, target_instance=manual)
+  resp = fafbseg.merge_neuron(y, target_instance=manual, tag='YOURTAG')
 
 
 Gotchas

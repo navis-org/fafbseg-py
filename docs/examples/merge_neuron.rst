@@ -37,7 +37,7 @@ See :func:`fafbseg.merge_neuron` for additional parameters.
 
 .. code-block:: python
 
-  resp = fafbseg.merge_neuron(x, target_instance=manual)
+  resp = fafbseg.merge_neuron(x, target_instance=manual, tag='YOURTAG')
 
 .. image:: https://github.com/flyconnectome/fafbseg-py/blob/master/media/screencast.gif?raw=true
    :width: 100%
