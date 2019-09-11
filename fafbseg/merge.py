@@ -426,7 +426,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                              new_edges.parent_id.values)
 
             # If not linker, check skip conditions
-            if sum(lcond1 | lcond2) <= 1:
+            if sum(lcond1) + sum(lcond2) <= 1:
                 if f.cable_length < min_upload_size:
                     continue
                 if f.n_nodes < min_upload_nodes:
