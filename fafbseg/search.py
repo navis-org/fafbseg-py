@@ -174,9 +174,7 @@ def neuron_to_segments(x, **kwargs):
                         Neurons for which to return segment IDs.
     **kwargs
                         Keyword arguments passed to
-                        `brainmappy.get_seg_at_location`. Use this to set a
-                        lower `chunksize` (max 10e3) if you are
-                        experiencing "Service Unavailable" errors.
+                        `brainmappy.get_seg_at_location`.
 
     Returns
     -------
@@ -199,8 +197,7 @@ def neuron_to_segments(x, **kwargs):
     nodes = x.nodes
 
     # Get segmentation IDs
-    nodes['seg_id'] = bm.get_seg_at_location(nodes[['x', 'y', 'z']].values,
-                                             chunksize=kwargs.get('chunksize', 1e3))
+    nodes['seg_id'] = bm.get_seg_at_location(nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
     seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
@@ -390,8 +387,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     node_counts = tn_table.groupby('skeleton_id').treenode_id.count().to_dict()
 
     # Get segment IDs for the input neuron
-    x.nodes['seg_id'] = bm.get_seg_at_location(x.nodes[['x', 'y', 'z']].values,
-                                               chunksize=remote_instance.max_threads * 100)
+    x.nodes['seg_id'] = bm.get_seg_at_location(x.nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
     x_seg_counts = x.nodes.groupby('seg_id').treenode_id.count().reset_index(drop=False)
@@ -408,9 +404,13 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
                           distance_upper_bound=2500)
     tn_table = tn_table.loc[dist <= 2500]
 
+    # Remove neurons that can't possibly have enough overlap
+    node_counts2 = tn_table.groupby('skeleton_id').treenode_id.count().to_dict()
+    to_keep = [k for k, v in node_counts2.items() if v >= min(min_node_overlap, node_counts[k])]
+    tn_table = tn_table[tn_table.skeleton_id.isin(to_keep)]
+
     # Add segment IDs
-    tn_table['seg_id'] = bm.get_seg_at_location(tn_table[['x', 'y', 'z']].values,
-                                                chunksize=remote_instance.max_threads * 100)
+    tn_table['seg_id'] = bm.get_seg_at_location(tn_table[['x', 'y', 'z']].values)
 
     # Now group by neuron and by segment
     seg_counts = tn_table.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
