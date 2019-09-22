@@ -7,9 +7,6 @@ Tools to work with manually generated and auto-segmented data in FAFB.
 FAFBseg is on [readthedocs](https://fafbseg-py.readthedocs.io/en/latest/).
 
 ## Quickstart
-Please make sure to install [Github Large File Storage](https://git-lfs.github.com)
-before cloning and installing from this repository.
-
 ```
 pip3 install git+git://github.com/flyconnectome/fafbseg-py.git
 ```

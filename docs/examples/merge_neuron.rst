@@ -21,7 +21,7 @@ Fetch the autoseg neuron to transfer to v14
 
   x = pymaid.get_neuron(267355161, remote_instance=auto)
 
-Get the neuron's annotations so that they can be merged too
+Get the neuron's annotations so that they can be merged too:
 
 .. code-block:: python
 
@@ -39,7 +39,7 @@ See :func:`fafbseg.merge_neuron` for additional parameters.
 
   resp = fafbseg.merge_neuron(x, target_instance=manual, tag='YOURTAG')
 
-.. image:: https://github.com/flyconnectome/fafbseg-py/blob/master/media/screencast.gif?raw=true
+.. image:: https://github.com/flyconnectome/fafbseg-py-media/blob/master/media/screencast.gif?raw=true
    :width: 100%
 
 
@@ -53,7 +53,7 @@ tracings were joined. The respective nodes will both be tagged
 with ``Joined from/into {SKELETON_ID}`` and have a confidence of ``1`` so that they are
 easy to find in the treenode table:
 
-.. image:: https://github.com/flyconnectome/fafbseg-py/blob/master/media/screenshot1.png?raw=true
+.. image:: https://github.com/flyconnectome/fafbseg-py-media/blob/master/media/screenshot1.png?raw=true
    :width: 100%
 
 Depending on how much you care about the neuron, you want do a **full review**
