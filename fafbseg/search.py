@@ -30,7 +30,7 @@ USE_BRAINMAPS = True
 
 
 def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
-                       verbose=True):
+                       verbose=True, raise_none_found=True):
     """Retrieve autoseg neurons of given segmentation ID(s).
 
     If a given segmentation ID has been merged into another fragment, will try
@@ -45,6 +45,9 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     name_pattern :      str, optional
                         Segmentation IDs are encoded in the name. Use parameter
                         this to define that pattern.
+    raise_none_found :  bool, optional
+                        If True and none of the requested segments were found,
+                        will raise ValueError
 
     Returns
     -------
@@ -61,7 +64,11 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     to_fetch = list(set([v for v in seg2skid.values() if v]))
 
     if not to_fetch:
-        raise ValueError("None of the provided segmentation IDs could be found")
+        if raise_none_found:
+            raise ValueError("None of the provided segmentation IDs could be found")
+        else:
+            # Return empty list
+            return pymaid.CatmaidNeuronList([])
 
     nl = pymaid.get_neurons(to_fetch,
                             remote_instance=autoseg_instance)
@@ -224,7 +231,7 @@ def neuron_to_segments(x, **kwargs):
 
 
 def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
-                           verbose=True):
+                           verbose=True, raise_none_found=True):
     """Find autoseg tracings constituting a given neuron.
 
     This function works by querying the segmentation IDs along the neurites and
@@ -242,6 +249,9 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     min_nodes :         int, optional
                         Minimum node count for returned neurons.
     verbose :           bool, optional
+    raise_none_found :  bool, optional
+                        If True and none of the requested segments were found,
+                        will raise ValueError
 
     Return
     ------
@@ -294,7 +304,8 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     # Now try finding the corresponding skeletons
     nl = segments_to_neuron(seg_ids,
                             autoseg_instance=autoseg_instance,
-                            verbose=verbose)
+                            verbose=verbose,
+                            raise_none_found=raise_none_found=True)
 
     nl.sort_values('n_nodes')
 
