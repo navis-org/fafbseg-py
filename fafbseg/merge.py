@@ -134,27 +134,32 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     nl = find_autoseg_fragments(x,
                                 autoseg_instance=autoseg_instance,
                                 min_node_overlap=min_node_overlap,
-                                verbose=False)
+                                verbose=False,
+                                raise_none_found=False)
 
     # Next create a union
-    for n in nl:
-        n.nodes['origin'] = 'autoseg'
-        n.nodes['origin_skid'] = n.skeleton_id
-    x.nodes['origin'] = 'query'
-    union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
+    if not nl.empty:
+        for n in nl:
+            n.nodes['origin'] = 'autoseg'
+            n.nodes['origin_skid'] = n.skeleton_id
+        x.nodes['origin'] = 'query'
+        union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
 
-    # Subset to autoseg nodes
-    autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
+        # Subset to autoseg nodes
+        autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
+    else:
+        autoseg_nodes = pd.DataFrame()
 
     # Process fragments if any autoseg nodes left
-    if autoseg_nodes.shape[0]:
+    data = []
+    frags = pymaid.CatmaidNeuronList([])
+    if not autoseg_nodes.empty:
         autoseg = pymaid.subset_neuron(union, autoseg_nodes)
 
         # Split into fragments
         frags = pymaid.break_fragments(autoseg)
 
         # Generate summary
-        data = []
         nodes = union.nodes.set_index('treenode_id')
         for n in frags:
             # Find parent node in union
@@ -162,9 +167,6 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
             pn_co = nodes.loc[pn, ['x', 'y', 'z']].values
             org_skids = n.nodes.skeleton_id.unique().tolist()
             data.append([n.n_nodes, n.cable_length, pn, pn_co, org_skids])
-    else:
-        data = []
-        frags = pymaid.CatmaidNeuronList([])
 
     df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id',
                                      'node_loc', 'autoseg_skids'])
