@@ -298,6 +298,10 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     # First collect segments constituting this neuron
     overlap_matrix = neuron_to_segments(x)
 
+    # If none found, return empty neuronlist
+    if overlap_matrix.empty:
+        return pymaid.CatmaidNeuronList([])
+
     # Filter
     seg_ids = overlap_matrix.loc[overlap_matrix[x.skeleton_id] >= min_node_overlap].index.tolist()
 
