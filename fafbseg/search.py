@@ -305,7 +305,7 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     nl = segments_to_neuron(seg_ids,
                             autoseg_instance=autoseg_instance,
                             verbose=verbose,
-                            raise_none_found=raise_none_found=True)
+                            raise_none_found=raise_none_found)
 
     nl.sort_values('n_nodes')
 
