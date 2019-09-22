@@ -148,12 +148,12 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
         # Subset to autoseg nodes
         autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
     else:
-        autoseg_nodes = pd.DataFrame()
+        autoseg_nodes =  np.empty((0, 5))
 
     # Process fragments if any autoseg nodes left
     data = []
     frags = pymaid.CatmaidNeuronList([])
-    if not autoseg_nodes.empty:
+    if autoseg_nodes.shape[0]:
         autoseg = pymaid.subset_neuron(union, autoseg_nodes)
 
         # Split into fragments
