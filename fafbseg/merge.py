@@ -143,12 +143,13 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
             n.nodes['origin'] = 'autoseg'
             n.nodes['origin_skid'] = n.skeleton_id
         x.nodes['origin'] = 'query'
+        x.nodes['origin_skid'] = x.skeleton_id
         union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
 
         # Subset to autoseg nodes
         autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
     else:
-        autoseg_nodes =  np.empty((0, 5))
+        autoseg_nodes = np.empty((0, 5))
 
     # Process fragments if any autoseg nodes left
     data = []
@@ -165,7 +166,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
             # Find parent node in union
             pn = nodes.loc[n.root[0], 'parent_id']
             pn_co = nodes.loc[pn, ['x', 'y', 'z']].values
-            org_skids = n.nodes.skeleton_id.unique().tolist()
+            org_skids = n.nodes.origin_skid.unique().tolist()
             data.append([n.n_nodes, n.cable_length, pn, pn_co, org_skids])
 
     df = pd.DataFrame(data, columns=['n_nodes', 'cable_length', 'node_id',
