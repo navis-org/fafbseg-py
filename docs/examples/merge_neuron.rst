@@ -4,7 +4,7 @@ Merging
 =======
 
 This example will illustrate how to merge a neuron from v14 autoseg into
-manual tracing:
+manual tracings:
 
 .. note::
 
@@ -33,7 +33,7 @@ At this point you could make changes to your neuron like:
    - ...
 
 Next, start the actual commit process (see video below for a demonstration).
-See :func:`fafbseg.merge_neuron` for additional parameters.
+See :func:`fafbseg.merge_neuron` for additional parameters!
 
 .. code-block:: python
 
