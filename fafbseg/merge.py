@@ -353,7 +353,13 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                                         remote_instance=target_instance)
             if 'error' in resp:
                 return resp
-            print('Done', flush=True)
+
+            # Add annotations
+            _ = __merge_annotations(n, resp['skeleton_id'], tag, target_instance)
+
+            msg = '\nNeuron "{}" successfully uploaded to target instance as "{}" #{}'
+            print(msg.format(n.neuron_name, n.neuron_name, resp['skeleton_id']),
+                  flush=True)
             continue
 
         # Check if there are any duplicate node IDs between neuron ``x`` and the
@@ -518,21 +524,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                                                          remote_instance=target_instance)
 
         # Add annotations
-        to_add = []
-        # Add "{URL} upload {tag} annotation"
-        if not isinstance(getattr(n, '_remote_instance'), type(None)):
-            u = n._remote_instance.server.split('/')[-1] + ' upload'
-            if isinstance(tag, str):
-                u += " {}".format(tag)
-            to_add.append(u)
-        # Existing annotation (the individual fragments would not have inherited them)
-        if n.__dict__.get('annotations', []):
-            to_add += n.annotations
-        # If anything to add
-        if to_add:
-            resp = pymaid.add_annotations(bn,
-                                          to_add,
-                                          remote_instance=target_instance)
+        _ = __merge_annotations(n, bn, tag, target_instance)
 
         # Update node radii
         if update_radii:
@@ -547,6 +539,25 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
               flush=True)
 
     return
+
+
+def __merge_annotations(n, bn, tag, target_instance):
+    """Make sure proper annotations are added."""
+    to_add = []
+    # Add "{URL} upload {tag} annotation"
+    if not isinstance(getattr(n, '_remote_instance'), type(None)):
+        u = n._remote_instance.server.split('/')[-1] + ' upload'
+        if isinstance(tag, str):
+            u += " {}".format(tag)
+        to_add.append(u)
+    # Existing annotation (the individual fragments would not have inherited them)
+    if n.__dict__.get('annotations', []):
+        to_add += n.annotations
+    # If anything to add
+    if to_add:
+        resp = pymaid.add_annotations(bn,
+                                      to_add,
+                                      remote_instance=target_instance)
 
 
 def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
