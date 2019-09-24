@@ -1014,8 +1014,8 @@ def _confirm_overlap(x, fragments, viewer=None):
     # If no overlapping fragments (either non from the start or all removed
     # during filtering) ask if just proceed with upload
     if not fragments:
-        msg = '\nNo overlapping fragments to be merged found in target instance. ' \
-              'Proceed with uploading this neuron?'
+        msg = '\nNo overlapping fragments to be merged in target instance.\n' \
+              'Proceed with just uploading this neuron?'
         q = [inquirer.Confirm(name='confirm', message=msg)]
         confirm = inquirer.prompt(q, theme=GreenPassion()).get('confirm')
 
