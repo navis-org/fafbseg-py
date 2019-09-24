@@ -403,6 +403,10 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     resp = remote_instance.fetch(urls, desc='Searching for overlapping neurons')
     skids = set([s for l in resp for s in l])
 
+    # Return empty NeuronList if no skids found
+    if not skids:
+        return pymaid.CatmaidNeuronList([])
+
     # Get nodes for these candidates
     tn_table = pymaid.get_treenode_table(skids,
                                          include_details=False,
