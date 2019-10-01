@@ -25,3 +25,14 @@ These functions let you merge autoseg neurons into manual.
 
     ~fafbseg.merge_neuron
     ~fafbseg.find_missed_branches
+
+Setup
+-----
+Functions for setting up segmentation data source.
+
+.. autosummary::
+    :toctree: generated/
+
+    ~fafbseg.use_brainmaps
+    ~fafbseg.use_google_storage
+    ~fafbseg.use_remote_service
