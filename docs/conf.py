@@ -10,7 +10,7 @@ import os
 
 MOCK_MODULES = ['numpy', 'pandas',
                 'pymaid', 
-                'brainmappy',
+                'cloudvolume',
                 'networkx', 'tqdm',
                 'inquirer', 'inquirer.themes', 'inquirer.themes.GreenPassion']
 for mod_name in MOCK_MODULES:

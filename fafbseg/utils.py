@@ -14,6 +14,7 @@
 #    GNU General Public License for more details.
 
 from functools import wraps
+from urllib.parse import urlparse
 
 use_pbars = True
 
@@ -42,3 +43,12 @@ def never_cache(function):
         # Return result
         return res
     return wrapper
+
+
+def is_url(x):
+    """Check if URL is valid."""
+    try:
+        result = urlparse(x)
+        return all([result.scheme, result.netloc, result.path])
+    except BaseException:
+        return False

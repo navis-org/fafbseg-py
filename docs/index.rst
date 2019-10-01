@@ -17,21 +17,18 @@ To install the latest version of :code:`fafbseg-py` with :code:`pip`.
 
 Then make sure to install required dependencies
 `pymaid <https://pymaid.readthedocs.io/en/latest/>`_,
-`brainmappy <https://github.com/schlegelp/brainmappy>`_,
+`cloudvolume <https://github.com/seung-lab/cloud-volume>`_,
 `inquirer <https://magmax.org/python-inquirer/index.html>`_ and
 `iPython <https://ipython.org/install.html>`_:
 
 .. code-block:: bat
 
     pip3 install git+git://github.com/schlegelp/pymaid@master
-    pip3 install git+git://github.com/schlegelp/brainmappy@master
+    pip3 install cloudvolume
     pip3 install inquirer
     pip3 install ipython
 
-You will need brainmaps API access. See
-`brainmappy <https://github.com/schlegelp/brainmappy>`_ for details.
-
-Now have a look at the :doc:`examles<examples/index>` or the :doc:`API<api>`
+Now have a look at the :doc:`examples<examples/index>` or the :doc:`API<api>`
 to get started.
 
 Contents

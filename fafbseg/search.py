@@ -13,20 +13,12 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import brainmappy as bm
 import numpy as np
 import pandas as pd
 import pymaid
 
-import requests
-
-from tqdm import tqdm
-
-from . import utils
+from . import utils, segmentation
 use_pbars = utils.use_pbars
-
-SEG_ID_URL = None
-USE_BRAINMAPS = True
 
 
 def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
@@ -211,10 +203,7 @@ def neuron_to_segments(x, **kwargs):
     nodes = x.nodes
 
     # Get segmentation IDs
-    if USE_BRAINMAPS:
-        nodes['seg_id'] = bm.get_seg_at_location(nodes[['x', 'y', 'z']].values)
-    else:
-        nodes['seg_id'] = get_seg_ids(nodes[['x', 'y', 'z']].values)
+    nodes['seg_id'] = segmentation.get_seg_ids(nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
     seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
@@ -288,7 +277,6 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
                         neuron e.g. from autoseg.
 
     """
-
     if not isinstance(x, pymaid.CatmaidNeuron):
         raise TypeError('Expected pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
 
@@ -416,10 +404,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     node_counts = tn_table.groupby('skeleton_id').treenode_id.count().to_dict()
 
     # Get segment IDs for the input neuron
-    if USE_BRAINMAPS:
-        x.nodes['seg_id'] = bm.get_seg_at_location(x.nodes[['x', 'y', 'z']].values)
-    else:
-        x.nodes['seg_id'] = get_seg_ids(x.nodes[['x', 'y', 'z']].values)
+    x.nodes['seg_id'] = segmentation.get_seg_ids(x.nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
     x_seg_counts = x.nodes.groupby('seg_id').treenode_id.count().reset_index(drop=False)
@@ -442,10 +427,7 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
     tn_table = tn_table[tn_table.skeleton_id.isin(to_keep)]
 
     # Add segment IDs
-    if USE_BRAINMAPS:
-        tn_table['seg_id'] = bm.get_seg_at_location(tn_table[['x', 'y', 'z']].values)
-    else:
-        tn_table['seg_id'] = get_seg_ids(tn_table[['x', 'y', 'z']].values)
+    tn_table['seg_id'] = segmentation.get_seg_ids(tn_table[['x', 'y', 'z']].values)
 
     # Now group by neuron and by segment
     seg_counts = tn_table.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
@@ -493,47 +475,3 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
         ol = pymaid.CatmaidNeuronList([])
 
     return ol
-
-
-def get_seg_ids(locs, url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
-    """Return segment IDs at given locations.
-
-    Parameters
-    ----------
-    locs :      list-like
-                x/y/z coordinates.
-    """
-
-    if not url:
-        if SEG_ID_URL:
-            url = SEG_ID_URL
-        else:
-            import os
-            url = os.environ.get('SEG_ID_URL')
-
-    if not url:
-        raise ValueError('Must provide valid URL to fetch segment IDs')
-
-    locs = np.array(locs)
-    pixel_conversion = np.array(pixel_conversion)
-
-    locs = locs.astype(int) / pixel_conversion
-
-    locs = np.round(locs).astype(int)
-
-    seg_ids = []
-    with tqdm(total=len(locs), desc='Segment IDs') as pbar:
-        for i in range(0, len(locs), int(chunk_size)):
-            chunk = locs[i: i + int(chunk_size)]
-
-            resp = requests.post(url, json={'locations': chunk.tolist()})
-            resp.raise_for_status()
-
-            if 'error' in resp.json():
-                raise BaseException('Error fetching data: {}'.format(resp.json()['error']))
-
-            seg_ids += resp.json()
-
-            pbar.update(len(chunk))
-
-    return seg_ids

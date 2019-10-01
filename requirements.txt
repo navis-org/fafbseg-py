@@ -1,4 +1,4 @@
-inquirer ~= 2.6.3
+inquirer~=2.6.3
 # git+git://github.com/schlegelp/pymaid@master
-# git+git://github.com/schlegelp/brainmappy@master
 ipython
+cloudvolume>=0.60.0

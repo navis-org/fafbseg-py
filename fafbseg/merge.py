@@ -273,7 +273,6 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
 
     Examples
     --------
-
     Setup
 
     >>> import fafbseg

@@ -5,8 +5,10 @@ Examples
     :widths: 15 40
     :header-rows: 1
 
-    * - 
+    * -
       - **Description**
+    * - :doc:`General setup<general_setup>`
+      - Learn how to set things up
     * - :doc:`Merging<merge_neuron>`
       - How to merge an autoseg neuron into ``v14``
     * - :doc:`Missed branches<find_missing>`
