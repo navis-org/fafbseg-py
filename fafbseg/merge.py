@@ -319,11 +319,20 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
 
     # Start by find all overlapping fragments
     overlapping = []
-    for n in tqdm(x, desc='Pre-processing neuron(s)', leave=False, disable=not use_pbars):
+    for n in tqdm(x, desc='Pre-processing neuron(s)',
+                  leave=False, disable=not use_pbars):
         ol = find_fragments(n,
                             min_node_overlap=min_node_overlap,
                             min_nodes=min_overlap_size,
                             remote_instance=target_instance)
+
+        # Add number of samplers to each neuron
+        n_samplers = pymaid.get_sampler_counts(ol,
+                                               remote_instance=target_instance)
+
+        for nn in ol:
+            nn.sampler_count = n_samplers[str(nn.skeleton_id)]
+
         overlapping.append(ol)
 
     # Now have the user confirm merges before we actually make them
@@ -610,8 +619,8 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
     # we identify the master ("base_neuron") via it's skeleton ID
     skids = [n.skeleton_id for n in x]
     if len(skids) > len(np.unique(skids)):
-        raise ValueError('Duplicate skeleton IDs found. Try manually assigning '
-                         'unique skeleton IDs.')
+        raise ValueError('Duplicate skeleton IDs found in neurons to be merged. '
+                         'Try manually assigning unique skeleton IDs.')
 
     if any([not isinstance(n, pymaid.CatmaidNeuron) for n in x]):
         raise TypeError('Input must only be CatmaidNeurons/List')
@@ -981,10 +990,12 @@ def _confirm_overlap(x, fragments, viewer=None):
             fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
 
         # Now ask for smaller fragments via CLI
-        s = fragments.summary(add_cols=['overlap_score'])[['neuron_name',
+        s = fragments.summary(add_cols=['overlap_score',
+                                        'sampler_count'])[['neuron_name',
                                                            'skeleton_id',
                                                            'n_nodes',
                                                            'n_connectors',
+                                                           'sampler_count',
                                                            'overlap_score']]
 
         # Ask user which neuron should be merged
@@ -1010,7 +1021,7 @@ def _confirm_overlap(x, fragments, viewer=None):
         # Remove fragments that are not selected
         fragments = fragments[selection]
 
-    # If no overlapping fragments (either non from the start or all removed
+    # If no overlapping fragments (either none from the start or all removed
     # during filtering) ask if just proceed with upload
     if not fragments:
         msg = '\nNo overlapping fragments to be merged in target instance.\n' \
@@ -1025,10 +1036,12 @@ def _confirm_overlap(x, fragments, viewer=None):
     # If any fragments left, ask for base neuron
     else:
         # Ask user which neuron to use as merge target
-        s = fragments.summary(add_cols=['overlap_score'])[['neuron_name',
+        s = fragments.summary(add_cols=['overlap_score',
+                                        'sampler_count'])[['neuron_name',
                                                            'skeleton_id',
                                                            'n_nodes',
                                                            'n_connectors',
+                                                           'sampler_count',
                                                            'overlap_score']]
 
         print("\nAbove fragments and your input neuron will be merged into a "
@@ -1052,8 +1065,24 @@ def _confirm_overlap(x, fragments, viewer=None):
 
         base_neuron = fragments[bn]
 
-    # Some safeguards
-    if sum([not isinstance(s, type(None)) for s in fragments.soma]) > 1:
+    # Some safeguards:
+    # Check if we would delete any samplers
+    cond1 = s.skeleton_id != base_neuron.skeleton_id
+    cond2 = s.sampler_count > 0
+    has_sampler = s[cond1 & cond2]
+    if not has_sampler.empty:
+        print("\nMerging selected fragments would delete reconstruction "
+              "samplers on the following neurons:")
+        print(has_sampler)
+        q = [inquirer.Confirm(name='confirm', message='Proceed anyway?')]
+        confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
+
+        if not confirm:
+            raise SystemExit('Merge process aborted by user.')
+
+    # Check if we would generate any 2-soma neurons
+    has_soma = [not isinstance(s, type(None)) for s in fragments.soma]
+    if sum(has_soma) > 1:
         msg = '\nMerging the selected fragments would generate a neuron with ' \
               'two somas! Proceed anyway?'
         q = [inquirer.Confirm(name='confirm', message=msg)]
