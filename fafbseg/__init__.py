@@ -4,4 +4,4 @@ from .search import (segments_to_skids, segments_to_neuron,
 from .segmentation import (use_google_storage, use_brainmaps,
                            use_remote_service, get_seg_ids)
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
