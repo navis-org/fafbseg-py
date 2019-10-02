@@ -39,9 +39,6 @@ See :func:`fafbseg.merge_neuron` for additional parameters!
 
   resp = fafbseg.merge_neuron(x, target_instance=manual, tag='YOURTAG')
 
-.. image:: https://github.com/flyconnectome/fafbseg-py-media/blob/master/media/screencast.gif?raw=true
-   :width: 100%
-
 
 Merge finished - What now?
 --------------------------
