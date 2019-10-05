@@ -120,7 +120,7 @@ From now on credentials are stored locally and in the future you can simply run:
 
 .. code-block:: python
 
-  fafbseg.use_google_storage('772153499790:fafb_v14:fafb-ffn1-20190805')
+  fafbseg.use_brainmaps('772153499790:fafb_v14:fafb-ffn1-20190805')
 
 .. tip::
 
