@@ -290,7 +290,7 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
     if utils.is_url(volume_name):
         url = volume_name
     else:
-        url = 'https://storage.googleapis.com/{}/segmentation'.format(url)
+        url = 'https://storage.googleapis.com/{}/segmentation'.format(volume_name)
 
     volume = cloudvolume.CloudVolume(url, **defaults)
     get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
