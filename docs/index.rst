@@ -24,7 +24,7 @@ Then make sure to install required dependencies
 .. code-block:: bat
 
     pip3 install git+git://github.com/schlegelp/pymaid@master
-    pip3 install cloudvolume
+    pip3 install cloud-volume
     pip3 install inquirer
     pip3 install ipython
 
