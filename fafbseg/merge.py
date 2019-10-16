@@ -29,6 +29,10 @@ from inquirer.themes import GreenPassion
 from . import utils
 use_pbars = utils.use_pbars
 
+# This is to prevent FutureWarning from numpy (via vispy)
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 @utils.never_cache
 def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
