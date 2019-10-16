@@ -282,7 +282,7 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
                         data.
 
     """
-    global get_seg_ids
+    global _get_seg_ids
 
     # Set and update defaults from kwargs
     defaults = dict(cache=True,
@@ -296,9 +296,9 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
         url = 'https://storage.googleapis.com/{}/segmentation'.format(volume_name)
 
     volume = cloudvolume.CloudVolume(url, **defaults)
-    get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
-                                            max_workers=max_workers,
-                                            progress=progress)
+    _get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
+                                             max_workers=max_workers,
+                                             progress=progress)
     print('Using Google CloudStorage to retrieve segmentation IDs.')
 
 
@@ -321,7 +321,7 @@ def use_local_data(path, progress=True, **kwargs):
     None
 
     Examples
-    --------    
+    --------
     >>> fafbseg.use_local_data("/Volumes/SSD/segmentation")
 
     See Also
@@ -334,7 +334,7 @@ def use_local_data(path, progress=True, **kwargs):
                         Use this to access via Google Cloud storage.
 
     """
-    global get_seg_ids
+    global _get_seg_ids
 
     # Set and update defaults from kwargs
     defaults = dict(cache=True,
@@ -346,9 +346,9 @@ def use_local_data(path, progress=True, **kwargs):
         path = 'file://' + path
 
     volume = cloudvolume.CloudVolume(path, **defaults)
-    get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
-                                            max_workers=1,
-                                            progress=progress)
+    _get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
+                                             max_workers=1,
+                                             progress=progress)
     print('Using local segmentation data to retrieve segmentation IDs.')
 
 
@@ -399,7 +399,7 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
                         data.
 
     """
-    global get_seg_ids
+    global _get_seg_ids
 
     if not url:
         url = os.environ.get('SEG_ID_URL')
@@ -407,9 +407,9 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
     if not utils.is_url(url):
         raise ValueError("Invalid URL. Must provide valid URL.")
 
-    get_seg_ids = lambda x: _get_seg_ids_url(x, url,
-                                             pixel_conversion=pixel_conversion,
-                                             chunk_size=chunk_size)
+    _get_seg_ids = lambda x: _get_seg_ids_url(x, url,
+                                              pixel_conversion=pixel_conversion,
+                                              chunk_size=chunk_size)
     print('Using web-hosted solution to retrieve segmentation IDs.')
 
 
@@ -448,7 +448,7 @@ def use_brainmaps(volume_id, client_secret=None, max_threads=10):
                         data.
 
     """
-    global get_seg_ids
+    global _get_seg_ids
 
     try:
         import brainmappy as bm
@@ -459,20 +459,54 @@ def use_brainmaps(volume_id, client_secret=None, max_threads=10):
 
     session = bm.acquire_credentials(client_secret)
 
-    get_seg_ids = lambda x: bm.get_seg_at_location(x,
-                                                   volume_id=volume_id,
-                                                   max_threads=max_threads,
-                                                   session=session
-                                                   )
+    _get_seg_ids = lambda x: bm.get_seg_at_location(x,
+                                                    volume_id=volume_id,
+                                                    max_threads=max_threads,
+                                                    session=session
+                                                    )
     print('Using brainmaps API to retrieve segmentation IDs.')
 
 
 def _warn_setup(*args, **kwargs):
     """Tell user to set up connection."""
     raise BaseException('Please use fafbseg.use_google_storage, '
-                        'fafbseg.use_brainmaps or fafbseg.use_remote_service '
+                        'fafbseg.use_brainmaps, fafbseg.use_remote_service '
+                        'or fafbseg.use_local_data '
                         'to set the way you want to fetch segmentation IDs.')
 
 
+def get_seg_ids(locs):
+    """Retrieve segmentation IDs at given location(s).
+
+    On startup you must use one of the ``fafbseg.use_...`` functions (see
+    below) to set a source for the segmentation data.
+
+    Parameters
+    ----------
+    locs :      list-like
+                Array of x/y/z coordinates in NM.
+
+    Returns
+    -------
+    list
+                List of segmentation IDs in the same order as ``locs``.
+
+    See Also
+    --------
+    :func:`~fafbseg.use_remote_service`
+                        Use this is if you are hosting your own solution.
+    :func:`~fafbseg.use_google_storage`
+                        This uses the segmentation data hosted on Google Storage
+                        and does not require any special permissions.
+    :func:`~fafbseg.use_local_data`
+                        Use this is if you have a local copy of the segmentation
+                        data.
+    :func:`~fafbseg.use_brainmaps`
+                        Use this if you have access to the brainmaps API.
+
+    """
+    return _get_seg_ids(locs)
+
+
 # On import access to segmentation is not set -> this function will warn
-get_seg_ids = _warn_setup
+_get_seg_ids = _warn_setup
