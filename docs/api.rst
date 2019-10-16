@@ -36,3 +36,4 @@ Functions for setting up segmentation data source.
     ~fafbseg.use_brainmaps
     ~fafbseg.use_google_storage
     ~fafbseg.use_remote_service
+    ~fafbseg.use_local_data

@@ -277,6 +277,9 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
                         Use this if you have access to the brainmaps API.
     :func:`~fafbseg.use_remote_service`
                         Use this is if you are hosting your own solution.
+    :func:`~fafbseg.use_local_data`
+                        Use this is if you have a local copy of the segmentation
+                        data.
 
     """
     global get_seg_ids
@@ -297,6 +300,56 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
                                             max_workers=max_workers,
                                             progress=progress)
     print('Using Google CloudStorage to retrieve segmentation IDs.')
+
+
+def use_local_data(path, progress=True, **kwargs):
+    """Fetch segment IDs using a local copy of the segmentation data.
+
+    Parameters
+    ----------
+    path :          str
+                    Path to the local copy. Must point to the directory with
+                    the ``info`` file.
+    progress :      bool, optional
+                    If False, will not show progress bar.
+    **kwargs
+                    Keyword arguments passed on to ``cloudvolume.CloudVolume``.
+
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------    
+    >>> fafbseg.use_local_data("/Volumes/SSD/segmentation")
+
+    See Also
+    --------
+    :func:`~fafbseg.use_brainmaps`
+                        Use this if you have access to the brainmaps API.
+    :func:`~fafbseg.use_remote_service`
+                        Use this is if you are hosting your own solution.
+    :func:`~fafbseg.use_google_storage`
+                        Use this to access via Google Cloud storage.
+
+    """
+    global get_seg_ids
+
+    # Set and update defaults from kwargs
+    defaults = dict(cache=True,
+                    mip=0,
+                    progress=False)
+    defaults.update(kwargs)
+
+    if not path.startswith('file://'):
+        path = 'file://' + path
+
+    volume = cloudvolume.CloudVolume(path, **defaults)
+    get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
+                                            max_workers=1,
+                                            progress=progress)
+    print('Using local segmentation data to retrieve segmentation IDs.')
 
 
 def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
@@ -341,6 +394,9 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
     :func:`~fafbseg.use_google_storage`
                         This uses the segmentation data hosted on Google Storage
                         and does not require any special permissions.
+    :func:`~fafbseg.use_local_data`
+                        Use this is if you have a local copy of the segmentation
+                        data.
 
     """
     global get_seg_ids
@@ -387,6 +443,9 @@ def use_brainmaps(volume_id, client_secret=None, max_threads=10):
     :func:`~fafbseg.use_google_storage`
                         This uses the segmentation data hosted on Google Storage
                         and does not require any special permissions.
+    :func:`~fafbseg.use_local_data`
+                        Use this is if you have a local copy of the segmentation
+                        data.
 
     """
     global get_seg_ids
