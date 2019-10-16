@@ -330,12 +330,13 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                             min_nodes=min_overlap_size,
                             remote_instance=target_instance)
 
-        # Add number of samplers to each neuron
-        n_samplers = pymaid.get_sampler_counts(ol,
-                                               remote_instance=target_instance)
+        if ol:
+            # Add number of samplers to each neuron
+            n_samplers = pymaid.get_sampler_counts(ol,
+                                                   remote_instance=target_instance)
 
-        for nn in ol:
-            nn.sampler_count = n_samplers[str(nn.skeleton_id)]
+            for nn in ol:
+                nn.sampler_count = n_samplers[str(nn.skeleton_id)]
 
         overlapping.append(ol)
 
