@@ -1070,30 +1070,30 @@ def _confirm_overlap(x, fragments, viewer=None):
 
         base_neuron = fragments[bn]
 
-    # Some safeguards:
-    # Check if we would delete any samplers
-    cond1 = s.skeleton_id != base_neuron.skeleton_id
-    cond2 = s.sampler_count > 0
-    has_sampler = s[cond1 & cond2]
-    if not has_sampler.empty:
-        print("\nMerging selected fragments would delete reconstruction "
-              "samplers on the following neurons:")
-        print(has_sampler)
-        q = [inquirer.Confirm(name='confirm', message='Proceed anyway?')]
-        confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
+        # Some safeguards:
+        # Check if we would delete any samplers
+        cond1 = s.skeleton_id != base_neuron.skeleton_id
+        cond2 = s.sampler_count > 0
+        has_sampler = s[cond1 & cond2]
+        if not has_sampler.empty:
+            print("\nMerging selected fragments would delete reconstruction "
+                  "samplers on the following neurons:")
+            print(has_sampler)
+            q = [inquirer.Confirm(name='confirm', message='Proceed anyway?')]
+            confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
 
-        if not confirm:
-            raise SystemExit('Merge process aborted by user.')
+            if not confirm:
+                raise SystemExit('Merge process aborted by user.')
 
-    # Check if we would generate any 2-soma neurons
-    has_soma = [not isinstance(s, type(None)) for s in fragments.soma]
-    if sum(has_soma) > 1:
-        msg = '\nMerging the selected fragments would generate a neuron with ' \
-              'two somas! Proceed anyway?'
-        q = [inquirer.Confirm(name='confirm', message=msg)]
-        confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
+        # Check if we would generate any 2-soma neurons
+        has_soma = [not isinstance(s, type(None)) for s in fragments.soma]
+        if sum(has_soma) > 1:
+            msg = '\nMerging the selected fragments would generate a neuron with ' \
+                  'two somas! Proceed anyway?'
+            q = [inquirer.Confirm(name='confirm', message=msg)]
+            confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
 
-        if not confirm:
-            raise SystemExit('Merge process aborted by user.')
+            if not confirm:
+                raise SystemExit('Merge process aborted by user.')
 
     return fragments, base_neuron
