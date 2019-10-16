@@ -42,6 +42,11 @@ the corresponding credentials):
                                 caching=False,
                                 max_threads=20)
 
+Last but not least, we need to tell ``fafbseg`` what source to use to query the
+segmentation data. For this you use one of the ``fafbseg.use_....`` functions -
+which one depends on the data source you have available. See below for an
+explanation.                              
+
 Choosing a segmentation source
 ------------------------------
 
@@ -66,17 +71,23 @@ There are three options for where to get that data from:
         Seung lab to query it.
       - does not need any special permissions
       - slow
-    * - 2. brainmaps API
+    * - 2. Local copy of the segmentation data
+      - At the highest resolution (i.e. not downsampled) segmentation data for
+        FAFB is ~850Gb. Given that the segmentation data is publicly available,
+        you can download it and use that local copy to fetch segmentation IDs.
+      - fast
+      - requires SSDs (USB or internal)
+    * - 3. brainmaps API
       - This is the the same API that neuroglancer uses to browse the segmentation
         data.
       - blazingly fast
       - needs permission to access the brainmaps API (see
         `brainmappy <https://github.com/schlegelp/brainmappy>`_ for details)
-    * - 3. Self-hosted remote data
-      - The highest resolution (i.e. not downsampled) segmentation data for FAFB
-        is ~850Gb. Given that the segmentation data is publicly available, you
-        download and host it yourself - using for example
-        `CloudVolumeServer <https://github.com/flyconnectome/CloudVolumeServer>`_.
+    * - 4. Self-hosted remote data
+      - If you have a machine that can act as a server, you could download a
+        local copy of the data and serve it e.g. via
+        `CloudVolumeServer <https://github.com/flyconnectome/CloudVolumeServer>`_
+        similar to what brainmaps does.
       - potentially faster than brainmaps
       - requires server & know-how
 
@@ -91,6 +102,22 @@ up run :func:`fafbseg.use_google_storage` at start up:
 
   # Accessing the most recent autoseg data
   fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+
+
+Using local copy
+****************
+
+An alternative to slow remote access via Google Storage is to download the data
+locally. See :doc:`here<download_copy>` for a brief explanation on how to do
+this.
+
+Once you have set up a local copy of the segmentation data, you use fafbseg like
+so:
+
+.. code-block:: python
+
+  # Accessing the most recent autoseg data
+  fafbseg.use_local_data("path/to/segmentation")
 
 
 Using brainmaps

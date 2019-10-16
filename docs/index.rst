@@ -31,6 +31,11 @@ Then make sure to install required dependencies
 Now have a look at the :doc:`examples<examples/index>` or the :doc:`API<api>`
 to get started.
 
+.. warning::
+
+  ``fafbseg`` has not been tested on Windows and is unlikely to work off the
+  bat. I highly recommend using either OSX or linux.
+
 Contents
 =========
 

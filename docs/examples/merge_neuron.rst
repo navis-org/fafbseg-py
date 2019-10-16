@@ -82,4 +82,4 @@ wrong:
 .. code-block:: python
 
   # Default is 100 -> let's lower that
-  manual.max_threads = 50
+  manual.max_threads = 20
