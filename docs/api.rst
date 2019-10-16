@@ -15,6 +15,7 @@ These functions will let you map between autoseg and manual CATMAID.
     ~fafbseg.neuron_to_segments
     ~fafbseg.find_autoseg_fragments
     ~fafbseg.find_fragments
+    ~fafbseg.get_seg_ids
 
 Merge
 -----
