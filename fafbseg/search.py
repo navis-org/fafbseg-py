@@ -179,19 +179,13 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     return seg2skid
 
 
-def neuron_to_segments(x, **kwargs):
-    """Use brainmaps API to return segment IDs overlapping with a given neuron.
-
-    This is in essence a higher-level function of brainmappy's
-    get_seg_at_location.
+def neuron_to_segments(x):
+    """Get segment IDs overlapping with a given neuron.
 
     Parameters
     ----------
     x :                 CatmaidNeuron/List
                         Neurons for which to return segment IDs.
-    **kwargs
-                        Keyword arguments passed to
-                        `brainmappy.get_seg_at_location`.
 
     Returns
     -------
@@ -250,6 +244,8 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     min_nodes :         int, optional
                         Minimum node count for returned neurons.
     verbose :           bool, optional
+                        If True, will be print summary of who has contributed
+                        to the autoseg fragments by merging or tracing nodes.
     raise_none_found :  bool, optional
                         If True and none of the requested segments were found,
                         will raise ValueError
@@ -310,6 +306,32 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
                             raise_none_found=raise_none_found)
 
     nl.sort_values('n_nodes')
+
+    # Give contribution summary
+    if verbose:
+        # Get annotation details
+        an_details = pymaid.get_annotation_details(nl,
+                                                   remote_instance=autoseg_instance)
+        # Extract merge annotations
+        merge_an = an_details[an_details.annotation.str.contains('Merged:')]
+        # Group by user and count
+        merge_count = merge_an.groupby('user')[['annotation']].count()
+
+        # Get manual tracing contributions
+        contr = pymaid.get_user_contributions(nl,
+                                              remote_instance=autoseg_instance)
+        contr.set_index('user', inplace=True)
+
+        # Merge both
+        summary = pd.merge(merge_count, contr[['nodes', 'nodes_reviewed']],
+                           left_index=True, right_index=True).fillna(0)
+        summary.columns = ['merges', 'nodes_traced', 'nodes_reviewed']
+
+        if not summary.empty:
+            print('Tracer have worked on these neurons:')
+            print(summary)
+        else:
+            print('Nobody has worked on these neurons')
 
     return nl[nl.n_nodes >= min_nodes]
 
