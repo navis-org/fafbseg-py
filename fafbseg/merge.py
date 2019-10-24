@@ -78,16 +78,14 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     Setup
 
     >>> import fafbseg
-    >>> import brainmaps as bm
     >>> import pymaid
 
     >>> # Set up connections to manual and autoseg CATMAID
     >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
     >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
-    >>> # Initialise brainmaps
-    >>> session = bm.acquire_credentials()
-    >>> bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
+    >>> # Set a source for segmentation data
+    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find missed branches and tag them
 
@@ -201,7 +199,8 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
     This function will attempt to:
 
         1. Find fragments in ``target_instance`` that overlap with ``x``
-           using the brainmaps API.
+           using whatever segmentation data source you have set using
+           ``fafbseg.use_...``.
         2. Generate a union of these fragments and ``x``.
         3. Make a differential upload of the union leaving existing nodes
            untouched.
@@ -280,16 +279,14 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
     Setup
 
     >>> import fafbseg
-    >>> import brainmaps as bm
     >>> import pymaid
 
     >>> # Set up connections to manual and autoseg CATMAID
     >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
     >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
-    >>> # Initialise brainmaps
-    >>> session = bm.acquire_credentials()
-    >>> bm.set_global_volume('772153499790:fafb_v14:fafb-ffn1-20190521')
+    >>> # Set a segmentation data source
+    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Merge a neuron from autoseg into v14
 

@@ -44,7 +44,9 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     Returns
     -------
     CatmaidNeuronList
-                        Neurons representing given segmentation IDs.
+                        Neurons representing given segmentation IDs. Each neuron
+                        has the list of segmentation IDs associated with it
+                        as ``.seg_ids`` attribute.
 
     """
     assert isinstance(autoseg_instance, pymaid.CatmaidInstance)
@@ -223,8 +225,9 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
                            verbose=True, raise_none_found=True):
     """Find autoseg tracings constituting a given neuron.
 
-    This function works by querying the segmentation IDs along the neurites and
-    then fetching the corresponding skeletons in ``autoseg_instance``.
+    This function works by querying the segmentation IDs along the neurites of
+    your query neuron and then fetching the corresponding skeletons in
+    ``autoseg_instance``.
 
     Parameters
     ----------
@@ -253,14 +256,12 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
 
     >>> import pymaid
     >>> import fafbseg
-    >>> import brainmappy as bm
 
     >>> manual = pymaid.CatmaidInstance('MANUAL_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
     >>> auto = pymaid.CatmaidInstance('AUTO_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
-    >>> flow = bm.acquire_credentials()
-    >>> # Note that volume ID must match with the autoseg CatmaidInstance!
-    >>> bm.set_global_volume('some_volume_id')
+    >>> # Call one of the fafbseg.use_... to set a source for segmentation IDs
+    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find autoseg fragments overlapping with a manually traced neuron:
 
@@ -314,7 +315,8 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
         1. Traverse neurites of ``x`` search within 2.5 microns radius for
            potentially overlapping fragments.
         2. Collect segmentation IDs for the input neuron and all potentially
-           overlapping fragments using the brainmaps API.
+           overlapping fragments using whatever source for segmentation IDs
+           you have set by ``fafbseg.use_...``.
         3. Return fragments that overlap with at least ``min_overlap`` nodes
            with input neuron.
 
@@ -345,14 +347,12 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
 
     >>> import pymaid
     >>> import fafbseg
-    >>> import brainmappy as bm
 
     >>> manual = pymaid.CatmaidInstance('MANUAL_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
     >>> auto = pymaid.CatmaidInstance('AUTO_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
-    >>> flow = bm.acquire_credentials()
-    >>> # Note that volume ID must match with the autoseg CatmaidInstance!
-    >>> bm.set_global_volume('some_volume_id')
+    >>> # Set a source for segmentation data
+    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find manually traced fragments overlapping with an autoseg neuron:
 
