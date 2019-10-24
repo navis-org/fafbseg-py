@@ -372,6 +372,14 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                   flush=True)
             continue
 
+        # Check if there is a duplicate skeleton ID between the to-be-merged
+        # neuron and the to-merge-into neurons
+        if n.skeleton_id in ol.skeleton_id:
+            print('Fixing duplicate skeleton IDs.',
+                  flush=True)
+            n.skeleton_id += 'a'
+            n._clear_temp_attributes()
+
         # Check if there are any duplicate node IDs between neuron ``x`` and the
         # overlapping fragments and create new IDs for ``x`` if necessary
         duplicated = n.nodes[n.nodes.treenode_id.isin(ol.nodes.treenode_id.values)]
@@ -565,9 +573,9 @@ def __merge_annotations(n, bn, tag, target_instance):
         to_add += n.annotations
     # If anything to add
     if to_add:
-        resp = pymaid.add_annotations(bn,
-                                      to_add,
-                                      remote_instance=target_instance)
+        _ = pymaid.add_annotations(bn,
+                                   to_add,
+                                   remote_instance=target_instance)
 
 
 def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
