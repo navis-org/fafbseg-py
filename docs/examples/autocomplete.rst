@@ -11,7 +11,7 @@ a partially reconstructed neuron.
     For this to work, you need to have CATMAID API write and import access
 
 Please first see and follow the instructions in the
-:doc:`General Setup<general_setup>`
+:doc:`General Setup<general_setup>`.
 
 OK now that we're all set, we can start the process:
 
@@ -44,23 +44,32 @@ you neuron. For this, turn on the legend by pressing ``L`` (this might take a
 second) and then pressing ``P`` to enable picking. Now you can click on the
 legend entries to show/hide neurons.
 
-Hide fragments you do **not** want to use to autocomplete your neuron and then
-run this:
+Hide autoseg fragments you do **not** want to use to autocomplete your neuron
+and then run this:
 
 .. code-block:: python
 
   import numpy as np
   visible = ol[np.isin(ol.skeleton_id, pymaid.get_viewer().visible)]
 
-Before we can start the merge process, we have to stitch all fragments
-to form a single neuron for upload:
+Before we can start the merge process, we have to stitch all ``auto-seg``
+fragments to form a single virtual neuron for upload:
 
 .. code-block:: python
 
   y = pymaid.stitch_neurons(visible, method='NONE')
 
-Now we can start the upload process as described in :doc:`Merging<merge_neuron>`.
-(see also :func:`fafbseg.merge_neuron` for additional parameters):
+If you want to have a final look this is how you can co-visualize the manual
+tracings and the to-be-merged ``auto-seg`` fragments:
+
+.. code-block:: python
+
+  x.plot3d(color='w', clear=True)
+  y.plot3d(color='r')
+
+Once you are ready start the upload process as described in
+:doc:`Merging<merge_neuron>`. (see also :func:`fafbseg.merge_neuron` for
+additional parameters):
 
 .. code-block:: python
 
@@ -70,7 +79,7 @@ Now we can start the upload process as described in :doc:`Merging<merge_neuron>`
 Gotchas
 -------
 
-When looking for overlapping autoseg fragments, you can end up finding the
+When looking for overlapping ``auto-seg`` fragments, you can end up finding the
 autoseg version of your original neuron - ``x`` in above example. This happens
 if somebody has merged a Google skeleton into ``x``.
 
