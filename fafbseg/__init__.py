@@ -6,4 +6,4 @@ from .segmentation import (use_google_storage, use_brainmaps,
                            use_remote_service, use_local_data,
                            get_seg_ids)
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
