@@ -167,14 +167,14 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
             hist = pymaid.get_skeleton_change(missing,
                                               remote_instance=autoseg_instance)
             # Flatten the list of links (and convert to string)
-            existed = set([str(e) for l in hist for e in l[0]])            
+            existed = set([str(e) for l in hist for e in l[0]])
 
             still_missing = set(missing) & existed
 
-        if still_missing:
-            msg = "{} out of {} segmentation IDs could not be found: {}"
-            msg = msg.format(len(still_missing), len(seg_ids), ", ".join(still_missing))
-            print(msg)
+            if still_missing:
+                msg = "{} out of {} segmentation IDs could not be found: {}"
+                msg = msg.format(len(still_missing), len(seg_ids), ", ".join(still_missing))
+                print(msg)
 
     return seg2skid
 
