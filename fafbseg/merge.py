@@ -999,7 +999,8 @@ def _confirm_overlap(x, fragments, viewer=None):
             # neurons that has been hidden
             fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
 
-        # Now ask for smaller fragments via CLI
+    # Now ask for smaller fragments via CLI
+    if fragments:
         s = fragments.summary(add_cols=['overlap_score',
                                         'sampler_count'])[['neuron_name',
                                                            'skeleton_id',
@@ -1034,8 +1035,8 @@ def _confirm_overlap(x, fragments, viewer=None):
     # If no overlapping fragments (either none from the start or all removed
     # during filtering) ask if just proceed with upload
     if not fragments:
-        msg = '\nNo overlapping fragments to be merged in target instance.\n' \
-              'Proceed with just uploading this neuron?'
+        msg = '\nNo overlapping fragments to be merged into in target ' \
+              'instance.\nProceed with just uploading this neuron?'
         q = [inquirer.Confirm(name='confirm', message=msg)]
         confirm = inquirer.prompt(q, theme=GreenPassion()).get('confirm')
 
