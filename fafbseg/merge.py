@@ -982,10 +982,12 @@ def _confirm_overlap(x, fragments, viewer=None):
             print('Large (>10 nodes) overlapping fragments:')
             print(s.to_string(index=False, show_dimensions=False))
 
-            msg = '\nPlease check these large fragments for overlap and deselect ' \
-                  'neurons that you DO NOT want to have merged by clicking on ' \
-                  'their names in the legend.\nHit ENTER when you are ready to ' \
-                  'proceed or CTRL-C to cancel.'
+            msg = """
+            Please check these large fragments for overlap and deselect
+            neurons that you DO NOT want to have merged by clicking on
+            their names in the legend.
+            Hit ENTER when you are ready to proceed or CTRL-C to cancel.
+            """
 
             try:
                 _ = input(msg)
@@ -1010,10 +1012,13 @@ def _confirm_overlap(x, fragments, viewer=None):
                                                            'overlap_score']]
 
         # Ask user which neuron should be merged
-        print("\nPlease check the fragments that potentially overlap with the "
-              "input neuron (white).\nDeselect those that should NOT be "
-              "merged using the arrows keys.\nHit ENTER when you are ready "
-              "to proceed or CTRL-C to abort")
+        msg = """
+        Please check the fragments that potentially overlap with the input neuron (white).
+        Deselect those that should NOT be merged using the arrows keys.
+        Hit ENTER when you are ready to proceed or CTRL-C to abort
+        """
+        print(msg)
+
         msg = s.to_string(index=False).split('\n')[0]
 
         s_str = s.to_string(index=False, show_dimensions=False, header=False)
@@ -1035,8 +1040,8 @@ def _confirm_overlap(x, fragments, viewer=None):
     # If no overlapping fragments (either none from the start or all removed
     # during filtering) ask if just proceed with upload
     if not fragments:
-        msg = '\nNo overlapping fragments to be merged into in target ' \
-              'instance.\nProceed with just uploading this neuron?'
+        print('No overlapping fragments to be merged into in target instance.')
+        msg = 'Proceed with just uploading this neuron?'
         q = [inquirer.Confirm(name='confirm', message=msg)]
         confirm = inquirer.prompt(q, theme=GreenPassion()).get('confirm')
 
@@ -1055,18 +1060,18 @@ def _confirm_overlap(x, fragments, viewer=None):
                                                            'sampler_count',
                                                            'overlap_score']]
 
-        print("\nAbove fragments and your input neuron will be merged into a "
-              "single neuron.\nAll annotations will be preserved but only the "
-              "neuron used as merge target will keep its name and skeleton ID."
-              "\nPlease select the neuron you would like to use as merge target!"
-              "\n                  " + s.to_string(index=False).split('\n')[0])
-
-        msg = 'Choose merge target'
+        msg = """
+        Above fragments and your input neuron will be merged into a single neuron.
+        All annotations will be preserved but only the neuron used as merge target
+        will keep its name and skeleton ID.
+        Please select the neuron you would like to use as merge target!
+        """ + s.to_string(index=False).split('\n')[0]
+        print(msg)
 
         s_str = s.to_string(index=False, show_dimensions=False, header=False)
         choices = [(v, i) for i, v in enumerate(s_str.split('\n'))]
         q = [inquirer.List(name='base_neuron',
-                           message=msg,
+                           message='Choose merge target',
                            choices=choices)]
         # Ask the question
         bn = inquirer.prompt(q, theme=GreenPassion()).get('base_neuron')
@@ -1082,7 +1087,7 @@ def _confirm_overlap(x, fragments, viewer=None):
         cond2 = s.sampler_count > 0
         has_sampler = s[cond1 & cond2]
         if not has_sampler.empty:
-            print("\nMerging selected fragments would delete reconstruction "
+            print("Merging selected fragments would delete reconstruction "
                   "samplers on the following neurons:")
             print(has_sampler)
             q = [inquirer.Confirm(name='confirm', message='Proceed anyway?')]
@@ -1094,9 +1099,9 @@ def _confirm_overlap(x, fragments, viewer=None):
         # Check if we would generate any 2-soma neurons
         has_soma = [not isinstance(s, type(None)) for s in fragments.soma]
         if sum(has_soma) > 1:
-            msg = '\nMerging the selected fragments would generate a neuron with ' \
-                  'two somas! Proceed anyway?'
-            q = [inquirer.Confirm(name='confirm', message=msg)]
+            print('Merging the selected fragments would generate a neuron  '
+                  'with two somas!')
+            q = [inquirer.Confirm(name='confirm', message='Proceed anyway?')]
             confirm = inquirer.prompt(q, theme=GreenPassion())['confirm']
 
             if not confirm:
