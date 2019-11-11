@@ -1035,7 +1035,11 @@ def _confirm_overlap(x, fragments, viewer=None):
             raise SystemExit('Merge process aborted by user.')
 
         # Remove fragments that are not selected
-        fragments = fragments[selection]
+        if selection:
+            fragments = fragments[selection]
+        else:
+            # If no selection, remove all neurons from the list
+            fragments = fragments[:0]
 
     # If no overlapping fragments (either none from the start or all removed
     # during filtering) ask if just proceed with upload
