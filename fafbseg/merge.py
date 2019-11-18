@@ -309,14 +309,24 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
     if not isinstance(tag, (str, type(None))):
         raise TypeError('Tag must be string, got "{}"'.format(type(tag)))
 
+    # Check user permissions
+    perm = target_instance.fetch(target_instance.make_url('permissions'))
+    requ_perm = ['can_annotate', 'can_annotate_with_token', 'can_import']
+    miss_perm = [p for p in requ_perm if
+                 target_instance.project_id not in perm[0].get(p, [])]
+
+    if miss_perm:
+        msg = 'Your lacks permissions: {}. Please contact an administrator'
+        raise PermissionError(msg.format(', '.join(miss_perm)))
+
     pymaid.set_loggers('WARNING')
 
     # Throttle requests just to play it safe
     # On a bad connection one might have to decrease max_threads further
     target_instance.max_threads = min(target_instance.max_threads, 50)
 
-    # For user convenience, we will do all the stuff that needs user interaction
-    # first and then run the automatic merge:
+    # For user convenience, we will do all the stuff that needs user
+    # interaction first and then run the automatic merge:
 
     # Start by find all overlapping fragments
     overlapping = []
