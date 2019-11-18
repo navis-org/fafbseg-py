@@ -388,7 +388,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             print('Fixing duplicate skeleton IDs.',
                   flush=True)
             n.skeleton_id += 'a'
-            n._clear_temp_attributes()
+            n._clear_temp_attr()
 
         # Check if there are any duplicate node IDs between neuron ``x`` and the
         # overlapping fragments and create new IDs for ``x`` if necessary
