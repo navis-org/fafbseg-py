@@ -18,6 +18,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pymaid
+import random
 
 from tqdm import tqdm
 
@@ -263,8 +264,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                         uploading new branches. This is relevant if your neuron
                         is a virtual chimera of several neurons: in order to
                         preserve provenance (i.e. correctly associating each
-                        node with a ``source_id`` origin) you should make
-                        sure that your neuron is
+                        node with a ``source_id`` origin).
 
     Returns
     -------
@@ -305,6 +305,10 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
         if not isinstance(x, pymaid.CatmaidNeuron):
             raise TypeError('Expected pymaid.CatmaidNeuron/List, got "{}"'.format(type(x)))
         x = pymaid.CatmaidNeuronList(x)
+
+    # Make a copy - in case we make any changes to the neurons
+    # (like changing duplicate skeleton IDs)
+    x = x.copy()
 
     if not isinstance(tag, (str, type(None))):
         raise TypeError('Tag must be string, got "{}"'.format(type(tag)))
@@ -384,10 +388,14 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
 
         # Check if there is a duplicate skeleton ID between the to-be-merged
         # neuron and the to-merge-into neurons
+        original_skid = None
         if n.skeleton_id in ol.skeleton_id:
             print('Fixing duplicate skeleton IDs.',
                   flush=True)
-            n.skeleton_id += 'a'
+            # Keep track of old skid
+            original_skid = n.skeleton_id
+            # Skeleton ID must stay convertable to integer
+            n.skeleton_id = str(random.randint(1, 1000000))
             n._clear_temp_attr()
 
         # Check if there are any duplicate node IDs between neuron ``x`` and the
@@ -402,6 +410,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             n.nodes['treenode_id'] = n.nodes.treenode_id.map(lambda n: id_map.get(n, n))
             n.nodes['parent_id'] = n.nodes.parent_id.map(lambda n: id_map.get(n, n))
             n.connectors['treenode_id'] = n.connectors.treenode_id.map(lambda n: id_map.get(n, n))
+            n._clear_temp_attr()
             print('Done.', flush=True)
 
         # Combining the fragments into a single neuron is actually non-trivial:
@@ -473,7 +482,12 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             source_info = {'source_type': 'segmentation'}
 
             if not sid_from_nodes or 'skeleton_id' not in f.nodes.columns:
-                source_info['source_id'] = int(n.skeleton_id)
+                # If we had to change the skeleton ID due to duplication, make
+                # sure to pass the original skid as source ID
+                if original_skid:
+                    source_info['source_id'] = int(original_skid)
+                else:
+                    source_info['source_id'] = int(n.skeleton_id)
             else:
                 if f.nodes.skeleton_id.unique().shape[0] == 1:
                     skid = f.nodes.skeleton_id.unique()[0]
