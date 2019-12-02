@@ -2,3 +2,4 @@ inquirer~=2.6.3
 # git+git://github.com/schlegelp/pymaid@master
 ipython
 cloud-volume>=0.60.0
+PyMCubes
