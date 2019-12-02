@@ -180,7 +180,7 @@ def _get_seg_ids_gs(points, volume, max_workers=4, progress=True):
 
 
 def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
-                     chunk_size=10e3, progress=True):
+                     chunk_size=10e3, progress=True, **kwargs):
     """Fetch segment IDs at given locations via a URL.
 
     Use this is you are hosting the segmentation data yourself on a remote
@@ -200,6 +200,9 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
                         Use this to limit the number of locations per query.
     progress :          bool, optional
                         If False, will not show progress bar.
+    **kwargs
+                        Keyword arguments passed to ``requests.post``.
+
 
     Returns
     -------
@@ -231,7 +234,8 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
         for i in range(0, len(locs), int(chunk_size)):
             chunk = locs[i: i + int(chunk_size)]
 
-            resp = requests.post(url, json={'locations': chunk.tolist()})
+            resp = requests.post(url, json={'locations': chunk.tolist()},
+                                 **kwargs)
             resp.raise_for_status()
 
             if 'error' in resp.json():
@@ -352,7 +356,8 @@ def use_local_data(path, progress=True, **kwargs):
     print('Using local segmentation data to retrieve segmentation IDs.')
 
 
-def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
+def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3,
+                       **kwargs):
     """Fetch segment IDs at given locations using a custom web service.
 
     Use this is you are hosting the segmentation data yourself on a remote
@@ -370,6 +375,8 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
                         absolute units to pixel coordinates.
     chunk_size :        int, optional
                         Use this to limit the number of locations per query.
+    **kwargs
+                        Keyword arguments passed to ``requests.post``.
 
     Returns
     -------
@@ -409,7 +416,8 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3):
 
     _get_seg_ids = lambda x: _get_seg_ids_url(x, url,
                                               pixel_conversion=pixel_conversion,
-                                              chunk_size=chunk_size)
+                                              chunk_size=chunk_size,
+                                              **kwargs)
     print('Using web-hosted solution to retrieve segmentation IDs.')
 
 
