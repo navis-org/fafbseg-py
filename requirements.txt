@@ -3,3 +3,4 @@ inquirer~=2.6.3
 ipython
 cloud-volume>=0.60.0
 PyMCubes
+pyoctree
