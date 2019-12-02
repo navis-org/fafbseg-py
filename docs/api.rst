@@ -27,6 +27,16 @@ These functions let you merge autoseg neurons into manual.
     ~fafbseg.merge_neuron
     ~fafbseg.find_missed_branches
 
+Review
+------
+These functions let you review (autoseg) tracings
+
+.. autosummary::
+    :toctree: generated/
+
+    ~fafbseg.autoreview_edges
+    ~fafbseg.test_edges
+
 Setup
 -----
 Functions for setting up segmentation data source.

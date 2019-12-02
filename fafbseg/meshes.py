@@ -16,10 +16,12 @@
 import cloudvolume
 import mcubes
 import numpy as np
+import pandas as pd
 import tqdm
 import pymaid
 
 from pyoctree import pyoctree
+from concurrent import futures
 
 from . import utils, segmentation
 
@@ -30,15 +32,21 @@ CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
 def get_mesh(x, bbox, vol=None):
     """Get mesh for given segmentation ID using CloudVolume.
 
+    This produces meshes from scratch using marching cubes. As this requires
+    loading the segmentation data it is not suited for generating meshes for
+    whole neurons.
+
     Parameters
     ----------
     x :     int, list of ints
-            Segmentation ID(s).
+            Segmentation ID(s). Will produce a single mesh from all
+            segmentation IDs.
     bbox :  list-like
             Bounding box. Either ``[x1, x2, y1, y2, z1, z2]`` or
             ``[[x1, x2], [y1, y2], [z1, z2]]``. Coordinates are expected to
             be in nanometres.
     vol :   cloudvolume.CloudVolume
+            CloudVolume pointing to the segmentation data.
 
     Returns
     -------
@@ -82,10 +90,10 @@ def get_mesh(x, bbox, vol=None):
     if n_voxels == 0:
         raise ValueError("Id(s) {} not found in given bounding box.".format(x))
     elif n_voxels == 1:
-        #print('ID(s) are in a single voxel.')
+        #  print('ID(s) are in a single voxel.')
         return None
     elif n_voxels == np.prod(u.shape):
-        #print('All voxels in cutout are queried segmentation IDs')
+        #  print('All voxels in cutout are queried segmentation IDs')
         return None
 
     # We have to add some padding otherwise the marching cube will fail
@@ -101,43 +109,141 @@ def get_mesh(x, bbox, vol=None):
     verts *= vol.scale['resolution']
     verts += bbox[:, 0] * vol.scale['resolution']
 
-    # Turn into pymaid Volume and return
+    # Turn into and return pymaid Volume
     return pymaid.Volume(verts, faces, name=str(x))
 
 
-def test_edges(neuron, edges=None, vol=None):
+def autoreview_edges(x, conf_threshold=1, vol=None, remote_instance=None):
+    """Automatically review (low-confidence) edges between nodes.
+
+    The way this works:
+      1. Fetch the live version of the neuron(s) from the CATMAID instance
+      2. Use raycasting to test (low-confidence) egdes
+      3. Edge confidence is set to ``5`` if test is passed and to ``1`` if not
+
+    You *can* use this function to test all edges in a neuron by increasing
+    ``conf_threshold`` to 5. Please note that this could produce a lot of false
+    positives (i.e. edges will be flagged as incorrect even though they
+    aren't). Part of the problem is that mitochondria are segmented as
+    separate entities and hence introduce membranes inside a neuron.
+
+    Parameters
+    ----------
+    x :                 skeleton ID(s) | pymaid.CatmaidNeuron/List
+                        Neuron(s) to review.
+    conf_threshold :    int, optional
+                        Confidence threshold for edges to be tested. By
+                        default only reviews edges with confidence <= 1.
+    vol :               cloudvolume.CloudVolume, optional
+                        CloudVolume pointing to segmentation data.
+    remote_instance :   pymaid.CatmaidInstance, optional
+                        CATMAID instance. If ``None``, will use globally
+                        define instance.
+
+    Returns
+    -------
+    server response
+                        CATMAID server response from updating node
+                        confidences.
+
+    See Also
+    --------
+    :func:`fafbseg.test_edges`
+                        If you only need to test without changing confidences.
+
+    Examples
+    --------
+    >>> # Set up CloudVolume from the publicly hosted FAFB segmentation data
+    >>> # (if you have a local copy, use that instead)
+    >>> from cloudvolume import CloudVolume
+    >>> vol = CloudVolume('https://storage.googleapis.com/fafb-ffn1-20190805/segmentation',
+    ...                   cache=True,
+    ...                   progress=False)
+    >>> # Autoreview edges
+    >>> _ = fafbseg.autoreview_edges(14401884, vol=vol, remote_instance=manual)
+
+    """
+    # Fetch neuron(s)
+    n = pymaid.get_neurons(x, remote_instance=remote_instance)
+
+    # Extract low confidence edges
+    not_root = ~n.nodes.parent_id.isnull()
+    is_low_conf = n.nodes.confidence <= conf_threshold
+    to_test = n.nodes[is_low_conf & not_root]
+
+    if to_test.empty:
+        print('No low-confidence edges to test in neuron(s) '
+              '{} found'.format(n.skeleton_id))
+        return
+
+    # Test edges
+    verdict = test_edges(n,
+                         edges=to_test[['treenode_id', 'parent_id']].values,
+                         vol=vol)
+
+    # Update node confidences
+    new_confidences = {n: 5 for n in to_test[verdict].treenode_id.values}
+    new_confidences.update({n: 1 for n in to_test[~verdict].treenode_id.values})
+    resp = pymaid.update_node_confidence(new_confidences,
+                                         remote_instance=remote_instance)
+
+    msg = '{} of {} tested low-confidence edges were found to be correct.'
+    msg = msg.format(sum(verdict), to_test.shape[0])
+    print(msg)
+
+    return resp
+
+
+def test_edges(x, edges=None, vol=None, max_workers=4):
     """Test if edge(s) cross membranes using ray-casting.
 
     Parameters
     ----------
-    neuron :    pymaid.CatmaidNeuron
-                Neuron to test edges for.
-    edges :     list-like, optional
-                Edges to test. Can be:
-                 1. List of single treenode IDs
-                 2. List of pairs of treenode IDs
-                 3. ``None`` in which case all edges will be tested.
-    vol :       cloudvolume.CloudVolume
+    x :             pymaid.CatmaidNeuron | pandas.DataFrame
+                    Neuron or treenode table to test edges for.
+    edges :         list-like, optional
+                    Use to subset to given edges. Can be:
+                     1. List of single treenode IDs
+                     2. List of pairs of treenode IDs
+                     3. ``None`` in which case all edges will be tested. This
+                        excludes the root node as it doesn't have an edge!
+    vol :           cloudvolume.CloudVolume
+                    CloudVolume pointing to segmentation data.
+    max_workers :   int, optional
+                    Maximum number of parallel worker processes to test edges.
+
 
     Returns
     -------
-    array
-                Array containing True/False for each tested each.
+    numpy.ndarray
+                (N, ) array containing True/False for each tested edge.
+
+    See Also
+    --------
+    :func:`fafbseg.autoreview_edges`
+                Use if you want to automatically review low confidence edges.
 
     """
     if isinstance(vol, type(None)):
         vol = getattr(utils, 'vol')
 
     assert isinstance(vol, CVtype)
-    assert isinstance(neuron, pymaid.CatmaidNeuron)
+
+    if isinstance(x, pymaid.CatmaidNeuron):
+        nodes = x.nodes
+    elif isinstance(x, pd.DataFrame):
+        nodes = x
+    else:
+        raise TypeError('Expected CatmaidNeuron or DataFrame,'
+                        ' got "{}"'.format(type(x)))
 
     if isinstance(edges, type(None)):
-        not_root = ~neuron.nodes.parent_id.isnull()
-        edges = neuron.nodes[not_root].treenode_id.values
+        not_root = ~nodes.parent_id.isnull()
+        edges = nodes[not_root].treenode_id.values
 
     edges = np.array(edges)
 
-    nodes = neuron.nodes.set_index('treenode_id')
+    nodes = nodes.set_index('treenode_id', inplace=False)
     if edges.ndim == 1:
         locs1 = nodes.loc[edges][['x', 'y', 'z']].values
         parents = nodes.loc[edges].parent_id.values
@@ -148,69 +254,89 @@ def test_edges(neuron, edges=None, vol=None):
     else:
         raise ValueError('Unexpected format for edges: {}'.format(edges.shape))
 
-    # Get the segmentation IDs
+    # Get the segmentation IDs at the first location
     segids1 = segmentation.get_seg_ids(locs1)
-    segids2 = segmentation.get_seg_ids(locs2)
+    # segids2 = segmentation.get_seg_ids(locs2)
 
-    # Now iterate over each edge
-    verdict = []
-    for l1, l2, s1, s2 in tqdm.tqdm(zip(locs1, locs2, segids1, segids2),
-                                    total=len(locs1),
-                                    desc='Checking edges'):
+    pbar = tqdm.tqdm(total=len(locs1),
+                     desc='Testing edges')
 
-        # Get the bounding box
-        bbox = np.array([l1, l2])
-        bbox = np.array([bbox.min(axis=0), bbox.max(axis=0)]).T
+    with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+        point_futures = [ex.submit(_test_single_edge, *k, vol=vol) for k in zip(locs1,
+                                                                                locs2,
+                                                                                segids1)]
+        for f in futures.as_completed(point_futures):
+            pbar.update(1)
 
-        # Get the mesh
-        mesh = get_mesh(s1, bbox=bbox, vol=vol)
+    pbar.close()
+    return np.array([f.result() for f in point_futures])
 
-        # No mesh means that edge is most likely True
-        if not mesh:
-            verdict.append(True)
-            continue
 
-        # Prepare raycasting
-        tree = pyoctree.PyOctree(np.array(mesh.vertices,
-                                          dtype=float, order='C'),
-                                 np.array(mesh.faces,
-                                          dtype=np.int32, order='C')
-                                 )
+def _test_single_edge(l1, l2, seg_id, vol):
+    """Test single edge.
 
-        # Generate raypoints
-        rayp = np.array([l1, l2], dtype=np.float32)
+    Parameters
+    ----------
+    l1, l2 :    int | float
+                Locations of the nodes connected by the edge
+    seg_id :    int
+                Segment ID of one of the nodes.
+    vol :       cloudvolume.CloudVolume
 
-        # Get intersections and extract coordinates of intersection
-        inters = np.array([i.p for i in tree.rayIntersection(rayp)])
+    Returns
+    -------
+    bool
 
-        # If not intersections treat this edge as True
-        if not inters.any():
-            verdict.append(True)
-            continue
+    """
+    # Get the bounding box
+    bbox = np.array([l1, l2])
+    bbox = np.array([bbox.min(axis=0), bbox.max(axis=0)]).T
 
-        # In a few odd cases we can get the multiple intersections at the
-        # exact same coordinate (something funny with the faces)
-        unique_int = np.unique(np.round(inters), axis=0)
+    # Get the mesh
+    mesh = get_mesh(seg_id, bbox=bbox, vol=vol)
 
-        # Rays are bidirectional and travel infinitely -> we have to filter
-        # for those that occure between the points
-        minx, miny, minz = np.min(rayp, axis=0)
-        maxx, maxy, maxz = np.max(rayp, axis=0)
+    # No mesh means that edge is most likely True
+    if not mesh:
+        return True
 
-        cminx = (unique_int[:, 0] >= minx)
-        cmaxx = (unique_int[:, 0] <= maxx)
-        cminy = (unique_int[:, 1] >= miny)
-        cmaxy = (unique_int[:, 1] <= maxy)
-        cminz = (unique_int[:, 2] >= minz)
-        cmaxz = (unique_int[:, 2] <= maxz)
+    # Prepare raycasting
+    tree = pyoctree.PyOctree(np.array(mesh.vertices,
+                                      dtype=float, order='C'),
+                             np.array(mesh.faces,
+                                      dtype=np.int32, order='C')
+                             )
 
-        all_cond = cminx & cmaxx & cminy & cmaxy & cminz & cmaxz
+    # Generate raypoints
+    rayp = np.array([l1, l2], dtype=np.float32)
 
-        unilat_int = unique_int[all_cond]
+    # Get intersections and extract coordinates of intersection
+    inters = np.array([i.p for i in tree.rayIntersection(rayp)])
 
-        if unilat_int.any():
-            verdict.append(False)
-        else:
-            verdict.append(True)
+    # If not intersections treat this edge as True
+    if not inters.any():
+        return True
 
-    return verdict
+    # In a few odd cases we can get the multiple intersections at the
+    # exact same coordinate (something funny with the faces)
+    unique_int = np.unique(np.round(inters), axis=0)
+
+    # Rays are bidirectional and travel infinitely -> we have to filter
+    # for those that occure between the points
+    minx, miny, minz = np.min(rayp, axis=0)
+    maxx, maxy, maxz = np.max(rayp, axis=0)
+
+    cminx = (unique_int[:, 0] >= minx)
+    cmaxx = (unique_int[:, 0] <= maxx)
+    cminy = (unique_int[:, 1] >= miny)
+    cmaxy = (unique_int[:, 1] <= maxy)
+    cminz = (unique_int[:, 2] >= minz)
+    cmaxz = (unique_int[:, 2] <= maxz)
+
+    all_cond = cminx & cmaxx & cminy & cmaxy & cminz & cmaxz
+
+    unilat_int = unique_int[all_cond]
+
+    if unilat_int.any():
+        return False
+
+    return True
