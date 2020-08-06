@@ -81,6 +81,7 @@ def get_seg_ids(locs, root_ids=True, vol='graphene://https://prodv1.flywire-daf.
             defaults = dict(cache=True,
                             mip=0,
                             fill_missing=True,
+                            use_https=True,  # this way google secret is not needed
                             progress=False)
             defaults.update(kwargs)
 
