@@ -8,4 +8,5 @@ from .segmentation import (use_google_storage, use_brainmaps,
 
 from .meshes import get_mesh, test_edges, autoreview_edges
 
-__version__ = "0.2.10"
+
+__version__ = "0.2.11"
