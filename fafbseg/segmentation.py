@@ -25,6 +25,8 @@ from concurrent import futures
 from . import utils
 use_pbars = utils.use_pbars
 
+CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
+
 
 class GSPointLoader(object):
     """Build up a list of points, then load them batched by storage chunk.
@@ -43,7 +45,7 @@ class GSPointLoader(object):
         cloud_volume :  cloudvolume.CloudVolume
 
         """
-        if not isinstance(cloud_volume, cloudvolume.frontends.precomputed.CloudVolumePrecomputed):
+        if not isinstance(cloud_volume, CVtype):
             raise TypeError('Expected CloudVolume, got "{}"'.format(type(cloud_volume)))
 
         self._volume = cloud_volume
@@ -248,12 +250,12 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
     return seg_ids
 
 
-def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
+def use_google_storage(volume, max_workers=8, progress=True, **kwargs):
     """Use Google Storage via CloudVolume for segmentation IDs.
 
     Parameters
     ----------
-    volume :        str
+    volume :        str | CloudVolume
                     Name or URL of CloudVolume to use to fetch segmentation IDs.
     max_workers :   int, optional
                     Maximal number of parallel queries.
@@ -288,18 +290,20 @@ def use_google_storage(volume_name, max_workers=8, progress=True, **kwargs):
     """
     global _get_seg_ids
 
-    # Set and update defaults from kwargs
-    defaults = dict(cache=True,
-                    mip=0,
-                    progress=False)
-    defaults.update(kwargs)
+    if not 'CloudVolume' in str(type(volume)):
+        # Set and update defaults from kwargs
+        defaults = dict(cache=True,
+                        mip=0,
+                        progress=False)
+        defaults.update(kwargs)
 
-    if utils.is_url(volume_name):
-        url = volume_name
-    else:
-        url = 'https://storage.googleapis.com/{}/segmentation'.format(volume_name)
+        if 'http' in volume:
+            url = volume
+        else:
+            url = 'https://storage.googleapis.com/{}/segmentation'.format(volume)
 
-    volume = cloudvolume.CloudVolume(url, **defaults)
+        volume = cloudvolume.CloudVolume(url, **defaults)
+
     _get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
                                              max_workers=max_workers,
                                              progress=progress)
