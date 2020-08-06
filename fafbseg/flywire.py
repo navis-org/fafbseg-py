@@ -90,22 +90,21 @@ def get_seg_ids(locs, root_ids=True, vol='graphene://https://prodv1.flywire-daf.
     else:
         fw_vol = vol
 
-    # GSPointLoader expects nanometer
+    # GSPointLoader expects nanometer -> does the mapping based on mip itself
     if coordinates == 'pixel':
-        #res = vol.info['scales'][vol.mip]['resolution']
         locs = (locs * [4, 4, 40]).astype(int)
 
     pl = GSPointLoader(fw_vol)
     pl.add_points(locs)
 
-    svoxels, data = pl.load_all(max_workers=max_workers,
+    _, svoxels = pl.load_all(max_workers=max_workers,
                                 progress=progress,
                                 return_sorted=True)
 
     if root_ids:
         return fw_vol.get_roots(svoxels)
 
-    return data
+    return svoxels
 
 
 def __merge_flywire_neuron(id, cvpath, **kwargs):
