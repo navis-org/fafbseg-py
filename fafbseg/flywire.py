@@ -13,11 +13,15 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 import pymaid
+import requests
 
 import cloudvolume as cv
 import numpy as np
+import pandas as pd
 
+from requests_futures.sessions import FuturesSession
 from urllib.parse import urlparse, parse_qs
+from tqdm.auto import tqdm
 
 from .mapping import xform_flywire_fafb14
 from .merge import merge_neuron
@@ -31,19 +35,99 @@ except BaseException:
     raise
 
 
-def __decode_url(url):
-    """Decode neuroglancer URL."""
-    assert isinstance(url, str)
+def decode_ngl_url(url, ret='brief'):
+    """Decode neuroglancer URL.
 
-    query = parse_qs(urlparse(url).query)
+    Parameters
+    ----------
+    url :       str
+                URL to decode. Can be shortened URL.
+    ret :       "brief" | "full"
+                If brief, will only return "position" (in voxels), "selected"
+                segment IDs and "annotations". If full, will return entire scene.
+
+    Returns
+    -------
+    dict
+
+    """
+    assert isinstance(url, (str, dict))
+    assert ret in ['brief', 'full']
+
+    query = parse_qs(urlparse(url).query, keep_blank_values=True)
 
     if 'json_url' in query:
         # Fetch state
-        pass
+        token = cv.secrets.chunkedgraph_credentials['token']
+        r = requests.get(query['json_url'][0], headers={'Authorization': f"Bearer {token}"})
+        r.raise_for_status()
+
+        scene = r.json()
+    else:
+        scene = query
+
+    if ret == 'brief':
+        seg_layers = [l for l in scene['layers'] if l.get('type') == 'segmentation_with_graph']
+        an_layers = [l for l in scene['layers'] if l.get('type') == 'annotation']
+        return {'position': scene['navigation']['pose']['position']['voxelCoordinates'],
+                'annotations': [a for l in an_layers for a in l.get('annotations', [])],
+                'selected': [s for l in seg_layers for s in l.get('segments', [])]}
+
+    return scene
 
 
-def get_seg_ids(locs, root_ids=True, vol='graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31',
-                progress=True, coordinates='pixel', max_workers=8, **kwargs):
+def fetch_edit_history(x, progress=True, max_threads=4):
+    """Fetch edit history for given neuron(s).
+
+    Parameters
+    ----------
+    x :             int | iterable
+    progress :      bool
+                    If True, show progress bar.
+    max_threads :   int
+                    Max number of parallel requests to server.
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    if not isinstance(x, (list, set, np.ndarray)):
+        x = [x]
+
+    session = requests.Session()
+    future_session = FuturesSession(session=session, max_workers=max_threads)
+    token = cv.secrets.chunkedgraph_credentials['token']
+    session.headers['Authorization'] = f"Bearer {token}"
+
+    futures = []
+    for i in x:
+        url = f'https://prodv1.flywire-daf.com/segmentation/api/v1/table/fly_v31/root/{i}/tabular_change_log'
+        f = future_session.get(url, params=None)
+        futures.append(f)
+
+    # Get the responses
+    resp = [f.result() for f in tqdm(futures,
+                                     desc='Fetching',
+                                     disable=not progress or len(futures) == 1,
+                                     leave=False)]
+
+    df = []
+    for r, i in zip(resp, x):
+        r.raise_for_status()
+        this_df = pd.DataFrame(r.json())
+        this_df['segment'] = i
+        if not this_df.empty:
+            df.append(this_df)
+
+    df = pd.concat(df, axis=0, sort=True)
+    df['timestamp'] = pd.to_datetime(df.timestamp, unit='ms')
+
+    return df
+
+
+def locs_to_segments(locs, root_ids=True, vol='graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31',
+                     progress=True, coordinates='pixel', max_workers=8, **kwargs):
     """Retrieve flywire IDs at given location(s).
 
     Parameters
@@ -98,13 +182,15 @@ def get_seg_ids(locs, root_ids=True, vol='graphene://https://prodv1.flywire-daf.
     pl.add_points(locs)
 
     _, svoxels = pl.load_all(max_workers=max_workers,
-                                progress=progress,
-                                return_sorted=True)
+                             progress=progress,
+                             return_sorted=True)
 
     if root_ids:
         return fw_vol.get_roots(svoxels)
 
     return svoxels
+
+
 
 
 def __merge_flywire_neuron(id, cvpath, **kwargs):
