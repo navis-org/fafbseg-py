@@ -185,12 +185,14 @@ def locs_to_segments(locs, root_ids=True, vol='graphene://https://prodv1.flywire
                              progress=progress,
                              return_sorted=True)
 
-    if root_ids:
-        return fw_vol.get_roots(svoxels)
+    if not root_ids:
+        return svoxels
 
-    return svoxels
+    # get_roots() doesn't like to be asked for zeros - cases server error
+    roots = np.zeros(svoxels.shape)
+    roots[svoxels != 0] = fw_vol.get_roots(svoxels[svoxels != 0])
 
-
+    return roots
 
 
 def __merge_flywire_neuron(id, cvpath, **kwargs):
