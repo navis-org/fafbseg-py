@@ -1,9 +1,11 @@
-inquirer~=2.6.3
-# git+git://github.com/schlegelp/pymaid@master
-ipython
 cloud-volume~=1.20
+inquirer~=2.6.3
+ipython
+msgpack
+pandas
 PyMCubes
 pyoctree
 requests
-pandas
-request-futures
+requests-futures
+
+# git+git://github.com/schlegelp/pymaid@master
