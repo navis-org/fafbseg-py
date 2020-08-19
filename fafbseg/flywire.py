@@ -23,7 +23,7 @@ from requests_futures.sessions import FuturesSession
 from urllib.parse import urlparse, parse_qs
 from tqdm.auto import tqdm
 
-from .mapping import xform_flywire_fafb14
+from . import xform
 from .merge import merge_neuron
 from .segmentation import GSPointLoader
 
@@ -258,10 +258,11 @@ def __merge_flywire_neuron(id, cvpath, **kwargs):
     n_fw = pymaid.from_swc(cleaned, neuron_id=id)
 
     # Xform to FAFB
-    n_fafb = xform_flywire_fafb14(n_fw, on_fail='raise', coordinates='nm', inplace=False)
+    n_fafb = xform.flywire_to_fafb14(n_fw, on_fail='raise', coordinates='nm', inplace=False)
 
     # Merge neuron
     return merge_neuron(n_fafb, **kwargs)
 
 
+# Initialize without a volume
 fw_vol = None
