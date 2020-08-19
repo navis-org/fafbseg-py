@@ -14,7 +14,6 @@
 #    GNU General Public License for more details.
 
 import cloudvolume
-import mcubes
 import numpy as np
 import pandas as pd
 import tqdm
@@ -24,6 +23,13 @@ from pyoctree import pyoctree
 from concurrent import futures
 
 from . import utils, segmentation
+
+try:
+    import mcubes
+except ImportError:
+    mcubes = None
+except BaseException:
+    raise
 
 use_pbars = utils.use_pbars
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
@@ -57,6 +63,9 @@ def get_mesh(x, bbox, vol=None):
             no IDs other than the queried ID(s) in the bounding box.
 
     """
+    if not mcubes:
+        raise ImportError('Unable to import mcubes (PyMCubes) library.')
+
     if not isinstance(x, (list, np.ndarray)):
         x = [x]
 
