@@ -43,7 +43,7 @@ def decode_ngl_url(url, ret='brief'):
     url :       str
                 URL to decode. Can be shortened URL.
     ret :       "brief" | "full"
-                If brief, will only return "position" (in voxels), "selected"
+                If "brief", will only return "position" (in voxels), "selected"
                 segment IDs and "annotations". If full, will return entire scene.
 
     Returns
@@ -184,11 +184,13 @@ def locs_to_segments(locs, root_ids=True, vol='graphene://https://prodv1.flywire
                              progress=progress,
                              return_sorted=True)
 
+    svoxels = svoxels.flatten()
+
     if not root_ids:
         return svoxels
 
     # get_roots() doesn't like to be asked for zeros - cases server error
-    roots = np.zeros(svoxels.shape)
+    roots = np.zeros(svoxels.shape, dtype=np.int64)
     roots[svoxels != 0] = fw_vol.get_roots(svoxels[svoxels != 0])
 
     return roots
