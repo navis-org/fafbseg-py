@@ -162,8 +162,7 @@ def locs_to_segments(locs, root_ids=True, vol='graphene://https://prodv1.flywire
         #  Change default volume if necessary
         if not fw_vol or getattr(fw_vol, 'path') != vol:
             # Set and update defaults from kwargs
-            defaults = dict(cache=True,
-                            mip=0,
+            defaults = dict(mip=0,
                             fill_missing=True,
                             use_https=True,  # this way google secret is not needed
                             progress=False)
