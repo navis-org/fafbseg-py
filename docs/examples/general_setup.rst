@@ -27,25 +27,25 @@ the corresponding credentials):
 .. code-block:: python
 
   manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',
-                                  'HTTP_USER',
-                                  'HTTP_PW',
-                                  'API_TOKEN',
+                                  api_token='API_TOKEN',
+                                  http_user='HTTP_USER',
+                                  http_password='HTTP_PW',
                                   caching=False,
                                   max_threads=20)
 
 .. code-block:: python
 
   auto = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14-seg-li-190805.0',
-                                'HTTP_USER',
-                                'HTTP_PW',
-                                'API_TOKEN',
+                                api_token='API_TOKEN',
+                                http_user='HTTP_USER',
+                                http_password='HTTP_PW',
                                 caching=False,
                                 max_threads=20)
 
 Last but not least, we need to tell ``fafbseg`` what source to use to query the
 segmentation data. For this you use one of the ``fafbseg.use_....`` functions -
 which one depends on the data source you have available. See below for an
-explanation.                              
+explanation.
 
 Choosing a segmentation source
 ------------------------------

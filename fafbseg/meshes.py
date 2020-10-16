@@ -127,7 +127,7 @@ def autoreview_edges(x, conf_threshold=1, vol=None, remote_instance=None):
 
     The way this works:
       1. Fetch the live version of the neuron(s) from the CATMAID instance
-      2. Use raycasting to test (low-confidence) egdes
+      2. Use raycasting to test (low-confidence) edges
       3. Edge confidence is set to ``5`` if test is passed and to ``1`` if not
 
     You *can* use this function to test all edges in a neuron by increasing

@@ -13,9 +13,12 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
+import navis
+import pymaid
+
 import numpy as np
 import pandas as pd
-import pymaid
+import trimesh as tm
 
 from . import utils, segmentation
 use_pbars = utils.use_pbars
@@ -68,7 +71,7 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
                             remote_instance=autoseg_instance)
 
     # Make sure we're dealing with a list of neurons
-    if isinstance(nl, pymaid.CatmaidNeuron):
+    if isinstance(nl, pymaid.TreeNeuron):
         nl = pymaid.CatmaidNeuronList(nl)
 
     # Invert seg2skid
@@ -77,7 +80,7 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
         skid2seg[v] = skid2seg.get(v, []) + [k]
 
     for n in nl:
-        n.seg_ids = skid2seg[int(n.skeleton_id)]
+        n.seg_ids = skid2seg[int(n.id)]
 
     return nl
 
@@ -199,10 +202,10 @@ def neuron_to_segments(x):
                             10336682132   0     1
 
     """
-    if isinstance(x, pymaid.CatmaidNeuron):
+    if isinstance(x, navis.TreeNeuron):
         x = pymaid.CatmaidNeuronList(x)
 
-    assert isinstance(x, pymaid.CatmaidNeuronList)
+    assert isinstance(x, navis.NeuronList)
 
     # We must not perform this on x.nodes as this is a temporary property
     nodes = x.nodes
@@ -211,7 +214,7 @@ def neuron_to_segments(x):
     nodes['seg_id'] = segmentation.get_seg_ids(nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
-    seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
+    seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).node_id.count().reset_index(drop=False)
     seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
 
     # Remove seg IDs 0 (glia?)
@@ -283,8 +286,8 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
                         neuron e.g. from autoseg.
 
     """
-    if not isinstance(x, pymaid.CatmaidNeuron):
-        raise TypeError('Expected pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
+    if not isinstance(x, pymaid.TreeNeuron):
+        raise TypeError('Expected navis.TreeNeuron or pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
 
     if not isinstance(autoseg_instance, pymaid.CatmaidInstance):
         raise TypeError('Expected pymaid.CatmaidInstance, got "{}"'.format(type(autoseg_instance)))
@@ -336,7 +339,8 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     return nl[nl.n_nodes >= min_nodes]
 
 
-def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
+def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1,
+                   mesh=None):
     """Find manual tracings overlapping with given autoseg neuron.
 
     This function is a generalization of ``find_autoseg_fragments`` and is
@@ -345,15 +349,15 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
 
         1. Traverse neurites of ``x`` search within 2.5 microns radius for
            potentially overlapping fragments.
-        2. Collect segmentation IDs for the input neuron and all potentially
-           overlapping fragments using whatever source for segmentation IDs
-           you have set by ``fafbseg.use_...``.
+        2. Either collect segmentation IDs for the input neuron and all
+           potentially overlapping fragments or (if provided) use the mesh
+           to check if the candidates are inside that mesh.
         3. Return fragments that overlap with at least ``min_overlap`` nodes
            with input neuron.
 
     Parameters
     ----------
-    x :                 pymaid.CatmaidNeuron
+    x :                 pymaid.CatmaidNeuron | navis.TreeNeuron
                         Neuron to collect fragments for.
     remote_instance :   pymaid.CatmaidInstance
                         Catmaid instance in which to search for fragments.
@@ -364,6 +368,10 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
                         ``min_overlap = min(min_overlap, fragment.n_nodes)``
     min_nodes :         int, optional
                         Minimum node count for returned neurons.
+    mesh :              navis.Volume | trimesh.Trimesh | navis.MeshNeuron, optional
+                        Mesh representation of ``x``. If provided will use the
+                        mesh instead of querying the segmentation to determine
+                        if fragments overlap. This is generally the faster.
 
     Return
     ------
@@ -400,8 +408,12 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
                         ``find_fragments``.
 
     """
-    if not isinstance(x, pymaid.CatmaidNeuron):
-        raise TypeError('Expected pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
+    if not isinstance(x, navis.TreeNeuron):
+        raise TypeError('Expected navis.TreeNeuron or pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
+
+    meshtypes = (type(None), navis.MeshNeuron, navis.Volume, tm.Trimesh)
+    if not isinstance(mesh, meshtypes):
+        raise TypeError(f'Unexpected mesh of type "{type(mesh)}"')
 
     # Resample the autoseg neuron to 0.5 microns
     x_rs = x.resample(500, inplace=False)
@@ -427,71 +439,102 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1):
         return pymaid.CatmaidNeuronList([])
 
     # Get nodes for these candidates
-    tn_table = pymaid.get_treenode_table(skids,
-                                         include_details=False,
-                                         convert_ts=False,
-                                         remote_instance=remote_instance)
+    tn_table = pymaid.get_node_table(skids,
+                                     include_details=False,
+                                     convert_ts=False,
+                                     remote_instance=remote_instance)
     # Keep track of total node counts
-    node_counts = tn_table.groupby('skeleton_id').treenode_id.count().to_dict()
+    node_counts = tn_table.groupby('skeleton_id').node_id.count().to_dict()
 
-    # Get segment IDs for the input neuron
-    x.nodes['seg_id'] = segmentation.get_seg_ids(x.nodes[['x', 'y', 'z']].values)
+    # If no mesh, use segmentation
+    if not mesh:
+        # Get segment IDs for the input neuron
+        x.nodes['seg_id'] = segmentation.get_seg_ids(x.nodes[['x', 'y', 'z']].values)
 
-    # Count segment IDs
-    x_seg_counts = x.nodes.groupby('seg_id').treenode_id.count().reset_index(drop=False)
-    x_seg_counts.columns = ['seg_id', 'counts']
+        # Count segment IDs
+        x_seg_counts = x.nodes.groupby('seg_id').node_id.count().reset_index(drop=False)
+        x_seg_counts.columns = ['seg_id', 'counts']
 
-    # Remove seg IDs 0
-    x_seg_counts = x_seg_counts[x_seg_counts.seg_id != 0]
+        # Remove seg IDs 0
+        x_seg_counts = x_seg_counts[x_seg_counts.seg_id != 0]
 
-    # Generate KDTree for nearest neighbor calculations
-    tree = pymaid.neuron2KDTree(x)
+        # Generate KDTree for nearest neighbor calculations
+        tree = navis.neuron2KDTree(x)
 
-    # Now remove nodes that aren't even close to our input neuron
-    dist, ix = tree.query(tn_table[['x', 'y', 'z']].values,
-                          distance_upper_bound=2500)
-    tn_table = tn_table.loc[dist <= 2500]
+        # Now remove nodes that aren't even close to our input neuron
+        dist, ix = tree.query(tn_table[['x', 'y', 'z']].values,
+                              distance_upper_bound=2500)
+        tn_table = tn_table.loc[dist <= 2500]
 
-    # Remove neurons that can't possibly have enough overlap
-    node_counts2 = tn_table.groupby('skeleton_id').treenode_id.count().to_dict()
-    to_keep = [k for k, v in node_counts2.items() if v >= min(min_node_overlap, node_counts[k])]
-    tn_table = tn_table[tn_table.skeleton_id.isin(to_keep)]
+        # Remove neurons that can't possibly have enough overlap
+        node_counts2 = tn_table.groupby('skeleton_id').node_id.count().to_dict()
+        to_keep = [k for k, v in node_counts2.items() if v >= min(min_node_overlap, node_counts[k])]
+        tn_table = tn_table[tn_table.skeleton_id.isin(to_keep)]
 
-    # Add segment IDs
-    tn_table['seg_id'] = segmentation.get_seg_ids(tn_table[['x', 'y', 'z']].values)
+        # Add segment IDs
+        tn_table['seg_id'] = segmentation.get_seg_ids(tn_table[['x', 'y', 'z']].values)
 
-    # Now group by neuron and by segment
-    seg_counts = tn_table.groupby(['skeleton_id', 'seg_id']).treenode_id.count().reset_index(drop=False)
-    # Rename columns
-    seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
+        # Now group by neuron and by segment
+        seg_counts = tn_table.groupby(['skeleton_id', 'seg_id']).node_id.count().reset_index(drop=False)
+        # Rename columns
+        seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
 
-    # Remove seg IDs 0
-    seg_counts = seg_counts[seg_counts.seg_id != 0]
+        # Remove seg IDs 0
+        seg_counts = seg_counts[seg_counts.seg_id != 0]
 
-    # Remove segments IDs that are not overlapping with input neuron
-    seg_counts = seg_counts[np.isin(seg_counts.seg_id.values,
-                                    x_seg_counts.seg_id.values)]
+        # Remove segments IDs that are not overlapping with input neuron
+        seg_counts = seg_counts[np.isin(seg_counts.seg_id.values,
+                                        x_seg_counts.seg_id.values)]
 
-    # Now go over each candidate and see if there is enough overlap
-    ol = []
-    scores = []
-    for s in seg_counts.skeleton_id.unique():
-        # Subset to nodes of this neurons
-        this_counts = seg_counts[seg_counts.skeleton_id == s]
+        # Now go over each candidate and see if there is enough overlap
+        ol = []
+        scores = []
+        for s in seg_counts.skeleton_id.unique():
+            # Subset to nodes of this neurons
+            this_counts = seg_counts[seg_counts.skeleton_id == s]
 
-        # If the neuron is smaller than min_overlap, lower the threshold
-        this_min_ol = min(min_node_overlap, node_counts[s])
+            # If the neuron is smaller than min_overlap, lower the threshold
+            this_min_ol = min(min_node_overlap, node_counts[s])
 
-        # Sum up counts for both input neuron and this candidate
-        c_count = this_counts.counts.sum()
-        x_count = x_seg_counts[x_seg_counts.seg_id.isin(this_counts.seg_id.values)].counts.sum()
+            # Sum up counts for both input neuron and this candidate
+            c_count = this_counts.counts.sum()
+            x_count = x_seg_counts[x_seg_counts.seg_id.isin(this_counts.seg_id.values)].counts.sum()
 
-        # If there is enough overlap, keep this neuron
-        # and add score as `overlap_score`
-        if (c_count >= this_min_ol) and (x_count >= this_min_ol):
-            # The score is the minimal overlap
-            scores.append(min(c_count, x_count))
-            ol.append(s)
+            # If there is enough overlap, keep this neuron
+            # and add score as `overlap_score`
+            if (c_count >= this_min_ol) and (x_count >= this_min_ol):
+                # The score is the minimal overlap
+                scores.append(min(c_count, x_count))
+                ol.append(s)
+    else:
+        # Check if nodes are inside or outside the mesh
+        tn_table['in_mesh'] = navis.in_volume(tn_table[['x', 'y', 'z']].values,
+                                              mesh).astype(bool)
+        # Count the number of in-mesh nodes for each neuron
+        # This also drops skeletons without
+        ol_counts = tn_table.groupby('skeleton_id', as_index=False).in_mesh.sum()
+
+        # Rename columns
+        ol_counts.columns = ['skeleton_id', 'counts']
+
+        # Now subset to those that are overlapping sufficiently
+        # First drop all non-overlapping fragments
+        ol_counts = ol_counts[ol_counts.counts > 0]
+
+        # Add column with total node counts
+        ol_counts['node_count'] = ol_counts.skeleton_id.map(node_counts)
+
+        # Generate an threshold array such that the threshold is the minimum
+        # between the total nodes and min_node_overlap
+        mno_array = np.repeat([min_node_overlap], ol_counts.shape[0])
+        mnc_array = ol_counts.skeleton_id.map(node_counts).values
+        thr_array = np.vstack([mno_array, mnc_array]).min(axis=0)
+
+        # Subset to candidates that meet the threshold
+        ol_counts = ol_counts[ol_counts.counts >= thr_array]
+
+        ol = ol_counts.skeleton_id.tolist()
+        scores = ol_counts.counts.tolist()
 
     if ol:
         ol = pymaid.get_neurons(ol, remote_instance=remote_instance)

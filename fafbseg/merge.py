@@ -18,7 +18,10 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pymaid
+import navis
 import random
+
+import scipy.spatial
 
 from tqdm import tqdm
 
@@ -47,7 +50,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     autoseg_instance :  pymaid.CatmaidInstance
                         CATMAID instance containing the autoseg skeletons.
     tag :               bool, optional
-                        If True, will tag nodes of x that might have missed
+                        If True, will tag nodes of ``x`` that might have missed
                         branches with "missed branch?".
     tag_size_thresh :   int, optional
                         Size threshold in microns of cable for tagging
@@ -116,7 +119,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
     >>> branches.plot3d(color='r')
 
     """
-    if isinstance(x, pymaid.CatmaidNeuronList):
+    if isinstance(x, navis.NeuronList):
         to_concat = []
         for n in tqdm(x, desc='Processing neurons', disable=not use_pbars, leave=False):
             (summary,
@@ -126,12 +129,12 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
                                               tag=tag,
                                               tag_size_thresh=tag_size_thresh,
                                               **kwargs)
-            summary['skeleton_id'] = n.skeleton_id
+            summary['skeleton_id'] = n.id
             to_concat.append(summary)
 
         return pd.concat(to_concat, ignore_index=True)
-    elif not isinstance(x, pymaid.CatmaidNeuron):
-        raise TypeError('Input must be CatmaidNeuron/List, got "{}"'.format(type(x)))
+    elif not isinstance(x, navis.TreeNeuron):
+        raise TypeError(f'Input must be TreeNeuron/List, got "{type(x)}"')
 
     # Find autoseg neurons overlapping with input neuron
     nl = find_autoseg_fragments(x,
@@ -150,7 +153,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
         union = pymaid.union_neurons(x, nl, base_neuron=x, limit=2, non_overlap='stitch')
 
         # Subset to autoseg nodes
-        autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].treenode_id.values
+        autoseg_nodes = union.nodes[union.nodes.origin == 'autoseg'].node_id.values
     else:
         autoseg_nodes = np.empty((0, 5))
 
@@ -164,7 +167,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
         frags = pymaid.break_fragments(autoseg)
 
         # Generate summary
-        nodes = union.nodes.set_index('treenode_id')
+        nodes = union.nodes.set_index('node_id')
         for n in frags:
             # Find parent node in union
             pn = nodes.loc[n.root[0], 'parent_id']
@@ -194,7 +197,7 @@ def find_missed_branches(x, autoseg_instance, tag=True, tag_size_thresh=10,
 def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1,
                  merge_limit=1, min_upload_size=0, min_upload_nodes=1,
                  update_radii=True, import_tags=False, label_joins=True,
-                 sid_from_nodes=True):
+                 sid_from_nodes=True, mesh=None):
     """Merge neuron into target instance.
 
     This function will attempt to:
@@ -210,7 +213,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
 
     Parameters
     ----------
-    x :                 pymaid.CatmaidNeuron/List
+    x :                 pymaid.CatmaidNeuron/List | navis.TreeNeuron/List
                         Neuron(s)/fragment(s) to commit to ``target_instance``.
     target_instance :   pymaid.CatmaidInstance
                         Target Catmaid instance to commit the neuron to.
@@ -265,6 +268,10 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                         is a virtual chimera of several neurons: in order to
                         preserve provenance (i.e. correctly associating each
                         node with a ``source_id`` origin).
+    mesh :              Volume | MeshNeuron | mesh-like object | list thereof
+                        Mesh representation of ``x``. If provided, will use to
+                        improve merging. If ``x`` is a list of neurons, must
+                        provide a mesh for each of them.
 
     Returns
     -------
@@ -301,10 +308,19 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
     >>> resp = fafbseg.merge_neuron(x, target_instance=manual)
 
     """
-    if not isinstance(x, pymaid.CatmaidNeuronList):
-        if not isinstance(x, pymaid.CatmaidNeuron):
-            raise TypeError('Expected pymaid.CatmaidNeuron/List, got "{}"'.format(type(x)))
-        x = pymaid.CatmaidNeuronList(x)
+    if not isinstance(x, navis.NeuronList):
+        if not isinstance(x, navis.TreeNeuron):
+            raise TypeError('Expected TreeNeuron/List, got "{}"'.format(type(x)))
+        x = navis.NeuronList(x)
+
+    if not isinstance(mesh, (np.ndarray, list)):
+        if isinstance(mesh, type(None)):
+            mesh = [mesh] * len(x)
+        else:
+            mesh = [mesh]
+
+    if len(mesh) != len(x):
+        raise ValueError(f'Got {len(mesh)} meshes for {len(x)} neurons.')
 
     # Make a copy - in case we make any changes to the neurons
     # (like changing duplicate skeleton IDs)
@@ -334,11 +350,12 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
 
     # Start by find all overlapping fragments
     overlapping = []
-    for n in tqdm(x, desc='Pre-processing neuron(s)',
-                  leave=False, disable=not use_pbars):
+    for n, m in tqdm(zip(x, mesh), desc='Pre-processing neuron(s)',
+                     leave=False, disable=not use_pbars, total=len(x)):
         ol = find_fragments(n,
                             min_node_overlap=min_node_overlap,
                             min_nodes=min_overlap_size,
+                            mesh=m,
                             remote_instance=target_instance)
 
         if ol:
@@ -347,28 +364,31 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                                                    remote_instance=target_instance)
 
             for nn in ol:
-                nn.sampler_count = n_samplers[str(nn.skeleton_id)]
+                nn.sampler_count = n_samplers[str(nn.id)]
 
         overlapping.append(ol)
 
     # Now have the user confirm merges before we actually make them
-    viewer = pymaid.Viewer(title='Confirm merges')
+    viewer = navis.Viewer(title='Confirm merges')
     viewer.clear()
     overlap_cnf = []
     base_neurons = []
-    for n, ol in zip(x, overlapping):
-        # This asks user a bunch of questions prior to merge and upload
-        ol, bn = _confirm_overlap(n, ol, viewer=viewer)
-        overlap_cnf.append(ol)
-        base_neurons.append(bn)
-    viewer.close()
+    try:
+        for n, ol in zip(x, overlapping):
+            # This asks user a bunch of questions prior to merge and upload
+            ol, bn = _confirm_overlap(n, ol, viewer=viewer)
+            overlap_cnf.append(ol)
+            base_neurons.append(bn)
+    except BaseException:
+        raise
+    finally:
+        viewer.close()
 
-    for i, (n, ol, bn) in enumerate(zip(x, overlap_cnf, base_neurons)):
-        print('Processing neuron "{}" [{}/{}]'.format(n.neuron_name, i, len(x)),
-              flush=True)
+    for i, (n, ol, bn, m) in enumerate(zip(x, overlap_cnf, base_neurons, mesh)):
+        print(f'Processing neuron "{n.name}" ({n.id}) [{i}/{len(x)}]', flush=True)
         # If no overlapping neurons proceed with just uploading.
         if not ol:
-            print('No overlapping fragments to merge. Uploading...',
+            print('No overlapping fragments found. Uploading without merging...',
                   end='', flush=True)
             resp = pymaid.upload_neuron(n,
                                         import_tags=import_tags,
@@ -382,34 +402,35 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             _ = __merge_annotations(n, resp['skeleton_id'], tag, target_instance)
 
             msg = '\nNeuron "{}" successfully uploaded to target instance as "{}" #{}'
-            print(msg.format(n.neuron_name, n.neuron_name, resp['skeleton_id']),
+            print(msg.format(n.name, n.name, resp['skeleton_id']),
                   flush=True)
             continue
 
         # Check if there is a duplicate skeleton ID between the to-be-merged
         # neuron and the to-merge-into neurons
         original_skid = None
-        if n.skeleton_id in ol.skeleton_id:
+        if n.id in ol.id:
             print('Fixing duplicate skeleton IDs.',
                   flush=True)
             # Keep track of old skid
-            original_skid = n.skeleton_id
+            original_skid = n.id
             # Skeleton ID must stay convertable to integer
-            n.skeleton_id = str(random.randint(1, 1000000))
+            n.id = str(random.randint(1, 1000000))
             n._clear_temp_attr()
 
         # Check if there are any duplicate node IDs between neuron ``x`` and the
         # overlapping fragments and create new IDs for ``x`` if necessary
-        duplicated = n.nodes[n.nodes.treenode_id.isin(ol.nodes.treenode_id.values)]
+        duplicated = n.nodes[n.nodes.node_id.isin(ol.nodes.node_id.values)]
         if not duplicated.empty:
             print('Duplicate node IDs found. Regenerating node tables... ',
                   end='', flush=True)
-            max_ix = max(ol.nodes.treenode_id.max(), n.nodes.treenode_id.max()) + 1
+            max_ix = max(ol.nodes.node_id.max(), n.nodes.node_id.max()) + 1
             new_ids = range(max_ix, max_ix + duplicated.shape[0])
-            id_map = {old: new for old, new in zip(duplicated.treenode_id, new_ids)}
-            n.nodes['treenode_id'] = n.nodes.treenode_id.map(lambda n: id_map.get(n, n))
+            id_map = {old: new for old, new in zip(duplicated.node_id, new_ids)}
+            n.nodes['node_id'] = n.nodes.node_id.map(lambda n: id_map.get(n, n))
             n.nodes['parent_id'] = n.nodes.parent_id.map(lambda n: id_map.get(n, n))
-            n.connectors['treenode_id'] = n.connectors.treenode_id.map(lambda n: id_map.get(n, n))
+            if n.has_connectors:
+                n.connectors['node_id'] = n.connectors.node_id.map(lambda n: id_map.get(n, n))
             n._clear_temp_attr()
             print('Done.', flush=True)
 
@@ -427,49 +448,52 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
         # Keep track of original skeleton IDs
         for a in ol + n:
             # Original skeleton of each node
-            a.nodes['origin_skeletons'] = a.skeleton_id
-            # Original skeleton of each connector
-            a.connectors['origin_skeletons'] = a.skeleton_id
+            a.nodes['origin_skeletons'] = a.id
+            if a.has_connectors:
+                # Original skeleton of each connector
+                a.connectors['origin_skeletons'] = a.id
 
         print('Generating union of all fragments... ', end='', flush=True)
         union, new_edges, collapsed_into = collapse_nodes2(n, ol,
                                                            limit=merge_limit,
-                                                           base_neuron=bn)
+                                                           base_neuron=bn,
+                                                           mesh=m)
         print('Done.', flush=True)
 
         print('Extracting new nodes to upload... ', end='', flush=True)
         # Now we have to break the neuron into "new" fragments that we can upload
         # First get the new and old nodes
-        new_nodes = union.nodes[union.nodes.origin_skeletons == n.skeleton_id].treenode_id.values
-        old_nodes = union.nodes[union.nodes.origin_skeletons != n.skeleton_id].treenode_id.values
+        new_nodes = union.nodes[union.nodes.origin_skeletons == n.id].node_id.values
+        old_nodes = union.nodes[union.nodes.origin_skeletons != n.id].node_id.values
 
         # Now remove the already existing nodes from the union
-        only_new = pymaid.subset_neuron(union, new_nodes)
+        only_new = navis.subset_neuron(union, new_nodes)
 
         # And then break into continuous fragments for upload
-        frags = pymaid.break_fragments(only_new)
+        frags = navis.break_fragments(only_new)
         print('Done.', flush=True)
 
         # Also get the new edges we need to generate
         to_stitch = new_edges[~new_edges.parent_id.isnull()]
 
         # We need this later -> no need to compute this for every uploaded fragment
-        cond1b = to_stitch.treenode_id.isin(old_nodes)
+        cond1b = to_stitch.node_id.isin(old_nodes)
         cond2b = to_stitch.parent_id.isin(old_nodes)
 
         # Now upload each fragment and keep track of new node IDs
         tn_map = {}
-        for f in tqdm(frags, desc='Uploading new tracings', leave=False, disable=not use_pbars):
+        for f in tqdm(frags, desc='Merging new arbors', leave=False, disable=not use_pbars):
             # In cases of complete merging into existing neurons, the fragment
             # will have no nodes
             if f.n_nodes < 1:
                 continue
 
             # Check if fragment is a "linker" and as such can not be skipped
-            lcond1 = np.isin(f.nodes.treenode_id.values,
-                             new_edges.treenode_id.values)
-            lcond2 = np.isin(f.nodes.treenode_id.values,
+            lcond1 = np.isin(f.nodes.node_id.values,
+                             new_edges.node_id.values)
+            lcond2 = np.isin(f.nodes.node_id.values,
                              new_edges.parent_id.values)
+
 
             # If not linker, check skip conditions
             if sum(lcond1) + sum(lcond2) <= 1:
@@ -478,31 +502,35 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                 if f.n_nodes < min_upload_nodes:
                     continue
 
-            # Collect origin info for this neuron
-            source_info = {'source_type': 'segmentation'}
+            # Collect origin info for this neuron if it's a CatmaidNeuron
+            if isinstance(n, pymaid.CatmaidNeuron):
+                source_info = {'source_type': 'segmentation'}
 
-            if not sid_from_nodes or 'skeleton_id' not in f.nodes.columns:
-                # If we had to change the skeleton ID due to duplication, make
-                # sure to pass the original skid as source ID
-                if original_skid:
-                    source_info['source_id'] = int(original_skid)
+                if not sid_from_nodes or 'origin_skeletons' not in f.nodes.columns:
+                    # If we had to change the skeleton ID due to duplication, make
+                    # sure to pass the original skid as source ID
+                    if original_skid:
+                        source_info['source_id'] = int(original_skid)
+                    else:
+                        source_info['source_id'] = int(n.id)
                 else:
-                    source_info['source_id'] = int(n.skeleton_id)
+                    if f.nodes.origin_skeletons.unique().shape[0] == 1:
+                        skid = f.nodes.origin_skeletons.unique()[0]
+                    else:
+                        print('Warning: uploading chimera fragment with multiple '
+                              'skeleton IDs! Using largest contributor ID.')
+                        # Use the skeleton ID that has the most nodes
+                        by_skid = f.nodes.groupby('origin_skeletons').x.count()
+                        skid = by_skid.sort_values(ascending=False).index.values[0]
+
+                    source_info['source_id'] = int(skid)
+
+                if not isinstance(getattr(n, '_remote_instance', None), type(None)):
+                    source_info['source_project_id'] = n._remote_instance.project_id
+                    source_info['source_url'] = n._remote_instance.server
             else:
-                if f.nodes.skeleton_id.unique().shape[0] == 1:
-                    skid = f.nodes.skeleton_id.unique()[0]
-                else:
-                    print('Warning: uploading chimera fragment with multiple '
-                          'skeleton IDs! Using largest contributor ID.')
-                    # Use the skeleton ID that has the most nodes
-                    by_skid = f.nodes.groupby('skeleton_id').x.count()
-                    skid = by_skid.sort_values(ascending=False).index.values[0]
-
-                source_info['source_id'] = int(skid)
-
-            if not isinstance(getattr(n, '_remote_instance'), type(None)):
-                source_info['source_project_id'] = n._remote_instance.project_id
-                source_info['source_url'] = n._remote_instance.server
+                # Unknown source
+                source_info = {}
 
             resp = pymaid.upload_neuron(f,
                                         import_tags=import_tags,
@@ -521,7 +549,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             # Now check if we can create any of the new edges by joining nodes
             # Both treenode and parent ID have to be either existing nodes or
             # newly uploaded
-            cond1a = to_stitch.treenode_id.isin(tn_map)
+            cond1a = to_stitch.node_id.isin(tn_map)
             cond2a = to_stitch.parent_id.isin(tn_map)
 
             to_gen = to_stitch.loc[(cond1a | cond1b) & (cond2a | cond2b)]
@@ -529,10 +557,10 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
             # Join nodes
             for node in to_gen.itertuples():
                 # Make sure our base_neuron always come out as winner on top
-                if node.treenode_id in bn.nodes.treenode_id.values:
-                    winner, looser = node.treenode_id, node.parent_id
+                if node.node_id in bn.nodes.node_id.values:
+                    winner, looser = node.node_id, node.parent_id
                 else:
-                    winner, looser = node.parent_id, node.treenode_id
+                    winner, looser = node.parent_id, node.node_id
 
                 # We need to map winner and looser to the new node IDs
                 winner = tn_map.get(winner, winner)
@@ -548,7 +576,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                 # See if there was any error while uploading
                 if 'error' in resp:
                     print('Skipping joining nodes '
-                          '{} and {}: {} - '.format(node.treenode_id,
+                          '{} and {}: {} - '.format(node.node_id,
                                                     node.parent_id,
                                                     resp['error']))
                     # Skip changing confidences
@@ -566,10 +594,11 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                                                          remote_instance=target_instance)
 
         # Add annotations
-        _ = __merge_annotations(n, bn, tag, target_instance)
+        if n.has_annotations:
+            _ = __merge_annotations(n, bn, tag, target_instance)
 
         # Update node radii
-        if update_radii:
+        if update_radii and 'radius' in n.nodes.columns and np.all(n.nodes.radius):
             print('Updating radii of existing nodes... ', end='', flush=True)
             resp = update_node_radii(source=n, target=ol,
                                      remote_instance=target_instance,
@@ -577,7 +606,7 @@ def merge_neuron(x, target_instance, tag, min_node_overlap=4, min_overlap_size=1
                                      skip_existing=True)
             print('Done.', flush=True)
 
-        print('Neuron "{}" successfully merged into target instance as "{}" #{}'.format(n.neuron_name, bn.neuron_name, bn.skeleton_id),
+        print('Neuron "{}" successfully merged into target instance as "{}" #{}'.format(n.name, bn.name, bn.id),
               flush=True)
 
     return
@@ -587,7 +616,7 @@ def __merge_annotations(n, bn, tag, target_instance):
     """Make sure proper annotations are added."""
     to_add = []
     # Add "{URL} upload {tag} annotation"
-    if not isinstance(getattr(n, '_remote_instance'), type(None)):
+    if not isinstance(getattr(n, '_remote_instance', None), type(None)):
         u = n._remote_instance.server.split('/')[-1] + ' upload'
         if isinstance(tag, str):
             u += " {}".format(tag)
@@ -651,8 +680,8 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
     # This is just check on the off-chance that skeleton IDs are not unique
     # (e.g. if neurons come from different projects) -> this is relevant because
     # we identify the master ("base_neuron") via it's skeleton ID
-    skids = [n.skeleton_id for n in x]
-    if len(skids) > len(np.unique(skids)):
+    skids = [n.id for n in x]
+    if len(skids) > len(set(skids)):
         raise ValueError('Duplicate skeleton IDs found in neurons to be merged. '
                          'Try manually assigning unique skeleton IDs.')
 
@@ -669,7 +698,7 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
     union_simple = pymaid.stitch_neurons(x, method='NONE', master=base_neuron)
 
     # Check for duplicate node IDs
-    if any(union_simple.nodes.treenode_id.duplicated()):
+    if any(union_simple.nodes.node_id.duplicated()):
         raise ValueError('Duplicate node IDs found.')
 
     # Map priority nodes -> this will speed things up later
@@ -680,14 +709,14 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
     collapse_into = {}
     new_edges = []
     for c in comb:
-        tree = pymaid.neuron2KDTree(c[0], tree_type='c', data='treenodes')
+        tree = pymaid.neuron2KDTree(c[0], tree_type='c', data='nodes')
 
         # For each node in master get the nearest neighbor in minion
         coords = c[1].nodes[['x', 'y', 'z']].values
         nn_dist, nn_ix = tree.query(coords, k=1, distance_upper_bound=limit)
 
-        clps_left = c[0].nodes.iloc[nn_ix[nn_dist <= limit]].treenode_id.values
-        clps_right = c[1].nodes.iloc[nn_dist <= limit].treenode_id.values
+        clps_left = c[0].nodes.iloc[nn_ix[nn_dist <= limit]].node_id.values
+        clps_right = c[1].nodes.iloc[nn_dist <= limit].node_id.values
         clps_dist = nn_dist[nn_dist <= limit]
 
         for i, (n1, n2, d) in enumerate(zip(clps_left, clps_right, clps_dist)):
@@ -745,7 +774,7 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
 
     # Add properties to nodes
     survivors = np.unique(E[['source', 'target']])
-    props = union_simple.nodes.set_index('treenode_id').loc[survivors]
+    props = union_simple.nodes.set_index('node_id').loc[survivors]
     nx.set_node_attributes(tree, props.to_dict(orient='index'))
 
     # Recreate neuron
@@ -755,17 +784,19 @@ def collapse_nodes(*x, limit=1, base_neuron=None, priority_nodes=None):
 
     # Add tags back on
     for n in x:
+        if not n.has_tags:
+            continue
         union.tags.update({k: union.tags.get(k, []) + [collapse_into.get(a, a) for a in v] for k, v in n.tags.items()})
 
     # Add connectors back on
     union.connectors = x.connectors.drop_duplicates(subset='connector_id')
-    union.connectors.treenode_id = union.connectors.treenode_id.map(lambda x: collapse_into.get(x, x))
+    union.connectors.node_id = union.connectors.node_id.map(lambda x: collapse_into.get(x, x))
 
     # Return the last survivor
     return union, collapse_into, new_edges
 
 
-def collapse_nodes2(A, B, limit=2, base_neuron=None):
+def collapse_nodes2(A, B, limit=1, base_neuron=None, mesh=None):
     """Merge neuron A into neuron(s) B creating a union of both.
 
     This implementation uses edge contraction on the neurons' graph to ensure
@@ -780,10 +811,13 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
                         Neurons to collapse neuron A into.
     limit :             int, optional
                         Max distance [microns] for nearest neighbour search.
-    base_neuron :       skeleton_ID | CatmaidNeuron, optional
+    base_neuron :       skeleton ID | CatmaidNeuron, optional
                         Neuron from B to use as template for union. If not
                         provided, the first neuron in the list is used as
                         template!
+    mesh :              navis.Volume | navis.MeshNeuron | mesh-like object
+                        If provided, will use the mesh to check if nodes are
+                        in line of sight to each other before collapsing them.
 
     Returns
     -------
@@ -798,24 +832,29 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
                             NodeA -collapsed-into-> NodeB
 
     """
-    if isinstance(A, pymaid.CatmaidNeuronList):
+    if isinstance(A, navis.NeuronList):
         if len(A) == 1:
             A = A[0]
         else:
-            A = pymaid.stitch_neurons(A, method="NONE")
-    elif not isinstance(A, pymaid.CatmaidNeuron):
-        raise TypeError('`A` must be a CatmaidNeuron, got "{}"'.format(type(A)))
+            A = navis.stitch_neurons(A, method="NONE")
 
-    if isinstance(B, pymaid.CatmaidNeuron):
-        B = pymaid.CatmaidNeuronList(B)
-    elif not isinstance(B, pymaid.CatmaidNeuronList):
-        raise TypeError('`B` must be a CatmaidNeuronList, got "{}"'.format(type(B)))
+    if not isinstance(A, navis.TreeNeuron):
+        raise TypeError('`A` must be a TreeNeuron, got "{}"'.format(type(A)))
+
+    if isinstance(B, navis.TreeNeuron):
+        B = navis.NeuronList(B)
+
+    if not isinstance(B, navis.NeuronList):
+        raise TypeError('`B` must be a NeuronList, got "{}"'.format(type(B)))
+
+    if isinstance(base_neuron, type(None)):
+        base_neuron = B[0]
 
     # This is just check on the off-chance that skeleton IDs are not unique
     # (e.g. if neurons come from different projects) -> this is relevant because
     # we identify the master ("base_neuron") via it's skeleton ID
-    skids = [n.skeleton_id for n in B + A]
-    if len(skids) > len(np.unique(skids)):
+    skids = [n.id for n in B + A]
+    if len(skids) > len(set(skids)):
         raise ValueError('Duplicate skeleton IDs found. Try manually assigning '
                          'unique skeleton IDs.')
 
@@ -825,26 +864,51 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     # Before we start messing around, let's make sure we can keep track of
     # the origin of each node
     for n in B + A:
-        n.nodes['origin_skeletons'] = n.skeleton_id
+        n.nodes['origin_skeletons'] = n.id
 
     # First make a weak union by simply combining the node tables
-    union_simple = pymaid.stitch_neurons(B + A, method='NONE', master=base_neuron)
+    B.neurons = sorted(B.neurons, key=lambda x: {base_neuron: 0}.get(x, 2))
+    union_simple = navis.stitch_neurons(B + A, method='NONE', master='FIRST')
 
     # Check for duplicate node IDs
-    if any(union_simple.nodes.treenode_id.duplicated()):
+    if any(union_simple.nodes.node_id.duplicated()):
         raise ValueError('Duplicate node IDs found.')
 
     # Find nodes in A to be merged into B
-    tree = pymaid.neuron2KDTree(B, tree_type='c', data='treenodes')
+    tree = scipy.spatial.cKDTree(data=B.nodes[['x', 'y', 'z']].values)
 
     # For each node in A get the nearest neighbor in B
     coords = A.nodes[['x', 'y', 'z']].values
     nn_dist, nn_ix = tree.query(coords, k=1, distance_upper_bound=limit)
 
     # Find nodes that are close enough to collapse
-    collapsed = A.nodes.loc[nn_dist <= limit].treenode_id.values
-    clps_into = B.nodes.iloc[nn_ix[nn_dist <= limit]].treenode_id.values
+    collapsed = A.nodes.loc[nn_dist <= limit].node_id.values
+    clps_into = B.nodes.iloc[nn_ix[nn_dist <= limit]].node_id.values
 
+    # If we have a mesh, check if those collapsed nodes are in sight of each
+    # other
+    if mesh:
+        import ncollpyde
+        coll = ncollpyde.Volume(mesh.vertices, mesh.faces)
+
+        # Produce start and end coordinates for the to collapse nodes
+        starts = A.nodes.set_index('node_id').loc[collapsed,
+                                                  ['x', 'y', 'z']].values
+        ends = B.nodes.set_index('node_id').loc[clps_into,
+                                                ['x', 'y', 'z']].values
+
+        # Check if the line between start and end intersects the mesh
+        intersects, _, _ = coll.intersections(starts, ends)
+
+        # Indices that show up in `intersects` cross a membrane
+        # -> we need to invert this to get those nodes that don't
+        not_intersects = ~np.isin(np.arange(starts.shape[0]), intersects)
+
+        # Keep only collapses that don't intersect
+        collapsed = collapsed[not_intersects]
+        clps_into = clps_into[not_intersects]
+
+    # Generate a map of which node in A is to be collapsed into which node in B
     clps_map = {n1: n2 for n1, n2 in zip(collapsed, clps_into)}
 
     # The fastest way to collapse is to work on the edge list
@@ -853,7 +917,9 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     # Keep track of which edges were collapsed -> we will use this as weight
     # later on to prioritize existing edges over newly generated ones
     E['is_new'] = 1
-    E.loc[(E.source.isin(B.nodes.treenode_id.values)) | (E.target.isin(B.nodes.treenode_id.values)), 'is_new'] = 0
+    source_in_B = E.source.isin(B.nodes.node_id.values)
+    target_in_B = E.target.isin(B.nodes.node_id.values)
+    E.loc[source_in_B | target_in_B, 'is_new'] = 0
 
     # Now map collapsed nodes onto the nodes they collapsed into
     E['target'] = E.target.map(lambda x: clps_map.get(x, x))
@@ -870,8 +936,8 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
 
     # Because edges may exist in both directions (A->B and A<-B) we have to
     # generate a column that's agnostic to directionality using frozensets
-    E['edge'] = E[['source', 'target']].apply(frozenset, axis=1)
-    E.drop_duplicates(['edge'], keep='first', inplace=True)
+    E['frozen_edge'] = E[['source', 'target']].apply(frozenset, axis=1)
+    E.drop_duplicates(['frozen_edge'], keep='first', inplace=True)
 
     # Regenerate graph from these new edges
     G = nx.Graph()
@@ -879,20 +945,21 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
 
     # At this point there might still be disconnected pieces -> we will create
     # separate neurons for each tree
-    props = union_simple.nodes.loc[union_simple.nodes.treenode_id.isin(G.nodes)].set_index('treenode_id')
+    props = union_simple.nodes.loc[union_simple.nodes.node_id.isin(G.nodes)].set_index('node_id')
     nx.set_node_attributes(G, props.to_dict(orient='index'))
     fragments = []
     for n in nx.connected_components(G):
         c = G.subgraph(n)
         tree = nx.minimum_spanning_tree(c)
-        fragments.append(pymaid.graph.nx2neuron(tree,
-                                                neuron_name=base_neuron.neuron_name,
-                                                skeleton_id=base_neuron.skeleton_id))
-    fragments = pymaid.CatmaidNeuronList(fragments)
+        fragments.append(navis.graph.nx2neuron(tree,
+                                               name=base_neuron.name,
+                                               id=base_neuron.id))
+    fragments = navis.NeuronList(fragments)
 
     if len(fragments) > 1:
+        print('Union incomplete - watch out for disconnected fragments!')
         # Now heal those fragments using a minimum spanning tree
-        union = pymaid.stitch_neurons(*fragments, method='ALL')
+        union = navis.stitch_neurons(*fragments, method='ALL')
     else:
         union = fragments[0]
 
@@ -900,18 +967,21 @@ def collapse_nodes2(A, B, limit=2, base_neuron=None):
     union.reroot(base_neuron.root[0], inplace=True)
 
     # Add tags back on
-    union.tags.update(union_simple.tags)
+    if union_simple.has_tags:
+        if not union.has_tags:
+            union.tags = {}
+        union.tags.update(union_simple.tags)
 
     # Add connectors back on
     union.connectors = union_simple.connectors.drop_duplicates(subset='connector_id').copy()
-    union.connectors.loc[:, 'treenode_id'] = union.connectors.treenode_id.map(lambda x: clps_map.get(x, x))
+    union.connectors.loc[:, 'node_id'] = union.connectors.node_id.map(lambda x: clps_map.get(x, x))
 
     # Find the newly added edges (existing edges should not have been modified
     # - except for changing direction due to reroot)
     # The basic logic here is that new edges were only added between two
     # previously separate skeletons, i.e. where the skeleton ID changes between
     # parent and child node
-    node2skid = union_simple.nodes.set_index('treenode_id').skeleton_id.to_dict()
+    node2skid = union_simple.nodes.set_index('node_id').origin_skeletons.to_dict()
     union.nodes['parent_skeleton'] = union.nodes.parent_id.map(node2skid)
     new_edges = union.nodes[union.nodes.origin_skeletons != union.nodes.parent_skeleton]
     # Remove root edges
@@ -944,18 +1014,20 @@ def update_node_radii(source, target, remote_instance, limit=2, skip_existing=Tr
                         Server response.
 
     """
-    if not isinstance(source, (pymaid.CatmaidNeuron, pymaid.CatmaidNeuronList)):
-        raise TypeError('Expected CatmaidNeuron/List, got "{}"'.format(type(source)))
+    if not isinstance(source, (navis.TreeNeuron, navis.NeuronList)):
+        raise TypeError('Expected navis.TreeNeuron, pymaid.CatmaidNeuron '
+                        'or NeuronList, got "{}"'.format(type(source)))
 
-    if not isinstance(target, (pymaid.CatmaidNeuron, pymaid.CatmaidNeuronList)):
-        raise TypeError('Expected CatmaidNeuron/List, got "{}"'.format(type(target)))
+    if not isinstance(target, (navis.TreeNeuron, navis.NeuronList)):
+        raise TypeError('Expected navis.TreeNeuron, pymaid.CatmaidNeuron '
+                        'or NeuronList, got "{}"'.format(type(target)))
 
     # Turn limit from microns to nanometres
     limit *= 1000
 
     # First find the closest neighbor within distance limit for each node in target
     # Find nodes in A to be merged into B
-    tree = pymaid.neuron2KDTree(source, tree_type='c', data='treenodes')
+    tree = navis.neuron2KDTree(source, tree_type='c', data='nodes')
 
     nodes = target.nodes
     if skip_existing:
@@ -967,8 +1039,10 @@ def update_node_radii(source, target, remote_instance, limit=2, skip_existing=Tr
     nn_dist, nn_ix = tree.query(coords, k=1, distance_upper_bound=limit)
 
     # Find nodes that are close enough to collapse
-    tn_ids = nodes.loc[nn_dist <= limit].treenode_id.values
+    tn_ids = nodes.loc[nn_dist <= limit].node_id.values
     new_radii = source.nodes.iloc[nn_ix[nn_dist <= limit]].radius.values
+
+    print(dict(zip(tn_ids, new_radii)))
 
     return pymaid.update_radii(dict(zip(tn_ids, new_radii)),
                                remote_instance=remote_instance)
@@ -976,7 +1050,7 @@ def update_node_radii(source, target, remote_instance, limit=2, skip_existing=Tr
 
 def _confirm_overlap(x, fragments, viewer=None):
     """Show dialogs to confirm overlapping fragments."""
-    print('{}: {} overlapping fragments found'.format(x.neuron_name, len(fragments)))
+    print('{}: {} overlapping fragments found'.format(x.name, len(fragments)))
     if fragments:
         fragments.sort_values('n_nodes')
         # Have user inspect fragments
@@ -984,14 +1058,14 @@ def _confirm_overlap(x, fragments, viewer=None):
         if any(fragments.n_nodes > 10):
             # Generate a summary
             large_frags = fragments[fragments.n_nodes > 10]
-            s = large_frags.summary(add_cols=['overlap_score'])[['neuron_name',
-                                                                 'skeleton_id',
-                                                                 'n_nodes',
-                                                                 'n_connectors',
-                                                                 'overlap_score']]
+            s = large_frags.summary(add_props=['overlap_score', 'id'])[['name',
+                                                                        'id',
+                                                                        'n_nodes',
+                                                                        'n_connectors',
+                                                                        'overlap_score']]
             # Show and let user decide which ones to merge
             if not viewer:
-                viewer = pymaid.Viewer(title='Check overlap')
+                viewer = navis.Viewer(title='Check overlap')
             # Make sure viewer is actually visible and cleared
             viewer.show()
             viewer.clear()
@@ -1023,17 +1097,17 @@ def _confirm_overlap(x, fragments, viewer=None):
             # Remove deselected fragments
             # Mind you not all fragments are on viewer - this is why we remove
             # neurons that has been hidden
-            fragments = fragments[~np.isin(fragments.skeleton_id, viewer.invisible)]
+            fragments = fragments[~np.isin(fragments.id, viewer.invisible)]
 
     # Now ask for smaller fragments via CLI
     if fragments:
-        s = fragments.summary(add_cols=['overlap_score',
-                                        'sampler_count'])[['neuron_name',
-                                                           'skeleton_id',
-                                                           'n_nodes',
-                                                           'n_connectors',
-                                                           'sampler_count',
-                                                           'overlap_score']]
+        s = fragments.summary(add_props=['overlap_score',
+                                         'sampler_count', 'id'])[['name',
+                                                                  'id',
+                                                                  'n_nodes',
+                                                                  'n_connectors',
+                                                                  'sampler_count',
+                                                                  'overlap_score']]
 
         # Ask user which neuron should be merged
         msg = """
@@ -1080,13 +1154,14 @@ def _confirm_overlap(x, fragments, viewer=None):
     # If any fragments left, ask for base neuron
     else:
         # Ask user which neuron to use as merge target
-        s = fragments.summary(add_cols=['overlap_score',
-                                        'sampler_count'])[['neuron_name',
-                                                           'skeleton_id',
-                                                           'n_nodes',
-                                                           'n_connectors',
-                                                           'sampler_count',
-                                                           'overlap_score']]
+        s = fragments.summary(add_props=['overlap_score',
+                                         'sampler_count',
+                                         'id'])[['name',
+                                                 'id',
+                                                 'n_nodes',
+                                                 'n_connectors',
+                                                 'sampler_count',
+                                                 'overlap_score']]
 
         msg = """
         Above fragments and your input neuron will be merged into a single neuron.
@@ -1111,7 +1186,7 @@ def _confirm_overlap(x, fragments, viewer=None):
 
         # Some safeguards:
         # Check if we would delete any samplers
-        cond1 = s.skeleton_id != base_neuron.skeleton_id
+        cond1 = s.id != base_neuron.id
         cond2 = s.sampler_count > 0
         has_sampler = s[cond1 & cond2]
         if not has_sampler.empty:

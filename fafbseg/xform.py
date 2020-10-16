@@ -13,11 +13,13 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
+import navis
 import pymaid
 import requests
 import warnings
 
 import numpy as np
+import trimesh as tm
 
 from . import utils
 use_pbars = utils.use_pbars
@@ -41,7 +43,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
                     Resolution of mapping. Lower = more precise but much slower.
                     Currently only mip 4 available!
     coordinates :   "nm" | "pixel"
-                    Units of the provided coordinates in ``x``.
+                    Units of the provided data in ``x``.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
                     work with a copy.
@@ -63,7 +65,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
                    mip=mip)
 
 
-def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='warn'):
+def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn'):
     """Transform neurons/coordinates from flywire to FAFB V14.
 
     This uses a service hosted by Eric Perlman.
@@ -74,8 +76,10 @@ def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='war
                     Data to transform.
     mip :           int
                     Resolution of mapping. Lower = more precise but much slower.
-    coordinates :   "nm" | "pixel"
-                    Units of the provided coordinates in ``x``.
+    coordinates :   None | "nm" | "pixel"
+                    Units of the provided data in ``x``. If ``None`` will
+                    assume that Neuron/List are in nanometers and everything
+                    else is in pixel.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
                     work with a copy.
@@ -89,13 +93,37 @@ def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='war
                     nm.
 
     """
+    if isinstance(coordinates, type(None)):
+        if isinstance(x, (navis.BaseNeuron, navis.NeuronList)):
+            coordinates = 'nm'
+        else:
+            coordinates = 'pixel'
+
     xf = _flycon(x,
                  dataset='flywire_v1',
                  coordinates=coordinates,
                  inplace=inplace,
                  on_fail=on_fail,
                  mip=mip)
-    return xf * [4, 4, 40]
+
+    # _flycon always returns pixels - we have to convert to nanometers
+    if isinstance(xf, navis.NeuronList):
+        for n in xf:
+            if isinstance(n, navis.TreeNeuron):
+                n *= [4, 4, 40, 1]
+            elif isinstance(n, navis.MeshNeuron):
+                n *= [4, 4, 40]
+            xf.units = 'nm' # manually set the units
+    elif isinstance(xf, navis.TreeNeuron):
+        # The 4th value is the radius and that is assumed to not change
+        xf *= [4, 4, 40, 1]
+        xf.units = 'nm'  # manually set the units
+    elif hasattr(xf, 'vertices'):
+        xf.vertices *= [4, 4, 40]
+    else:
+        xf *= [4, 4, 40]
+
+    return xf
 
 
 def _flycon(x, dataset, base_url='https://spine.janelia.org/app/flyconv',
@@ -134,30 +162,44 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/flyconv',
 
     """
     assert on_fail in ['warn', 'raise', 'ignore']
-    assert coordinates in ['nm', 'pixel']
+    assert coordinates in ['nm', 'nanometers', 'nanometer', 'pixel', 'pxl', 'pixels']
     assert isinstance(mip, (int, np.int))
     assert mip >= 0
 
-    if isinstance(x, pymaid.CatmaidNeuronList):
+    if isinstance(x, navis.NeuronList):
         return pymaid.CatmaidNeuronList([_flycon(n,
+                                                 dataset=dataset,
                                                  on_fail=on_fail,
                                                  coordinates=coordinates,
                                                  mip=mip,
                                                  base_url=base_url,
                                                  inplace=inplace) for n in x])
-    elif isinstance(x, pymaid.CatmaidNeuron):
+    elif isinstance(x, (navis.BaseNeuron, navis.Volume, tm.Trimesh)):
         if not inplace:
             x = x.copy()
 
-        x.nodes[['x', 'y', 'z']] = _flycon(x.nodes[['x', 'y', 'z']].values,
-                                           on_fail=on_fail,
-                                           coordinates=coordinates,
-                                           mip=mip,
-                                           base_url=base_url,
-                                           inplace=inplace)
+        if isinstance(x, navis.TreeNeuron):
+            x.nodes[['x', 'y', 'z']] = _flycon(x.nodes[['x', 'y', 'z']].values,
+                                               dataset=dataset,
+                                               on_fail=on_fail,
+                                               coordinates=coordinates,
+                                               mip=mip,
+                                               base_url=base_url,
+                                               inplace=inplace)
+        elif isinstance(x, (navis.MeshNeuron, navis.Volume, tm.Trimesh)):
+            x.vertices = _flycon(x.vertices,
+                                 dataset=dataset,
+                                 on_fail=on_fail,
+                                 coordinates=coordinates,
+                                 mip=mip,
+                                 base_url=base_url,
+                                 inplace=inplace)
+        else:
+            raise TypeError(f'Unable to convert neuron of type "{type(x)}"')
 
-        if hasattr(x, 'connectors') and not x.connectors.empty:
+        if isinstance(x, navis.BaseNeuron) and x.has_connectors:
             x.connectors[['x', 'y', 'z']] = _flycon(x.connectors[['x', 'y', 'z']].values,
+                                                    dataset=dataset,
                                                     on_fail=on_fail,
                                                     coordinates=coordinates,
                                                     mip=mip,

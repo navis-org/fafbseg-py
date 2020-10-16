@@ -205,7 +205,6 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
     **kwargs
                         Keyword arguments passed to ``requests.post``.
 
-
     Returns
     -------
     list :              List of segmentation IDs.
@@ -241,7 +240,7 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
             resp.raise_for_status()
 
             if 'error' in resp.json():
-                raise BaseException('Error fetching data: {}'.format(resp.json()['error']))
+                raise BaseException('Error fetching data: {}'.format(resp.json()))
 
             seg_ids += resp.json()
 
@@ -290,7 +289,7 @@ def use_google_storage(volume, max_workers=8, progress=True, **kwargs):
     """
     global _get_seg_ids
 
-    if not 'CloudVolume' in str(type(volume)):
+    if 'CloudVolume' not in str(type(volume)):
         # Set and update defaults from kwargs
         defaults = dict(cache=True,
                         mip=0,
