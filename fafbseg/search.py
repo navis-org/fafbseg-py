@@ -71,7 +71,7 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
                             remote_instance=autoseg_instance)
 
     # Make sure we're dealing with a list of neurons
-    if isinstance(nl, pymaid.TreeNeuron):
+    if isinstance(nl, navis.TreeNeuron):
         nl = pymaid.CatmaidNeuronList(nl)
 
     # Invert seg2skid
@@ -286,7 +286,7 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
                         neuron e.g. from autoseg.
 
     """
-    if not isinstance(x, pymaid.TreeNeuron):
+    if not isinstance(x, navis.TreeNeuron):
         raise TypeError('Expected navis.TreeNeuron or pymaid.CatmaidNeuron, got "{}"'.format(type(x)))
 
     if not isinstance(autoseg_instance, pymaid.CatmaidInstance):
