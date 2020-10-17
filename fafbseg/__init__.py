@@ -12,4 +12,4 @@ from . import xform
 
 #from .xform import xform_flywire_fafb14
 
-__version__ = "0.2.17"
+__version__ = "0.2.18"
