@@ -214,7 +214,7 @@ def neuron_to_segments(x):
     nodes['seg_id'] = segmentation.get_seg_ids(nodes[['x', 'y', 'z']].values)
 
     # Count segment IDs
-    seg_counts = nodes.groupby(['skeleton_id', 'seg_id']).node_id.count().reset_index(drop=False)
+    seg_counts = nodes.groupby(['neuron', 'seg_id'], as_index=False).node_id.count()
     seg_counts.columns = ['skeleton_id', 'seg_id', 'counts']
 
     # Remove seg IDs 0 (glia?)
