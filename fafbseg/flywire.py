@@ -276,7 +276,7 @@ def skid_to_id(skid,
 
 def update_ids(id,
                sample=0.1,
-               vol='graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31',
+               vol='graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31',
                progress=True, **kwargs):
     """Retrieve the most recent version of given flywire neuron(s).
 
