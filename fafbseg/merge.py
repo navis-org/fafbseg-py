@@ -1042,8 +1042,6 @@ def update_node_radii(source, target, remote_instance, limit=2, skip_existing=Tr
     tn_ids = nodes.loc[nn_dist <= limit].node_id.values
     new_radii = source.nodes.iloc[nn_ix[nn_dist <= limit]].radius.values
 
-    print(dict(zip(tn_ids, new_radii)))
-
     return pymaid.update_radii(dict(zip(tn_ids, new_radii)),
                                remote_instance=remote_instance)
 
