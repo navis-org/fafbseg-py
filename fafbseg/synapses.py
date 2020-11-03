@@ -356,7 +356,7 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
 def get_neuron_connections(sources, targets=None, agglomerate=True,
                            score_thresh=30, ol_thresh=5, dist_thresh=2000,
                            drop_duplicates=True, drop_autapses=True, db=None,
-                           verbose=True, progress=True):
+                           verbose=True):
     """Fetch connections between sets of neurons.
 
     Works by:
@@ -364,11 +364,6 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
      2. Fetch Buhmann et al. synaptic connections between them
      3. Do some clean-up. See parameters for details - defaults are those used
         by Buhmann et al
-
-    Notes
-    -----
-    1. The ``connector_id`` columns is a simple enumeration and is effectively
-       meaningless.
 
     Parameters
     ----------
@@ -399,10 +394,8 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
                         If True, will automatically drop autapses.
     db :            str, optional
                     Must point to SQL database containing the synapse data. If
-                    not provided will look for a `BUHMANN_SYNAPSE_DB`
+                    not provided will look for a ```BUHMANN_SYNAPSE_DB``
                     environment variable.
-    progress :      bool
-                    Whether to show progress bars or not.
 
     Return
     ------
@@ -457,8 +450,35 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
     syn['id_pre'] = syn.segmentid_pre.map(seg2neuron)
     syn['id_post'] = syn.segmentid_post.map(seg2neuron)
 
+    # Let the clean-up BEGIN!
+
+    # First drop nasty autapses
     if drop_autapses:
         syn = syn[syn.id_pre != syn.id_post]
+
+    # Next drop synapses far away from our neurons
+    if dist_thresh:
+        syn['pre_close'] = False
+        syn['post_close'] = False
+        for id in np.unique(syn[['id_pre', 'id_post']].values.flatten()):
+            neuron = unique_neurons.idx[id]
+            tree = navis.neuron2KDTree(neuron)
+
+            is_pre = syn.id_pre == id
+            if np.any(is_pre):
+                dist, ix = tree.query(syn.loc[is_pre, ['pre_x', 'pre_y', 'pre_z']].values,
+                                      distance_upper_bound=dist_thresh)
+                syn.loc[is_pre, 'pre_close'] = dist < float('inf')
+
+            is_post = syn.id_post == id
+            if np.any(is_post):
+                dist, ix = tree.query(syn.loc[is_post, ['post_x', 'post_y', 'post_z']].values,
+                                      distance_upper_bound=dist_thresh)
+                syn.loc[is_post, 'post_close'] = dist < float('inf')
+
+        # Drop connections where either pre- or postsynaptic site are too far
+        # away from the neuron
+        syn = syn[syn.pre_close & syn.post_close]
 
     # Drop duplicate connections, i.e. connections that connect the same pre-
     # and postsynaptic segmentation ID and are within a distance of 250nm
