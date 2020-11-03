@@ -54,8 +54,8 @@ def get_connection(filepath=None, force_reconnect=False):
     return conn
 
 
-def get_segment_synapses(seg_ids, pre=True, post=True, score_thresh=30,
-                         ret='brief', db=None):
+def query_synapses(seg_ids, pre=True, post=True, score_thresh=30, ret='brief',
+                   db=None):
     """Fetch synapses for given segment IDs.
 
     Parameters
@@ -65,9 +65,9 @@ def get_segment_synapses(seg_ids, pre=True, post=True, score_thresh=30,
     pre/post :      bool
                     Whether to fetch pre- and/or postsynapses.
     score_thresh :  int, optional
-                    If provided will only return synapsed with a cleft with this
-                    or higher. The default of 30 is used in the original Buhmann
-                    paper.
+                    If provided will only return synapses with a cleft score of
+                    this or higher. The default of 30 is used in the original
+                    Buhmann et al paper.
     ret :           "brief" | "full"
                     If "full" will return all fields. If "brief" will omit some
                     of the less relevant fields.
@@ -107,6 +107,58 @@ def get_segment_synapses(seg_ids, pre=True, post=True, score_thresh=30,
         where = f'WHERE segmentid_post IN ({seg_ids_str})'
     else:
         raise ValueError('`pre` and `post` must not both be False')
+
+    if score_thresh:
+        where += f' AND cleft_scores >= {score_thresh}'
+
+    return pd.read_sql(f'{sel} {where};', conn)
+
+
+def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief', db=None):
+    """Fetch synaptic connections between given segment IDs.
+
+    Parameters
+    ----------
+    pre_/post_ids : int | list of int
+                    Pre- and postsynaptic segment IDs to search for.
+    score_thresh :  int, optional
+                    If provided will only return synapses with a cleft score of
+                    this or higher. The default of 30 is used in the original
+                    Buhmann et al paper.
+    ret :           "brief" | "full"
+                    If "full" will return all fields. If "brief" will omit some
+                    of the less relevant fields.
+    db :            str, optional
+                    Must point to SQL database containing the synapse data. If
+                    not provided will look for a `BUHMANN_SYNAPSE_DB`
+                    environment variable.
+
+    Return
+    ------
+    pd.DataFrame
+
+    """
+    assert ret in ('brief', 'full')
+    assert isinstance(score_thresh, (type(None), int, float))
+
+    conn = get_connection(db)
+
+    pre_ids = navis.utils.make_iterable(pre_ids)
+    post_ids = navis.utils.make_iterable(pre_ids)
+
+    # Turn into query string
+    pre_ids_str = f'{",".join(pre_ids.astype(str))}'
+    post_ids_str = f'{",".join(post_ids.astype(str))}'
+
+    # Create query
+    if ret == 'brief':
+        cols = ['pre_x', 'pre_y', 'pre_z', 'post_x', 'post_y', 'post_z', 'scores',
+                'cleft_id', 'cleft_scores', 'segmentid_post', 'segmentid_pre']
+    else:
+        cols = ['*']
+    sel = f'SELECT {", ".join(cols)} from synlinks'
+
+    where = f'WHERE (segmentid_pre IN ({pre_ids_str}) AND segmentid_post in ({post_ids_str}))'
 
     if score_thresh:
         where += f' AND cleft_scores >= {score_thresh}'
@@ -184,9 +236,9 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
 
     # Fetch pre- and postsynapses associated with these segments
     # It's cheaper to get them all in one go
-    syn = get_segment_synapses(seg_ids.index.values,
-                               score_thresh=score_thresh,
-                               db=None)
+    syn = query_synapses(seg_ids.index.values,
+                         score_thresh=score_thresh,
+                         db=None)
 
     # Now associate synapses with neurons
     tables = []
@@ -299,3 +351,148 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
 
     if not attach:
         return pd.concat(tables, axis=0, sort=True).reset_index(drop=True)
+
+
+def get_neuron_connections(sources, targets=None, agglomerate=True,
+                           score_thresh=30, ol_thresh=5, dist_thresh=2000,
+                           drop_duplicates=True, drop_autapses=True, db=None,
+                           verbose=True, progress=True):
+    """Fetch connections between sets of neurons.
+
+    Works by:
+     1. Fetch segment IDs corresponding to given neurons
+     2. Fetch Buhmann et al. synaptic connections between them
+     3. Do some clean-up. See parameters for details - defaults are those used
+        by Buhmann et al
+
+    Notes
+    -----
+    1. The ``connector_id`` columns is a simple enumeration and is effectively
+       meaningless.
+
+    Parameters
+    ----------
+    sources :       navis.Neuron | pymaid.CatmaidNeuron | NeuronList
+                    Presynaptic neurons to fetch connections for.
+    targets :       navis.Neuron | pymaid.CatmaidNeuron | NeuronList | None
+                    Postsynaptic neurons to fetch connections for. If ``None``,
+                    ``targets = sources``.
+    agglomerate :   bool
+                    If True, will agglomerate connectivity by ID and return a
+                    weighted edge list. If False, will return a list of
+                    individual synapses.
+    ol_thresh :     int, optional
+                    If provided, will required a minimum node overlap between
+                    a neuron and a segment for that segment to be included
+                    (see step 1 above).
+    score_thresh :  int, optional
+                    If provided will only return synapses with a cleft score of
+                    this or higher.
+    dist_thresh :   int
+                    Synapses further away than the given distance [nm] from any
+                    node in the neuron than given distance will be discarded.
+    drop_duplicates :   bool
+                        If True, will merge synapses which connect the same
+                        pair of pre-post segmentation IDs and are within
+                        less than 250nm.
+    drop_autapses :     bool
+                        If True, will automatically drop autapses.
+    db :            str, optional
+                    Must point to SQL database containing the synapse data. If
+                    not provided will look for a `BUHMANN_SYNAPSE_DB`
+                    environment variable.
+    progress :      bool
+                    Whether to show progress bars or not.
+
+    Return
+    ------
+    pd.DataFrame
+                    Either edge list or list of synapses - see ``agglomerate``
+                    parameter.
+
+    """
+    # This is just so we throw a DB exception early and not wait for fetching
+    # segment Ids first
+    _ = get_connection(db)
+
+    assert isinstance(sources, (navis.BaseNeuron, navis.NeuronList))
+
+    if isinstance(targets, type(None)):
+        targets = sources
+
+    assert isinstance(targets, (navis.BaseNeuron, navis.NeuronList))
+
+    if not isinstance(sources, navis.NeuronList):
+        sources = navis.NeuronList([sources])
+    if not isinstance(targets, navis.NeuronList):
+        targets = navis.NeuronList([targets])
+
+    # Get segments for this neuron(s)
+    unique_neurons = (sources + targets).remove_duplicates(key='id')
+    seg_ids = search.neuron_to_segments(unique_neurons)
+
+    # Drop segments with overlap below threshold
+    if ol_thresh:
+        seg_ids = seg_ids.loc[seg_ids.max(axis=1) >= ol_thresh]
+
+    # We need to make sure that every segment ID is only attributed to a single
+    # neuron
+    is_top = seg_ids.values != seg_ids.max(axis=1).values.reshape((seg_ids.shape[0], 1))
+    where_top = np.where(is_top)
+    seg_ids.values[where_top] = 0
+
+    pre_ids = seg_ids.loc[seg_ids[sources.id].max(axis=1) > 0].index.values
+    post_ids = seg_ids.loc[seg_ids[targets.id].max(axis=1) > 0].index.values
+
+    # Fetch pre- and postsynapses associated with these segments
+    # It's cheaper to get them all in one go
+    syn = query_connections(pre_ids, post_ids,
+                            score_thresh=score_thresh,
+                            db=None)
+
+    # Now associate synapses with neurons
+    seg2neuron = dict(zip(seg_ids.index.values,
+                          seg_ids.columns[np.argmax(seg_ids.values, axis=1)]))
+
+    syn['id_pre'] = syn.segmentid_pre.map(seg2neuron)
+    syn['id_post'] = syn.segmentid_post.map(seg2neuron)
+
+    if drop_autapses:
+        syn = syn[syn.id_pre != syn.id_post]
+
+    # Drop duplicate connections, i.e. connections that connect the same pre-
+    # and postsynaptic segmentation ID and are within a distance of 250nm
+    dupl_thresh = 250
+    if drop_duplicates:
+        # We are dealing with this from a presynaptic perspective
+        while True:
+            pre_tree = cKDTree(syn[['pre_x', 'pre_y', 'pre_z']].values)
+            pairs = pre_tree.query_pairs(r=dupl_thresh, output_type='ndarray')
+
+            same_pre = syn.iloc[pairs[:, 0]].segmentid_pre.values == syn.iloc[pairs[:, 1]].segmentid_pre.values
+            same_post = syn.iloc[pairs[:, 0]].segmentid_post.values == syn.iloc[pairs[:, 1]].segmentid_post.values
+            same_cn = same_pre & same_post
+
+            # If no more pairs to collapse break
+            if same_cn.sum() == 0:
+                break
+
+            # Generate a graph from pairs
+            G = nx.Graph()
+            G.add_edges_from(pairs[same_cn])
+
+            # Find the minimum number of nodes we need to remove
+            # to separate the connectors
+            to_rm = []
+            for cn in nx.connected_components(G):
+                to_rm += list(nx.minimum_node_cut(nx.subgraph(G, cn)))
+            syn = syn.drop(index=syn.index.values[to_rm])
+
+    if agglomerate:
+        edges = syn.groupby(['id_pre', 'id_post'],
+                            as_index=False).cleft_id.count()
+        edges.rename({'cleft_id': 'weight'}, axis=1, inplace=True)
+        edges.sort_values('weight', ascending=False, inplace=True)
+        return edges.reset_index(drop=True)
+
+    return syn
