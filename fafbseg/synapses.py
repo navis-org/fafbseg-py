@@ -192,7 +192,7 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
     tables = []
     for c in tqdm(seg_ids.columns,
                   desc='Proc. neurons',
-                  disable=not progress,
+                  disable=not progress or seg_ids.shape[1] == 1,
                   leave=False):
         this_seg = seg_ids.loc[seg_ids[c].notnull(), c].index.values
         this_pre = syn[syn.segmentid_pre.isin(this_seg)]
@@ -256,6 +256,13 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
         connectors['type'] = 'post'
         connectors.loc[:this_pre.shape[0], 'type'] = 'pre'
 
+        # Fix some data types
+        connectors = connectors.astype({'type': 'category',
+                                        'x': np.float32,
+                                        'y': np.float32,
+                                        'z': np.float32,
+                                        'cleft_scores': np.float32})
+
         # Map connectors to nodes
         neuron = x.idx[c]
         tree = navis.neuron2KDTree(neuron)
@@ -268,8 +275,21 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
         # Assign node IDs
         connectors['node_id'] = neuron.nodes.iloc[ix[dist < np.inf]].node_id.values
 
+        # Somas can end up having synapes, which we know is wrong - let's fix it
+        if np.any(neuron.soma):
+            somata = navis.utils.make_iterable(neuron.soma)
+            s_locs = neuron.nodes.loc[neuron.nodes.node_id.isin(somata),
+                                      ['x', 'y', 'z']].values
+            # Find all nodes within 2 micron around the somas
+            soma_node_ix = tree.query_ball_point(s_locs, r=2000)
+            soma_node_ix = [n for l in soma_node_ix for n in l]
+            soma_node_id = neuron.nodes.iloc[soma_node_ix].node_id.values
+
+            # Drop connectors attached to these soma nodes
+            connectors = connectors[~connectors.node_id.isin(soma_node_id)]
+
         # Make fake IDs
-        connectors['connector_id'] = np.arange(connectors.shape[0])
+        connectors['connector_id'] = np.arange(connectors.shape[0]).astype(np.int32)
 
         if attach:
             neuron.connectors = connectors.reset_index(drop=True)
