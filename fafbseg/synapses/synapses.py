@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -24,9 +24,13 @@ import pandas as pd
 from scipy.spatial import cKDTree
 from tqdm.auto import tqdm
 
-from . import search
+from .. import google
 
 conn = None
+
+
+__all__ = ['query_synapses', 'query_connections', 'get_neuron_synapses',
+           'get_neuron_synapses', 'assign_connectors']
 
 
 def get_connection(filepath=None, force_reconnect=False):
@@ -55,7 +59,7 @@ def get_connection(filepath=None, force_reconnect=False):
 
 
 def query_synapses(seg_ids, pre=True, post=True, score_thresh=30, ret='brief',
-                   db=None):
+                   downcast=True, db=None):
     """Fetch synapses for given segment IDs.
 
     Parameters
@@ -71,6 +75,9 @@ def query_synapses(seg_ids, pre=True, post=True, score_thresh=30, ret='brief',
     ret :           "brief" | "full"
                     If "full" will return all fields. If "brief" will omit some
                     of the less relevant fields.
+    downcast:       bool
+                    If True, will downcast some columns to a more reasonable
+                    (and compact) datatype (usually int/float64 -> int/float32).
     db :            str, optional
                     Must point to SQL database containing the synapse data. If
                     not provided will look for a `BUHMANN_SYNAPSE_DB`
@@ -111,10 +118,46 @@ def query_synapses(seg_ids, pre=True, post=True, score_thresh=30, ret='brief',
     if score_thresh:
         where += f' AND cleft_scores >= {score_thresh}'
 
-    return pd.read_sql(f'{sel} {where};', conn)
+    return _query_database(f'{sel} {where};', conn, downcast=downcast)
 
 
-def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief', db=None):
+def _query_database(query, conn, downcast=True):
+    """Query the synapse database."""
+    resp = pd.read_sql(query, conn)
+
+    # Fix some data types
+    # A lot of these come out at 64 bit but with the exception of
+    # segmentation IDs 32 bit is more than enough
+    DTYPES = {'pre_x': np.int32,
+              'pre_y': np.int32,
+              'pre_z': np.int32,
+              'post_x': np.int32,
+              'post_y': np.int32,
+              'post_z': np.int32,
+              'cleft_scores': np.int32,
+              'dist': np.float32,
+              'segmentid_post': np.int64,
+              'segmentid_pre': np.int64,
+              'scores': np.float32,
+              'clust_con_offset': np.int32,
+              'cleft_id': np.int32,
+              'prob_count': np.int32,
+              'prob_max': np.int32,
+              'prob_mean': np.int32,
+              'prob_min': np.int32,
+              'prob_sum': np.int32,
+              'offset': np.int32
+              }
+
+    if downcast:
+        to_conv = {k: v for k, v in DTYPES.items() if k in resp.columns}
+        resp = resp.astype(to_conv, errors='ignore')
+
+    return resp
+
+
+def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief',
+                      downcast=True, db=None):
     """Fetch synaptic connections between given segment IDs.
 
     Parameters
@@ -128,6 +171,9 @@ def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief', db=None):
     ret :           "brief" | "full"
                     If "full" will return all fields. If "brief" will omit some
                     of the less relevant fields.
+    downcast:       bool
+                    If True, will downcast some columns to a more reasonable
+                    (and compact) datatype (usually int/float64 -> int/float32).
     db :            str, optional
                     Must point to SQL database containing the synapse data. If
                     not provided will look for a `BUHMANN_SYNAPSE_DB`
@@ -163,24 +209,30 @@ def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief', db=None):
     if score_thresh:
         where += f' AND cleft_scores >= {score_thresh}'
 
-    return pd.read_sql(f'{sel} {where};', conn)
+    return _query_database(f'{sel} {where};', conn=conn, downcast=downcast)
 
 
-def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
-                        dist_thresh=2000, attach=True, drop_duplicates=True,
-                        db=None, verbose=True, progress=True):
+def get_neuron_synapses(x, pre=True, post=True, collapse_connectors=False,
+                        score_thresh=30, ol_thresh=2, dist_thresh=1000,
+                        attach=True, drop_autapses=True, drop_duplicates=True,
+                        db=None, verbose=True, ret='catmaid', progress=True):
     """Fetch synapses for a given neuron.
 
     Works by:
      1. Fetch segment IDs corresponding to a neuron
      2. Fetch Buhmann et al. synapses associated with these segment IDs
-     3. Do some clean-up. See parameters for details - defaults are those used
-        by Buhmann et al
+     3. Do some clean-up. See parameters for details.
 
     Notes
     -----
-    1. The ``connector_id`` columns is a simple enumeration and is effectively
-       meaningless.
+    1. If ``collapse_connectors=False`` the ``connector_id`` column is a
+       simple enumeration and is effectively meaningless.
+    2. The x/y/z coordinates always correspond to the presynaptic site (like
+       with CATMAID connectors). These columns are renamed from "pre_{x|y|z}"
+       in the database.
+    3. Some of the clean-up assumes that the query neurons are unique neurons
+       and not fragments of the same neuron. If that is the case, you might be
+       better of running this function for each fragment individually.
 
     Parameters
     ----------
@@ -188,6 +240,10 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
                     Neurons to fetch synapses for.
     pre/post :      bool
                     Whether to fetch pre- and/or postsynapses.
+    collapse_connectors : bool
+                    If True, we will pool presynaptic connections into
+                    CATMAID-like connectors. If False each row represents a
+                    connections.
     ol_thresh :     int, optional
                     If provided, will required a minimum node overlap between
                     a neuron and a segment for that segment to be included
@@ -198,17 +254,28 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
     dist_thresh :   int
                     Synapses further away than the given distance [nm] from any
                     node in the neuron than given distance will be discarded.
+                    This is always with respect to the cleft site
+                    irrespective of whether our neuron is pre- or postsynaptic
+                    to it.
     attach :        bool
                     If True, will attach synapses as `.connectors` to neurons.
                     If False, will return DataFrame with synapses.
+    drop_autapses : bool
+                    If True, will drop synapses where pre- and postsynapse point
+                    to the same neuron. Autapses are wrong in 99.9% of all cases
+                    we've seen.
     drop_duplicates :   bool
                         If True, will merge synapses which connect the same
                         pair of pre-post segmentation IDs and are within
-                        less than 250nm.
+                        less than 2500nm.
     db :            str, optional
                     Must point to SQL database containing the synapse data. If
                     not provided will look for a `BUHMANN_SYNAPSE_DB`
                     environment variable.
+    ret :           "catmaid" | "brief" | "full"
+                    If "full" will return all synapse properties. If "brief"
+                    will return more relevant subset. If "catmaid" will return
+                    only CATMAID-like columns.
     progress :      bool
                     Whether to show progress bars or not.
 
@@ -223,22 +290,81 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
     _ = get_connection(db)
 
     assert isinstance(x, (navis.BaseNeuron, navis.NeuronList))
+    assert ret in ("catmaid", "brief", "full")
 
     if not isinstance(x, navis.NeuronList):
         x = navis.NeuronList([x])
 
     # Get segments for this neuron(s)
-    seg_ids = search.neuron_to_segments(x)
+    seg_ids = google.neuron_to_segments(x)
 
     # Drop segments with overlap below threshold
     if ol_thresh:
         seg_ids = seg_ids.loc[seg_ids.max(axis=1) >= ol_thresh]
 
+    # We will make sure that every segment ID is only attributed to a single
+    # neuron
+    not_top = seg_ids.values != seg_ids.max(axis=1).values.reshape((seg_ids.shape[0], 1))
+    where_not_top = np.where(not_top)
+    if np.any(where_not_top[0]):
+        seg_ids.values[where_not_top] = None  # do not change this to 0
+
     # Fetch pre- and postsynapses associated with these segments
     # It's cheaper to get them all in one go
     syn = query_synapses(seg_ids.index.values,
                          score_thresh=score_thresh,
+                         ret=ret if ret != 'catmaid' else 'brief',
                          db=None)
+
+    # Drop autapses - they are most likely wrong
+    if drop_autapses:
+        syn = syn[syn.segmentid_pre != syn.segmentid_post]
+
+    if drop_duplicates:
+        dupl_thresh = 250
+        # Deal with pre- and postsynapses separately
+        while True:
+            # Generate pairs of pre- and postsynaptic coordinates that are
+            # suspiciously close
+            pre_tree = cKDTree(syn[['pre_x', 'pre_y', 'pre_z']].values)
+            post_tree = cKDTree(syn[['post_x', 'post_y', 'post_z']].values)
+            pre_pairs = pre_tree.query_pairs(r=dupl_thresh)
+            post_pairs = post_tree.query_pairs(r=dupl_thresh)
+
+            # We will consider pairs for removal where both pre- OR postsynapse
+            # are close - this is easy to change via below operator
+            pairs = pre_pairs | post_pairs  # union of both
+            pairs = np.array(list(pairs))
+
+            # For each pair check if they connect the same IDs
+            same_pre = syn.iloc[pairs[:, 0]].segmentid_pre.values == syn.iloc[pairs[:, 1]].segmentid_pre.values
+            same_post = syn.iloc[pairs[:, 0]].segmentid_post.values == syn.iloc[pairs[:, 1]].segmentid_post.values
+            same_cn = same_pre & same_post
+
+            # If no more pairs to collapse break
+            if same_cn.sum() == 0:
+                break
+
+            # Generate a graph from pairs
+            G = nx.Graph()
+            G.add_edges_from(pairs[same_cn])
+
+            # Find the minimum number of nodes we need to remove
+            # to separate the connectors
+            to_rm = []
+            for cn in nx.connected_components(G):
+                to_rm += list(nx.minimum_node_cut(nx.subgraph(G, cn)))
+
+            # Drop those nodes
+            syn = syn.drop(index=syn.index.values[to_rm])
+        # Reset index
+        syn.reset_index(drop=True, inplace=True)
+
+    if collapse_connectors:
+        assign_connectors(syn)
+    else:
+        # Make fake IDs
+        syn['connector_id'] = np.arange(syn.shape[0]).astype(np.int32)
 
     # Now associate synapses with neurons
     tables = []
@@ -246,76 +372,58 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
                   desc='Proc. neurons',
                   disable=not progress or seg_ids.shape[1] == 1,
                   leave=False):
-        this_seg = seg_ids.loc[seg_ids[c].notnull(), c].index.values
-        this_pre = syn[syn.segmentid_pre.isin(this_seg)]
-        this_post = syn[syn.segmentid_post.isin(this_seg)]
+        this_segs = seg_ids.loc[seg_ids[c].notnull(), c]
+        is_pre = syn.segmentid_pre.isin(this_segs.index.values)
+        is_post = syn.segmentid_post.isin(this_segs.index.values)
 
-        # Drop connections that connect the same two segmentation IDs and are
-        # within a distance of 250nm
-        dupl_thresh = 250
-        if drop_duplicates:
-            # Deal with pre- and postsynapses separately
-            while True:
-                pre_tree = cKDTree(this_pre[['pre_x', 'pre_y', 'pre_z']].values)
-                pairs = pre_tree.query_pairs(r=dupl_thresh, output_type='ndarray')
+        # At this point we might see the exact same connection showing up in
+        # `is_pre` and in `is_post`. This happens when we mapped both the
+        # pre- and the postsynaptic segment to this neuron - likely an error.
+        # In these cases we have to decide whether our neuron is truely pre-
+        # or postsynaptic. For this we will use the overlap counts:
+        # First find connections that would show up twice
+        is_dupl = is_pre & is_post
+        if any(is_dupl):
+            dupl = syn[is_dupl]
+            # Next get the overlap counts for the pre- and postsynaptic seg IDs
+            dupl_pre_ol = seg_ids.loc[dupl.segmentid_pre, c].values
+            dupl_post_ol = seg_ids.loc[dupl.segmentid_post, c].values
 
-                same_pre = this_pre.iloc[pairs[:, 0]].segmentid_pre.values == this_pre.iloc[pairs[:, 1]].segmentid_pre.values
-                same_post = this_pre.iloc[pairs[:, 0]].segmentid_post.values == this_pre.iloc[pairs[:, 1]].segmentid_post.values
-                same_cn = same_pre & same_post
+            # We go for the one with more overlap
+            true_pre = dupl_pre_ol > dupl_post_ol
 
-                # If no more pairs to collapse break
-                if same_cn.sum() == 0:
-                    break
+            # Propagate that decision
+            is_pre[is_dupl] = true_pre
+            is_post[is_dupl] = ~true_pre
 
-                # Generate a graph from pairs
-                G = nx.Graph()
-                G.add_edges_from(pairs[same_cn])
+        # Now get our synapses
+        this_pre = syn[is_pre]
+        this_post = syn[is_post]
 
-                # Find the minimum number of nodes we need to remove
-                # to separate the connectors
-                to_rm = []
-                for cn in nx.connected_components(G):
-                    to_rm += list(nx.minimum_node_cut(nx.subgraph(G, cn)))
-                this_pre = this_pre.drop(index=this_pre.index.values[to_rm])
+        # Keep only one connector per presynapse
+        # -> just like in CATMAID connector tables
+        # Postsynaptic connectors will still show up multiple times
+        if collapse_connectors:
+            this_pre = this_pre.drop_duplicates('connector_id')
 
-            while True:
-                post_tree = cKDTree(this_post[['post_x', 'post_y', 'post_z']].values)
-                pairs = post_tree.query_pairs(r=dupl_thresh, output_type='ndarray')
-
-                same_pre = this_post.iloc[pairs[:, 0]].segmentid_pre.values == this_post.iloc[pairs[:, 1]].segmentid_pre.values
-                same_post = this_post.iloc[pairs[:, 0]].segmentid_post.values == this_post.iloc[pairs[:, 1]].segmentid_post.values
-                same_cn = same_pre & same_post
-
-                # If no more pairs to collapse break
-                if same_cn.sum() == 0:
-                    break
-
-                # Generate a graph from pairs
-                G = nx.Graph()
-                G.add_edges_from(pairs[same_cn])
-
-                # Find the minimum number of nodes we need to remove
-                # to separate the connectors
-                to_rm = []
-                for cn in nx.connected_components(G):
-                    to_rm += list(nx.minimum_node_cut(nx.subgraph(G, cn)))
-                this_post = this_post.drop(index=this_post.index.values[to_rm])
-
-        # Combine pre and postsynapses
-        connectors = np.vstack((this_pre[['pre_x', 'pre_y', 'pre_z', 'cleft_scores']].values,
-                                this_post[['post_x', 'post_y', 'post_z', 'cleft_scores']].values))
-        connectors = pd.DataFrame(connectors, columns=['x', 'y', 'z', 'cleft_scores'])
+        # Combine pre- and postsynapses and keep track of the type
+        connectors = pd.concat([this_pre, this_post], axis=0).reset_index(drop=True)
         connectors['type'] = 'post'
-        connectors.loc[:this_pre.shape[0], 'type'] = 'pre'
+        connectors.iloc[:this_pre.shape[0],
+                        connectors.columns.get_loc('type')] = 'pre'
+        connectors['type'] = connectors['type'].astype('category')
 
-        # Fix some data types
-        connectors = connectors.astype({'type': 'category',
-                                        'x': np.float32,
-                                        'y': np.float32,
-                                        'z': np.float32,
-                                        'cleft_scores': np.float32})
+        # Rename columns such that x/y/z corresponds to presynaptic sites
+        connectors.rename({'pre_x': 'x', 'pre_y': 'y', 'pre_z': 'z'},
+                          axis=1, inplace=True)
+
+        # For CATMAID-like connector tables subset to relevant columns
+        if ret == 'catmaid':
+            connectors = connectors[['connector_id', 'x', 'y', 'z',
+                                     'cleft_scores', 'type']].copy()
 
         # Map connectors to nodes
+        # Note that this is where we enforce `dist_thresh`
         neuron = x.idx[c]
         tree = navis.neuron2KDTree(neuron)
         dist, ix = tree.query(connectors[['x', 'y', 'z']].values,
@@ -327,7 +435,8 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
         # Assign node IDs
         connectors['node_id'] = neuron.nodes.iloc[ix[dist < np.inf]].node_id.values
 
-        # Somas can end up having synapes, which we know is wrong - let's fix it
+        # Somas can end up having synapses, which we know is wrong and is
+        # relatively easy to fix
         if np.any(neuron.soma):
             somata = navis.utils.make_iterable(neuron.soma)
             s_locs = neuron.nodes.loc[neuron.nodes.node_id.isin(somata),
@@ -340,17 +449,15 @@ def get_neuron_synapses(x, pre=True, post=True, score_thresh=30, ol_thresh=5,
             # Drop connectors attached to these soma nodes
             connectors = connectors[~connectors.node_id.isin(soma_node_id)]
 
-        # Make fake IDs
-        connectors['connector_id'] = np.arange(connectors.shape[0]).astype(np.int32)
-
         if attach:
             neuron.connectors = connectors.reset_index(drop=True)
         else:
-            connectors['neuron'] = neuron.id
+            connectors['neuron'] = neuron.id  # do NOT change the type of this
             tables.append(connectors)
 
     if not attach:
-        return pd.concat(tables, axis=0, sort=True).reset_index(drop=True)
+        connectors = pd.concat(tables, axis=0, sort=True).reset_index(drop=True)
+        return connectors
 
 
 def get_neuron_connections(sources, targets=None, agglomerate=True,
@@ -422,7 +529,7 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
 
     # Get segments for this neuron(s)
     unique_neurons = (sources + targets).remove_duplicates(key='id')
-    seg_ids = search.neuron_to_segments(unique_neurons)
+    seg_ids = google.neuron_to_segments(unique_neurons)
 
     # Drop segments with overlap below threshold
     if ol_thresh:
@@ -432,7 +539,7 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
     # neuron
     is_top = seg_ids.values != seg_ids.max(axis=1).values.reshape((seg_ids.shape[0], 1))
     where_top = np.where(is_top)
-    seg_ids.values[where_top] = 0
+    seg_ids.values[where_top] = 0  # do not change this to None
 
     pre_ids = seg_ids.loc[seg_ids[sources.id].max(axis=1) > 0].index.values
     post_ids = seg_ids.loc[seg_ids[targets.id].max(axis=1) > 0].index.values
@@ -516,3 +623,70 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
         return edges.reset_index(drop=True)
 
     return syn
+
+
+def assign_connectors(synapses, max_dist=300):
+    """Collapse synapses by presynaptic connectors.
+
+    1. Iterate over each unique presynaptic segment ID and ...
+    2. Form pairs of presynapses that are within ``max_dist``
+    3. Use these pairs to create a network graph
+    4. Break graph into connected components
+    3. Give a unique connector ID to all synapses in a connected component
+
+    Parameters
+    ----------
+    synapse :   pandas.DataFrame
+                Must contains ['pre_x', 'pre_y', 'pre_z'] or
+                column.
+    max_dist :  int
+                Max distance at which two presynaptic locations may be
+                collapsed.
+
+    Returns
+    -------
+    None
+                Adds a `connector_id` column to DataFrame.
+
+    """
+    assert isinstance(synapses, pd.DataFrame)
+
+    if all(np.isin(['pre_x', 'pre_y', 'pre_z'], synapses.columns)):
+        loc_cols = ['pre_x', 'pre_y', 'pre_z']
+    elif all(np.isin(['x', 'y', 'z'], synapses.columns)):
+        loc_cols = ['x', 'y', 'z']
+    else:
+        raise ValueError('Need either pre_x/pre_y/pre_z or x/y/z columns.')
+
+    # Iterate over presynaptic IDs
+    cn_id_counter = 1
+    synapses['connector_id'] = None
+    for sid in tqdm(synapses.segmentid_pre.unique(),
+                    leave=False,
+                    desc='Collapsing synapses'):
+        this_sid = synapses.segmentid_pre == sid
+        this = synapses[this_sid]
+
+        if this.shape[0] == 1:
+            synapses.loc[this_sid, 'connector_id'] = cn_id_counter
+            cn_id_counter += 1
+            continue
+
+        # Build KDTree and generate pairs
+        this_locs = this[loc_cols].values
+        tree = cKDTree(this_locs)
+        pairs = tree.query_pairs(r=max_dist)
+
+        # Generate graph from pairs
+        G = nx.Graph()
+        G.add_nodes_from(np.arange(this.shape[0]))  # this is for lone synapses
+        G.add_edges_from(pairs)
+
+        this_cn_ids = np.zeros(this.shape[0])
+        for cc in nx.connected_components(G):
+            this_cn_ids[list(cc)] = cn_id_counter
+            cn_id_counter += 1
+
+        synapses.loc[this_sid, 'connector_id'] = this_cn_ids
+
+    synapses['connector_id'] = synapses.connector_id.astype(np.int32)

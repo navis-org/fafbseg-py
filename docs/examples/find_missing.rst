@@ -3,36 +3,48 @@
 Finding missed branches
 =======================
 
-This examples will illustrate how to use the ``auto-seg`` to find potential
-missed branches.
+This examples will illustrate how to use the Google segmentation to find
+potential missed branches.
 
-.. note::
+We will take a single, manually traced neuron and try finding potentially missed
+branches by comparing it to the same Google skeleton.
 
-    For this to work, you need to have CATMAID API write access.
+First initialize connections to the ``manual`` and ``autoseg`` CATMAID instances
+set up - make sure to replace ``HTTP_USER``, ``HTTP_PW`` and ``API_TOKEN`` with
+your corresponding credentials:
 
-Please first see and follow the instructions in the
-:doc:`General Setup<general_setup>`
+.. code-block:: python
 
-OK now that we're all set, we can start the actual merging process:
+  manual = pymaid.CatmaidInstance('https://neuropil.janelia.org/tracing/fafb/v14',
+                                  api_token='API_TOKEN',
+                                  http_user='HTTP_USER',
+                                  http_password='HTTP_PW',
+                                  caching=False,
+                                  max_threads=20)
 
-In this example, we will take a single manually traced neuron and try
-finding potentially missed branches using the ``auto-seg``.
+.. code-block:: python
 
-First fetch the neuron (exchange the ``16`` for the skeleton ID
-of your neuron):
+  auto = pymaid.CatmaidInstance('https://spine.janelia.org/catmaid/fafb-v14-seg-li-200412.0',
+                                api_token='API_TOKEN',
+                                http_user='HTTP_USER',
+                                http_password='HTTP_PW',
+                                caching=False,
+                                max_threads=20)
+
+Then fetch the neuron (exchange the ``16`` for the skeleton ID of your neuron):
 
 .. code-block:: python
 
   x = pymaid.get_neuron(16, remote_instance=manual)
 
-Now find and tag missed branches (see:func:`fafbseg.find_missed_branches` for
+Now find and tag missed branches (see:func:`fafbseg.google.find_missed_branches` for
 additional parameters):
 
 .. code-block:: python
 
   (summary,
    fragments,
-   branches) = fafbseg.find_missed_branches(x, autoseg_instance=auto)
+   branches) = fafbseg.google.find_missed_branches(x, autoseg_instance=auto)
 
 Show summary of missed branches:
 

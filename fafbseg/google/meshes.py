@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -22,7 +22,8 @@ import pymaid
 from pyoctree import pyoctree
 from concurrent import futures
 
-from . import utils, segmentation
+from .. import utils
+from .segmentation import locs_to_segments
 
 try:
     import mcubes
@@ -33,6 +34,8 @@ except BaseException:
 
 use_pbars = utils.use_pbars
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
+
+__all__ = ['get_mesh', 'autoreview_edges', 'test_edges']
 
 
 def get_mesh(x, bbox, vol=None):
@@ -264,8 +267,7 @@ def test_edges(x, edges=None, vol=None, max_workers=4):
         raise ValueError('Unexpected format for edges: {}'.format(edges.shape))
 
     # Get the segmentation IDs at the first location
-    segids1 = segmentation.get_seg_ids(locs1)
-    # segids2 = segmentation.get_seg_ids(locs2)
+    segids1 = locs_to_segments(locs1)
 
     pbar = tqdm.tqdm(total=len(locs1),
                      desc='Testing edges')

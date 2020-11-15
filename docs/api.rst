@@ -3,48 +3,71 @@
 API Documentation
 =================
 
-Mapping
--------
-These functions will let you map between autoseg and manual CATMAID.
+FAFBseg is divided into separate modules dedicated to a single
+data source/type or functionality:
 
+  - ``fafbseg.flywire`` for FlyWire-related functions
+  - ``fafbseg.google`` for Google segmentation-related functions
+  - ``fafbseg.synapses`` for querying Buhmann et al. synapse predictions
+  - ``fafbseg.xform`` for transforming spatial data between FAFB14 and flywire's FAFB14.1
+  - ``fafbseg.move`` for moving/merging data between data sets
+
+See below for a by-module breakdown:
+
+Flywire segmentation
+--------------------
 .. autosummary::
     :toctree: generated/
 
-    ~fafbseg.segments_to_skids
-    ~fafbseg.segments_to_neuron
-    ~fafbseg.neuron_to_segments
-    ~fafbseg.find_autoseg_fragments
-    ~fafbseg.find_fragments
-    ~fafbseg.get_seg_ids
+    fafbseg.flywire.locs_to_segments
+    fafbseg.flywire.decode_ngl_url
+    fafbseg.flywire.fetch_edit_history
+    fafbseg.flywire.locs_to_supervoxels
+    fafbseg.flywire.skid_to_id
+    fafbseg.flywire.update_ids
+    fafbseg.flywire.skeletonize_neuron
+    fafbseg.flywire.generate_open_ends_url
+    fafbseg.flywire.merge_flywire_neuron
 
-Merge
------
-These functions let you merge autoseg neurons into manual.
-
+Google segmentation
+-------------------
 .. autosummary::
     :toctree: generated/
 
-    ~fafbseg.merge_neuron
-    ~fafbseg.find_missed_branches
+    fafbseg.google.locs_to_segments
+    fafbseg.google.segments_to_neuron
+    fafbseg.google.segments_to_skids
+    fafbseg.google.neuron_to_segments
+    fafbseg.google.find_autoseg_fragments
+    fafbseg.google.find_fragments
+    fafbseg.google.find_missed_branches
+    fafbseg.google.get_mesh
+    fafbseg.google.autoreview_edges
+    fafbseg.google.test_edges
 
-Review
-------
-These functions let you review (autoseg) tracings
-
+Buhmann synapse predictions
+---------------------------
 .. autosummary::
     :toctree: generated/
 
-    ~fafbseg.autoreview_edges
-    ~fafbseg.test_edges
+    fafbseg.synapses.locs_to_segments
+    fafbseg.synapses.query_synapses
+    fafbseg.synapses.query_connections
+    fafbseg.synapses.get_neuron_synapses
+    fafbseg.synapses.get_neuron_synapses
+    fafbseg.synapses.assign_connectors
 
-Setup
------
-Functions for setting up segmentation data source.
-
+Spatial transformation
+----------------------
 .. autosummary::
     :toctree: generated/
 
-    ~fafbseg.use_brainmaps
-    ~fafbseg.use_google_storage
-    ~fafbseg.use_remote_service
-    ~fafbseg.use_local_data
+    fafbseg.xform.flywire_to_fafb14
+    fafbseg.xform.fafb14_to_flywire
+
+Merging/combining data
+----------------------
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.move.merge_into_catmaid

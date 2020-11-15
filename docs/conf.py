@@ -8,11 +8,10 @@ import mock
 import sys
 import os
 
-MOCK_MODULES = ['numpy', 'pandas',
-                'pymaid',
+MOCK_MODULES = ['pymaid',
                 'cloudvolume',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
-                'networkx', 'tqdm',
+                'networkx',
                 'pyoctree', 'pyoctree.pyoctree',
                 'mcubes',
                 'inquirer', 'inquirer.themes', 'inquirer.themes.GreenPassion']

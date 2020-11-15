@@ -49,7 +49,6 @@ explanation.
 
 Choosing a segmentation source
 ------------------------------
-
 When importing neurons into another CATMAID instance, ``fafbseg`` will suggest
 potentially overlapping neurons for merging. For this it uses the
 segmentation data from Google to determine if skeletons are actually in the same

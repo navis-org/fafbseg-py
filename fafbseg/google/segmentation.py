@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -23,10 +23,12 @@ import tqdm
 
 from concurrent import futures
 
-from . import utils
-use_pbars = utils.use_pbars
+from .. import utils
 
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
+
+
+__all__ = ['locs_to_segments']
 
 
 class GSPointLoader(object):
@@ -63,7 +65,7 @@ class GSPointLoader(object):
                     to volume.scale['resolution'].
 
         """
-        points = np.array(points)
+        points = np.asarray(points)
 
         if isinstance(self._points, type(None)):
             self._points = points
@@ -125,15 +127,15 @@ class GSPointLoader(object):
         """
         progress_state = self._volume.progress
         self._volume.progress = False
-        pbar = tqdm.tqdm(total=len(self._chunk_map),
-                         desc='Segmentation IDs',
-                         disable=not progress)
-        with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
-            for f in futures.as_completed(point_futures):
-                pbar.update(1)
+        with tqdm.tqdm(total=len(self._chunk_map),
+                       desc='Segmentation IDs',
+                       leave=False,
+                       disable=not progress) as pbar:
+            with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
+                point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
+                for f in futures.as_completed(point_futures):
+                    pbar.update(1)
         self._volume.progress = progress_state
-        pbar.close()
 
         results = [f.result() for f in point_futures]
 
@@ -244,6 +246,7 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
     seg_ids = []
     with tqdm.tqdm(total=len(locs),
                    desc='Segment IDs',
+                   leave=False,
                    disable=not progress) as pbar:
         for i in range(0, len(locs), int(chunk_size)):
             chunk = locs.iloc[i: i + int(chunk_size)][['x', 'y', 'z']].values
@@ -515,15 +518,42 @@ def use_brainmaps(volume_id, client_secret=None, max_threads=10):
     print('Using brainmaps API to retrieve segmentation IDs.')
 
 
-def _warn_setup(*args, **kwargs):
-    """Tell user to set up connection."""
-    raise BaseException('Please use fafbseg.use_google_storage, '
-                        'fafbseg.use_brainmaps, fafbseg.use_remote_service '
-                        'or fafbseg.use_local_data '
-                        'to set the way you want to fetch segmentation IDs.')
+def locs_to_segments(locs, mip=0, dataset='fafb-ffn1-20200412',
+                     coordinates='pixel'):
+    """Retrieve Google segmentation IDs at given location(s).
+
+    Use Eric Perlman's service on spine.
+
+    Parameters
+    ----------
+    locs :          list-like
+                    Array of x/y/z coordinates.
+    mip :           int [0-9]
+                    Scale to query. Lower mip = more precise but slower;
+                    higher mip = faster but less precise (small segments
+                    might not show at all at high mips).
+    dataset :       str
+                    Currently, the only available dataset is
+                    "fafb-ffn1-20200412", the most recent segmentation by Google.
+    coordinates :   "pixel" | "nm"
+                    Units in which your coordinates are in. "pixel" is assumed
+                    to be 4x4x40 (x/y/z) nanometers.
+
+    Returns
+    -------
+    numpy.array
+                List of segmentation IDs in the same order as ``locs``. Invalid
+                locations will be returned with ID 0.
+
+    """
+    return utils.query_spine(locs,
+                             dataset=dataset,
+                             query='query',
+                             coordinates=coordinates,
+                             mip=mip)
 
 
-def get_seg_ids(locs, progress=True):
+def __locs_to_segments(locs, progress=True):
     """Retrieve segmentation IDs at given location(s).
 
     On startup you must use one of the ``fafbseg.use_...`` functions (see
@@ -576,6 +606,14 @@ def get_seg_ids(locs, progress=True):
     ids = ids.astype(int, copy=False)
 
     return ids
+
+
+def _warn_setup(*args, **kwargs):
+    """Tell user to set up connection."""
+    raise BaseException('Please use fafbseg.use_google_storage, '
+                        'fafbseg.use_brainmaps, fafbseg.use_remote_service '
+                        'or fafbseg.use_local_data '
+                        'to set the way you want to fetch segmentation IDs.')
 
 
 # On import access to segmentation is not set -> this function will warn
