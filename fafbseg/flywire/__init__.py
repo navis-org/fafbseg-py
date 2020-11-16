@@ -19,4 +19,5 @@ from .segmentation import *
 from .neuroglancer import *
 from .skeletonize import *
 from .merge import *
+from .meshes import *
 from .utils import *
