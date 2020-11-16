@@ -26,7 +26,7 @@ setup(
     url='https://github.com/flyconnectome/fafbseg-py',
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
-    keywords='FAFB neuron segmentation',
+    keywords='FAFB neuron segmentation flywire Google synapses',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
 
