@@ -11,4 +11,4 @@ sqlite3
 skeletor
 trimesh
 tqdm
-git+git://github.com/schlegelp/pymaid@master
+python-catmaid
