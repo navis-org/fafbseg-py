@@ -59,6 +59,10 @@ def set_chunkedgraph_secret(token, filepath=None):
     with open(filepath, 'w+') as f:
         json.dump({'token': token}, f)
 
+    # Should also reset the volume after setting the secret
+    global fw_vol
+    fw_vol = None
+
     print("Token succesfully stored in ", filepath)
 
 
