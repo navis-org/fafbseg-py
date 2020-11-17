@@ -53,7 +53,7 @@ def set_chunkedgraph_secret(token, filepath=None):
     # Make sure this file (and the path!) actually exist
     if not filepath.exists():
         if not filepath.parent.exists():
-            filepath.parent.mkdir(parent=True)
+            filepath.parent.mkdir(parents=True)
         filepath.touch()
 
     with open(filepath, 'w+') as f:
