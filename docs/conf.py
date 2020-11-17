@@ -9,11 +9,17 @@ import sys
 import os
 
 MOCK_MODULES = ['pymaid',
+                'navis',
+                'trimesh',
                 'cloudvolume',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
                 'networkx',
                 'pyoctree', 'pyoctree.pyoctree',
                 'mcubes',
+                'PyMCubes',
+                'scipy', 'scipy.spatial',
+                'sqlite3',
+                'tqdm', 'tqdm.auto',
                 'inquirer', 'inquirer.themes', 'inquirer.themes.GreenPassion']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
