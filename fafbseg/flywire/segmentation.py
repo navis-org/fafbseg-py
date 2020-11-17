@@ -199,8 +199,7 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
     return roots
 
 
-def skid_to_id(skid,
-               sample=.5,
+def skid_to_id(x,
                dataset='production',
                progress=True, **kwargs):
     """Find the flywire ID(s) corresponding to given CATMAID skeleton ID(s).
@@ -213,9 +212,9 @@ def skid_to_id(skid,
 
     Parameters
     ----------
-    id :            int | list-like | str | TreeNeuron/List
-                    Anything that's not a TreeNeuron/List be passed directly
-                    to ``pymaid.get_neuron``.
+    x :             int | list-like | str | TreeNeuron/List
+                    Anything that's not a TreeNeuron/List will be passed
+                    directly to ``pymaid.get_neuron``.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -235,41 +234,26 @@ def skid_to_id(skid,
     """
     vol = parse_volume(dataset, **kwargs)
 
-    if not isinstance(skid, (navis.TreeNeuron, navis.NeuronList)):
-        skid = pymaid.get_neuron(skid)
+    if not isinstance(x, (navis.TreeNeuron, navis.NeuronList)):
+        x = pymaid.get_neuron(x)
 
-    if isinstance(skid, navis.TreeNeuron):
-        nodes = skid.nodes[['x', 'y', 'z']]
-        nodes['skeleton_id'] = skid.id
-    elif isinstance(skid, navis.NeuronList):
-        nodes = skid.nodes[['x', 'y', 'z']]
+    if isinstance(x, navis.TreeNeuron):
+        nodes = x.nodes[['x', 'y', 'z']].copy()
+        nodes['skeleton_id'] = x.id
+    elif isinstance(x, navis.NeuronList):
+        nodes = x.nodes[['x', 'y', 'z']].copy()
     else:
-        raise TypeError(f'Unable to data of type "{type(skid)}"')
+        raise TypeError(f'Unable to data of type "{type(x)}"')
 
     # XForm coordinates from FAFB14 to FAFB14.1
     xformed = xform.fafb14_to_flywire(nodes[['x', 'y', 'z']].values,
                                       coordinates='nm')
 
     # Get the root IDs for each of these locations
-    nodes['root_id'] = locs_to_segments(xformed, coordinates='nm')
+    roots = locs_to_segments(xformed, coordinates='nm')
 
-    # Get supervoxel ids - we need to use mip=0 because otherwise small neurons might
-    # not have any (visible) supervoxels
-    svoxels = vol.get_leaves(id, bbox=vol.meta.bounds(0), mip=0)
-
-    # Shuffle voxels
-    np.random.shuffle(svoxels)
-
-    # Generate sample
-    if isinstance(sample, type(None)):
-        smpl = svoxels
-    elif sample >= 1:
-        smpl = svoxels[: sample]
-    else:
-        smpl = svoxels[: int(len(svoxels) * sample)]
-
-    # Fetch up-to-date root IDs for the sampled supervoxels
-    roots = vol.get_roots(smpl)
+    # Drop zeros
+    roots = roots[roots != 0]
 
     # Find unique Ids and count them
     unique, counts = np.unique(roots, return_counts=True)
@@ -280,14 +264,14 @@ def skid_to_id(skid,
     # New Id is the most frequent ID
     new_id = unique[sort_ix[-1]]
 
-    # Confidence is the difference between the top and the 2bd most frequent ID
+    # Confidence is the difference between the top and the 2nd most frequent ID
     if len(unique) > 1:
         conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
                      2)
     else:
         conf = 1
 
-    return pd.DataFrame([[id, new_id, conf, id != new_id]],
+    return pd.DataFrame([[x.id, new_id, conf, x.id != new_id]],
                         columns=['old_id', 'new_id', 'confidence', 'changed'])
 
 
