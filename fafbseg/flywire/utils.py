@@ -49,7 +49,7 @@ def set_chunkedgraph_secret(token, filepath=None):
 
     filepath = os.path.expanduser(filepath)
 
-    with open(filepath, 'w') as f:
+    with open(filepath, 'w+') as f:
         json.dump({'token': token}, f)
 
     print("Token succesfully stored in ", filepath)
