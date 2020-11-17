@@ -15,6 +15,7 @@
 
 import navis
 
+import numpy as np
 import trimesh as tm
 
 from .. import utils
@@ -196,8 +197,20 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-servic
 
         return x
 
-    return utils.query_spine(x, dataset,
-                             query='transform',
-                             coordinates=coordinates,
-                             mip=mip,
-                             on_fail=on_fail)
+    # Make sure we are working on array
+    x = np.asarray(x)
+
+    if x.ndim != 2 or x.shape[1] != 3:
+        raise ValueError(f'Expected coordinates of shape (N, 3), got {x.shape}')
+
+    # This returns offsets along x and y axis
+    offsets = utils.query_spine(x, dataset,
+                                query='transform',
+                                coordinates=coordinates,
+                                mip=mip,
+                                on_fail=on_fail)
+
+    # Transform points
+    x[:, :2] += offsets
+
+    return x
