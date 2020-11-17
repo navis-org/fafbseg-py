@@ -185,7 +185,7 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
     array([720575940621039145, 720575940621039145])
 
     """
-    svoxels = locs_to_supervoxels(locs)
+    svoxels = locs_to_supervoxels(locs, coordinates=coordinates)
 
     if not root_ids:
         return svoxels
