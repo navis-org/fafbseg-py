@@ -16,6 +16,7 @@
 import navis
 import json
 import os
+from pathlib import Path
 
 import cloudvolume as cv
 
@@ -47,7 +48,13 @@ def set_chunkedgraph_secret(token, filepath=None):
     elif not filepath.endswith('.json'):
         filepath = f'{filepath}.json'
 
-    filepath = os.path.expanduser(filepath)
+    filepath = Path(filepath).expanduser()
+
+    # Make sure this file (and the path!) actually exist
+    if not filepath.exists():
+        if not filepath.parent.exists():
+            filepath.parent.mkdir(parent=True)
+        filepath.touch()
 
     with open(filepath, 'w+') as f:
         json.dump({'token': token}, f)
