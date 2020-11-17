@@ -13,10 +13,10 @@ So if you happen to bump into them say thank you and buy them a beer.
 
 .. important::
 
-  If you are coming from fafbseg prior to version _1.0.0_: We have made major
-  changes to better organize the diverse landscape of FAFB segmentation data.
-  Function names and locations have changed! See the :doc:`API<api>` for an
-  overview.
+  If you are coming from :code:`fafbseg` prior to version ``1.0.0``: We have
+  made major changes to better organize the diverse landscape of FAFB
+  segmentation data. Function names and their locations have changed!
+  See the :doc:`API<api>` for an overview.
 
 Quick Start
 ===========
