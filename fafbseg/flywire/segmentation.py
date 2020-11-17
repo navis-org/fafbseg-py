@@ -247,12 +247,11 @@ def skid_to_id(skid,
         raise TypeError(f'Unable to data of type "{type(skid)}"')
 
     # XForm coordinates from FAFB14 to FAFB14.1
-    nodes[['xf', 'yf', 'zf']] = xform.fafb14_to_flywire(nodes[['x', 'y', 'z']].values,
-                                                        coordinates='nanometers')
+    xformed = xform.fafb14_to_flywire(nodes[['x', 'y', 'z']].values,
+                                      coordinates='nm')
 
     # Get the root IDs for each of these locations
-    nodes['root_id'] = locs_to_segments(nodes[['xf', 'yf', 'zf']].values,
-                                        coordinates='nm')
+    nodes['root_id'] = locs_to_segments(xformed, coordinates='nm')
 
     # Get supervoxel ids - we need to use mip=0 because otherwise small neurons might
     # not have any (visible) supervoxels
