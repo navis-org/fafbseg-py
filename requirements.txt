@@ -7,7 +7,6 @@ pandas
 PyMCubes
 requests
 requests-futures
-sqlite3
 skeletor
 trimesh
 tqdm
