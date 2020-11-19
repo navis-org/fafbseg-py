@@ -103,11 +103,17 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
         r.raise_for_status()
         this_df = pd.DataFrame(r.json())
         this_df['segment'] = i
-        if not this_df.empty:
-            df.append(this_df)
+        df.append(this_df)
 
-    df = pd.concat(df, axis=0, sort=True)
-    df['timestamp'] = pd.to_datetime(df.timestamp, unit='ms')
+    # Concat if any edits at all
+    if any([not f.empty for f in df]):
+        # Drop neurons without edits
+        df = [f for f in df if not f.empty]
+        df = pd.concat(df, axis=0, sort=True)
+        df['timestamp'] = pd.to_datetime(df.timestamp, unit='ms')
+    else:
+        # Return the first empty data frame
+        df = df[0]
 
     return df
 
