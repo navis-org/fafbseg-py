@@ -210,6 +210,9 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-servic
                                 mip=mip,
                                 on_fail=on_fail)
 
+    # We need to cast x to the same type as offsets -> likely float 64
+    x = x.astype(offsets.dtype)
+
     # Transform points
     x[:, :2] += offsets
 
