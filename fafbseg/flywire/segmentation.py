@@ -272,8 +272,8 @@ def skid_to_id(x,
 
     # Confidence is the difference between the top and the 2nd most frequent ID
     if len(unique) > 1:
-        conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
-                     2)
+        diff_1st_2nd = counts[sort_ix[-1]] - counts[sort_ix[-2]]
+        conf = round(diff_1st_2nd / roots.shape[0], 2)
     else:
         conf = 1
 
