@@ -20,12 +20,13 @@ setup(
     version=verstr,
     packages=find_packages(),
     license='GNU GPL V3',
-    description='Tools to work with manually generated and auto-segmented data in FAFB.',
+    description='Tools to work with auto-segmented FAFB data',
     long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     url='https://github.com/flyconnectome/fafbseg-py',
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
-    keywords='CATMAID neuron brainmaps',
+    keywords='FAFB neuron segmentation flywire Google synapses',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
 
@@ -40,6 +41,6 @@ setup(
     ],
     install_requires=requirements,
     extras_require={},
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     zip_safe=False
 )

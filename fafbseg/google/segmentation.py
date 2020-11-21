@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -16,16 +16,19 @@
 import cloudvolume
 import collections
 import numpy as np
+import pandas as pd
 import os
 import requests
 import tqdm
 
 from concurrent import futures
 
-from . import utils
-use_pbars = utils.use_pbars
+from .. import utils
 
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
+
+
+__all__ = ['locs_to_segments']
 
 
 class GSPointLoader(object):
@@ -62,7 +65,7 @@ class GSPointLoader(object):
                     to volume.scale['resolution'].
 
         """
-        points = np.array(points)
+        points = np.asarray(points)
 
         if isinstance(self._points, type(None)):
             self._points = points
@@ -124,15 +127,15 @@ class GSPointLoader(object):
         """
         progress_state = self._volume.progress
         self._volume.progress = False
-        pbar = tqdm.tqdm(total=len(self._chunk_map),
-                         desc='Segmentation IDs',
-                         disable=not progress)
-        with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
-            for f in futures.as_completed(point_futures):
-                pbar.update(1)
+        with tqdm.tqdm(total=len(self._chunk_map),
+                       desc='Segmentation IDs',
+                       leave=False,
+                       disable=not progress) as pbar:
+            with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
+                point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
+                for f in futures.as_completed(point_futures):
+                    pbar.update(1)
         self._volume.progress = progress_state
-        pbar.close()
 
         results = [f.result() for f in point_futures]
 
@@ -182,7 +185,8 @@ def _get_seg_ids_gs(points, volume, max_workers=4, progress=True):
 
 
 def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
-                     chunk_size=10e3, progress=True, **kwargs):
+                     payload_format='locations', chunk_size=10e3, progress=True,
+                     **kwargs):
     """Fetch segment IDs at given locations via a URL.
 
     Use this is you are hosting the segmentation data yourself on a remote
@@ -205,12 +209,15 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
     **kwargs
                         Keyword arguments passed to ``requests.post``.
 
-
     Returns
     -------
     list :              List of segmentation IDs.
 
     """
+    # TODO:
+    # - group locs such that each query ideally contains only close-by coordinates
+    assert payload_format in ('locations', 'columns')
+
     if not url:
         url = os.environ.get('SEG_ID_URL')
 
@@ -218,36 +225,60 @@ def _get_seg_ids_url(locs, url=None, pixel_conversion=[8, 8, 40],
         raise ValueError('Must provide valid URL to fetch segment IDs')
 
     # Make sure locations are numpy array
-    locs = np.array(locs)
+    locs = np.asarray(locs)
 
     # Make sure pixel_conversion is array
     pixel_conversion = np.array(pixel_conversion)
 
     # Bring locations into pixel space
-    locs = locs.astype(int) / pixel_conversion
+    locs = (locs / pixel_conversion).astype(int)
 
-    # Make sure locs are correctly rounded integers
-    locs = np.round(locs).astype(int)
+    # Turn into pandas DataFrame
+    locs = pd.DataFrame(locs, columns=['x', 'y', 'z'])
+
+    # Guess the chunk within the EM volume that each locations belongs to
+    cs = np.array([128, 128, 32])
+    locs['cs'] = (locs // cs * cs).apply(tuple, axis=1)
+
+    # Sort by chunk start - the index will keep track of the original order
+    locs.sort_values('cs', inplace=True)
 
     seg_ids = []
     with tqdm.tqdm(total=len(locs),
                    desc='Segment IDs',
+                   leave=False,
                    disable=not progress) as pbar:
         for i in range(0, len(locs), int(chunk_size)):
-            chunk = locs[i: i + int(chunk_size)]
+            chunk = locs.iloc[i: i + int(chunk_size)][['x', 'y', 'z']].values
 
-            resp = requests.post(url, json={'locations': chunk.tolist()},
-                                 **kwargs)
+            if payload_format == 'locations':
+                payload = {'locations': chunk.tolist()}
+            elif payload_format == 'columns':
+                payload = {'x': chunk[:, 0].tolist(),
+                           'y': chunk[:, 1].tolist(),
+                           'z': chunk[:, 2].tolist()}
+
+            resp = requests.post(url, json=payload, **kwargs)
             resp.raise_for_status()
 
             if 'error' in resp.json():
-                raise BaseException('Error fetching data: {}'.format(resp.json()['error']))
+                raise BaseException('Error fetching data: {}'.format(resp.json()))
 
-            seg_ids += resp.json()
+            data = resp.json()
+
+            if isinstance(data, list):
+                seg_ids = np.append(seg_ids, data)
+            elif isinstance(data, dict) and 'values' in data:
+                seg_ids = np.append(seg_ids, data['values'])
+            else:
+                raise ValueError(f'Unable to parse response: {data}')
 
             pbar.update(len(chunk))
 
-    return seg_ids
+    locs['seg_ids'] = np.array(seg_ids).flatten()
+
+    # Get back to original order and return
+    return locs.reset_index(drop=False).sort_values('index').seg_ids.values
 
 
 def use_google_storage(volume, max_workers=8, progress=True, **kwargs):
@@ -290,7 +321,7 @@ def use_google_storage(volume, max_workers=8, progress=True, **kwargs):
     """
     global _get_seg_ids
 
-    if not 'CloudVolume' in str(type(volume)):
+    if 'CloudVolume' not in str(type(volume)):
         # Set and update defaults from kwargs
         defaults = dict(cache=True,
                         mip=0,
@@ -360,7 +391,8 @@ def use_local_data(path, progress=True, **kwargs):
     print('Using local segmentation data to retrieve segmentation IDs.')
 
 
-def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3,
+def use_remote_service(url=None, pixel_conversion=[8, 8, 40],
+                       payload_format='locations', chunk_size=10e3,
                        **kwargs):
     """Fetch segment IDs at given locations using a custom web service.
 
@@ -377,6 +409,12 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3,
     pixel_conversion :  list-like, optional
                         Size of each pixel. This is used to convert from
                         absolute units to pixel coordinates.
+    payload_format :    "locations" | "columns"
+                        Format for the query JSON payload::
+
+                         'locations': {'locations': [[x1, y1, z1], ..]}
+                         'columns': {'x': [x1, ..], 'y': [y1, ..], 'z': [z1, ..]}
+
     chunk_size :        int, optional
                         Use this to limit the number of locations per query.
     **kwargs
@@ -421,6 +459,7 @@ def use_remote_service(url=None, pixel_conversion=[8, 8, 40], chunk_size=10e3,
     _get_seg_ids = lambda x: _get_seg_ids_url(x, url,
                                               pixel_conversion=pixel_conversion,
                                               chunk_size=chunk_size,
+                                              payload_format=payload_format,
                                               **kwargs)
     print('Using web-hosted solution to retrieve segmentation IDs.')
 
@@ -479,15 +518,42 @@ def use_brainmaps(volume_id, client_secret=None, max_threads=10):
     print('Using brainmaps API to retrieve segmentation IDs.')
 
 
-def _warn_setup(*args, **kwargs):
-    """Tell user to set up connection."""
-    raise BaseException('Please use fafbseg.use_google_storage, '
-                        'fafbseg.use_brainmaps, fafbseg.use_remote_service '
-                        'or fafbseg.use_local_data '
-                        'to set the way you want to fetch segmentation IDs.')
+def locs_to_segments(locs, mip=0, dataset='fafb-ffn1-20200412',
+                     coordinates='pixel'):
+    """Retrieve Google segmentation IDs at given location(s).
+
+    Use Eric Perlman's service on spine.
+
+    Parameters
+    ----------
+    locs :          list-like
+                    Array of x/y/z coordinates.
+    mip :           int [0-9]
+                    Scale to query. Lower mip = more precise but slower;
+                    higher mip = faster but less precise (small segments
+                    might not show at all at high mips).
+    dataset :       str
+                    Currently, the only available dataset is
+                    "fafb-ffn1-20200412", the most recent segmentation by Google.
+    coordinates :   "pixel" | "nm"
+                    Units in which your coordinates are in. "pixel" is assumed
+                    to be 4x4x40 (x/y/z) nanometers.
+
+    Returns
+    -------
+    numpy.array
+                List of segmentation IDs in the same order as ``locs``. Invalid
+                locations will be returned with ID 0.
+
+    """
+    return utils.query_spine(locs,
+                             dataset=dataset,
+                             query='query',
+                             coordinates=coordinates,
+                             mip=mip)
 
 
-def get_seg_ids(locs):
+def __locs_to_segments(locs, progress=True):
     """Retrieve segmentation IDs at given location(s).
 
     On startup you must use one of the ``fafbseg.use_...`` functions (see
@@ -500,8 +566,9 @@ def get_seg_ids(locs):
 
     Returns
     -------
-    list
+    np.array
                 List of segmentation IDs in the same order as ``locs``.
+                Locations without segmentation will typically return with ID 0.
 
     See Also
     --------
@@ -517,7 +584,36 @@ def get_seg_ids(locs):
                         Use this if you have access to the brainmaps API.
 
     """
-    return _get_seg_ids(locs)
+    locs = np.asarray(locs)
+    if locs.ndim == 1 and len(locs) == 3:
+        locs = locs.reshape((1, 3))
+    elif locs.ndim != 2 or locs.shape[1] != 3:
+        raise ValueError('Expected x/y/z coordinates as array of shape (N, 3)')
+
+    ids = _get_seg_ids(locs)
+
+    # Do some clean-up
+    # First, make sure this is an array
+    ids = np.asarray(ids)
+
+    # Do not remove the flatten here -> some service return nested lists/arrays
+    ids = ids.flatten()
+
+    # Replace NaNs/None with 0
+    ids[np.isin(ids, [None, 'NaN', 'None', 'nan'])] = 0
+
+    # Coerce to integers
+    ids = ids.astype(int, copy=False)
+
+    return ids
+
+
+def _warn_setup(*args, **kwargs):
+    """Tell user to set up connection."""
+    raise BaseException('Please use fafbseg.use_google_storage, '
+                        'fafbseg.use_brainmaps, fafbseg.use_remote_service '
+                        'or fafbseg.use_local_data '
+                        'to set the way you want to fetch segmentation IDs.')
 
 
 # On import access to segmentation is not set -> this function will warn

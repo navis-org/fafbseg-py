@@ -1,11 +1,14 @@
-cloud-volume~=1.20
-inquirer~=2.6.3
+cloud-volume~=3.1
+inquirer~=2.6
 ipython
-msgpack
+navis
+numpy
 pandas
 PyMCubes
-pyoctree
+pyperclip
 requests
 requests-futures
-
-# git+git://github.com/schlegelp/pymaid@master
+skeletor
+trimesh
+tqdm
+python-catmaid

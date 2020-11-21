@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -13,19 +13,15 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import pymaid
-import requests
-import warnings
+import navis
 
 import numpy as np
+import trimesh as tm
 
-from . import utils
+from .. import utils
 use_pbars = utils.use_pbars
 
-try:
-    import msgpack
-except ImportError:
-    msgpack = None
+__all__ = ['fafb14_to_flywire', 'flywire_to_fafb14']
 
 
 def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn'):
@@ -41,7 +37,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
                     Resolution of mapping. Lower = more precise but much slower.
                     Currently only mip 4 available!
     coordinates :   "nm" | "pixel"
-                    Units of the provided coordinates in ``x``.
+                    Units of the provided data in ``x``.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
                     work with a copy.
@@ -63,7 +59,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
                    mip=mip)
 
 
-def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='warn'):
+def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn'):
     """Transform neurons/coordinates from flywire to FAFB V14.
 
     This uses a service hosted by Eric Perlman.
@@ -74,8 +70,10 @@ def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='war
                     Data to transform.
     mip :           int
                     Resolution of mapping. Lower = more precise but much slower.
-    coordinates :   "nm" | "pixel"
-                    Units of the provided coordinates in ``x``.
+    coordinates :   None | "nm" | "pixel"
+                    Units of the provided data in ``x``. If ``None`` will
+                    assume that Neuron/List are in nanometers and everything
+                    else is in pixel.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
                     work with a copy.
@@ -89,16 +87,40 @@ def flywire_to_fafb14(x, coordinates='pixel', mip=2, inplace=False, on_fail='war
                     nm.
 
     """
+    if isinstance(coordinates, type(None)):
+        if isinstance(x, (navis.BaseNeuron, navis.NeuronList)):
+            coordinates = 'nm'
+        else:
+            coordinates = 'pixel'
+
     xf = _flycon(x,
                  dataset='flywire_v1',
                  coordinates=coordinates,
                  inplace=inplace,
                  on_fail=on_fail,
                  mip=mip)
-    return xf * [4, 4, 40]
+
+    # _flycon always returns pixels - we have to convert to back to nanometers
+    if isinstance(xf, navis.NeuronList):
+        for n in xf:
+            if isinstance(n, navis.TreeNeuron):
+                n *= [4, 4, 40, 1]
+            elif isinstance(n, navis.MeshNeuron):
+                n *= [4, 4, 40]
+            xf.units = 'nm'  # manually set the units
+    elif isinstance(xf, navis.TreeNeuron):
+        # The 4th value is the radius and that is assumed to not change
+        xf *= [4, 4, 40, 1]
+        xf.units = 'nm'  # manually set the units
+    elif hasattr(xf, 'vertices'):
+        xf.vertices *= [4, 4, 40]
+    else:
+        xf *= [4, 4, 40]
+
+    return xf
 
 
-def _flycon(x, dataset, base_url='https://spine.janelia.org/app/flyconv',
+def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-service',
             coordinates='nm', mip=2, inplace=False, on_fail='warn'):
     """Transform neurons/coordinates between flywire and FAFB V14.
 
@@ -133,31 +155,40 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/flyconv',
                     Returns same data type as input.
 
     """
-    assert on_fail in ['warn', 'raise', 'ignore']
-    assert coordinates in ['nm', 'pixel']
-    assert isinstance(mip, (int, np.int))
-    assert mip >= 0
-
-    if isinstance(x, pymaid.CatmaidNeuronList):
-        return pymaid.CatmaidNeuronList([_flycon(n,
-                                                 on_fail=on_fail,
-                                                 coordinates=coordinates,
-                                                 mip=mip,
-                                                 base_url=base_url,
-                                                 inplace=inplace) for n in x])
-    elif isinstance(x, pymaid.CatmaidNeuron):
+    if isinstance(x, navis.NeuronList):
+        return x.__class__([_flycon(n,
+                                    dataset=dataset,
+                                    on_fail=on_fail,
+                                    coordinates=coordinates,
+                                    mip=mip,
+                                    base_url=base_url,
+                                    inplace=inplace) for n in x])
+    elif isinstance(x, (navis.BaseNeuron, navis.Volume, tm.Trimesh)):
         if not inplace:
             x = x.copy()
 
-        x.nodes[['x', 'y', 'z']] = _flycon(x.nodes[['x', 'y', 'z']].values,
-                                           on_fail=on_fail,
-                                           coordinates=coordinates,
-                                           mip=mip,
-                                           base_url=base_url,
-                                           inplace=inplace)
+        if isinstance(x, navis.TreeNeuron):
+            x.nodes[['x', 'y', 'z']] = _flycon(x.nodes[['x', 'y', 'z']].values,
+                                               dataset=dataset,
+                                               on_fail=on_fail,
+                                               coordinates=coordinates,
+                                               mip=mip,
+                                               base_url=base_url,
+                                               inplace=inplace)
+        elif isinstance(x, (navis.MeshNeuron, navis.Volume, tm.Trimesh)):
+            x.vertices = _flycon(x.vertices,
+                                 dataset=dataset,
+                                 on_fail=on_fail,
+                                 coordinates=coordinates,
+                                 mip=mip,
+                                 base_url=base_url,
+                                 inplace=inplace)
+        else:
+            raise TypeError(f'Unable to convert neuron of type "{type(x)}"')
 
-        if hasattr(x, 'connectors') and not x.connectors.empty:
+        if isinstance(x, navis.BaseNeuron) and x.has_connectors:
             x.connectors[['x', 'y', 'z']] = _flycon(x.connectors[['x', 'y', 'z']].values,
+                                                    dataset=dataset,
                                                     on_fail=on_fail,
                                                     coordinates=coordinates,
                                                     mip=mip,
@@ -166,66 +197,23 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/flyconv',
 
         return x
 
-    # At this point we are expecting a numpy array
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
+    # Make sure we are working on array
+    x = np.asarray(x)
 
-    # Make sure data is now in the correct format
-    if not x.ndim == 2:
-        raise TypeError('Expected 2d array, got {}'.format(x.ndim))
-    if not x.shape[1] == 3:
-        raise TypeError('Expected (N, 3) array, got {}'.format(x.shape))
+    if x.ndim != 2 or x.shape[1] != 3:
+        raise ValueError(f'Expected coordinates of shape (N, 3), got {x.shape}')
 
-    # We need to convert to pixel coordinates
-    if coordinates == 'nm':
-        x = (x / [4, 4, 40]).astype(int)
+    # This returns offsets along x and y axis
+    offsets = utils.query_spine(x, dataset,
+                                query='transform',
+                                coordinates=coordinates,
+                                mip=mip,
+                                on_fail=on_fail)
 
-    # Convert pixels to mip
-    # x = (x / 2 ** mip).astype(int)
+    # We need to cast x to the same type as offsets -> likely float 64
+    x = x.astype(offsets.dtype)
 
-    # Generate URL
-    url = f'{base_url}/dataset/{dataset}/s/{mip}/values_array'
+    # Transform points
+    x[:, :2] += offsets
 
-    # Generate payload
-    payload = {'x': x[:, 0].tolist(),
-               'y': x[:, 1].tolist(),
-               'z': x[:, 2].tolist()}
-
-    if msgpack:
-        headers = {'Content-type': 'application/msgpack'}
-        resp = requests.post(url,
-                             data=msgpack.packb(payload),
-                             headers=headers)
-
-        # Check for errors
-        resp.raise_for_status()
-        data = msgpack.unpackb(resp.content)
-    else:
-        resp = requests.post(url,
-                             json=payload,
-                             headers={'Content-Type': 'application/json'})
-
-        # Check for errors
-        resp.raise_for_status()
-        data = resp.json()
-
-    if 'error' in data:
-        raise ValueError('Server returned error: {}'.format(str(data)))
-
-    # Parse data: service returns a list of dictionaries containing absolute
-    # coordinates x/y/z and offsets dx/dy/dz
-    coords = np.array([data['x'], data['y'], data['z']]).T
-
-    # If mapping failed will contain NaNs
-    is_nan = np.any(np.isnan(coords), axis=1)
-    if np.any(is_nan):
-        msg = '{} points failed to transform.'.format(is_nan.sum())
-        if on_fail == 'warn':
-            warnings.warn(msg)
-        elif on_fail == 'raise':
-            raise ValueError(msg)
-
-    # Return always equivalent to mip 0
-    # coords = coords * [2**mip, 2**mip, 1]
-
-    return coords
+    return x

@@ -1,5 +1,5 @@
-# A collection of tools to interface with manually traced and autosegmented data
-# in FAFB.
+#    A collection of tools to interface with manually traced and autosegmented
+#    data in FAFB.
 #
 #    Copyright (C) 2019 Philipp Schlegel
 #
@@ -14,15 +14,17 @@
 #    GNU General Public License for more details.
 
 import cloudvolume
-import numpy as np
-import pandas as pd
+import ncollpyde
 import tqdm
 import pymaid
 
-from pyoctree import pyoctree
+import numpy as np
+import pandas as pd
+
 from concurrent import futures
 
-from . import utils, segmentation
+from .. import utils
+from .segmentation import locs_to_segments
 
 try:
     import mcubes
@@ -33,6 +35,8 @@ except BaseException:
 
 use_pbars = utils.use_pbars
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
+
+__all__ = ['get_mesh', 'autoreview_edges', 'test_edges']
 
 
 def get_mesh(x, bbox, vol=None):
@@ -127,7 +131,7 @@ def autoreview_edges(x, conf_threshold=1, vol=None, remote_instance=None):
 
     The way this works:
       1. Fetch the live version of the neuron(s) from the CATMAID instance
-      2. Use raycasting to test (low-confidence) egdes
+      2. Use raycasting to test (low-confidence) edges
       3. Edge confidence is set to ``5`` if test is passed and to ``1`` if not
 
     You *can* use this function to test all edges in a neuron by increasing
@@ -264,20 +268,15 @@ def test_edges(x, edges=None, vol=None, max_workers=4):
         raise ValueError('Unexpected format for edges: {}'.format(edges.shape))
 
     # Get the segmentation IDs at the first location
-    segids1 = segmentation.get_seg_ids(locs1)
-    # segids2 = segmentation.get_seg_ids(locs2)
+    segids1 = locs_to_segments(locs1)
+    with tqdm.tqdm(total=len(segids1), desc='Testing edges') as pbar:
+        with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            point_futures = [ex.submit(_test_single_edge, *k, vol=vol) for k in zip(locs1,
+                                                                                    locs2,
+                                                                                    segids1)]
+            for f in futures.as_completed(point_futures):
+                pbar.update(1)
 
-    pbar = tqdm.tqdm(total=len(locs1),
-                     desc='Testing edges')
-
-    with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-        point_futures = [ex.submit(_test_single_edge, *k, vol=vol) for k in zip(locs1,
-                                                                                locs2,
-                                                                                segids1)]
-        for f in futures.as_completed(point_futures):
-            pbar.update(1)
-
-    pbar.close()
     return np.array([f.result() for f in point_futures])
 
 
@@ -309,43 +308,16 @@ def _test_single_edge(l1, l2, seg_id, vol):
         return True
 
     # Prepare raycasting
-    tree = pyoctree.PyOctree(np.array(mesh.vertices,
-                                      dtype=float, order='C'),
-                             np.array(mesh.faces,
-                                      dtype=np.int32, order='C')
-                             )
+    coll = ncollpyde.Volume(np.array(mesh.vertices, dtype=float, order='C'),
+                            np.array(mesh.faces, dtype=np.int32, order='C'))
 
-    # Generate raypoints
-    rayp = np.array([l1, l2], dtype=np.float32)
-
-    # Get intersections and extract coordinates of intersection
-    inters = np.array([i.p for i in tree.rayIntersection(rayp)])
+    # Get intersections
+    l1 = l1.reshape(1, 3)
+    l2 = l2.reshape(1, 3)
+    inter_ix, inter_xyz, is_inside = coll.intersections(l1, l2)
 
     # If not intersections treat this edge as True
-    if not inters.any():
+    if not inter_xyz.any():
         return True
-
-    # In a few odd cases we can get the multiple intersections at the
-    # exact same coordinate (something funny with the faces)
-    unique_int = np.unique(np.round(inters), axis=0)
-
-    # Rays are bidirectional and travel infinitely -> we have to filter
-    # for those that occure between the points
-    minx, miny, minz = np.min(rayp, axis=0)
-    maxx, maxy, maxz = np.max(rayp, axis=0)
-
-    cminx = (unique_int[:, 0] >= minx)
-    cmaxx = (unique_int[:, 0] <= maxx)
-    cminy = (unique_int[:, 1] >= miny)
-    cmaxy = (unique_int[:, 1] <= maxy)
-    cminz = (unique_int[:, 2] >= minz)
-    cmaxz = (unique_int[:, 2] <= maxz)
-
-    all_cond = cminx & cmaxx & cminy & cmaxy & cminz & cmaxz
-
-    unilat_int = unique_int[all_cond]
-
-    if unilat_int.any():
-        return False
 
     return True

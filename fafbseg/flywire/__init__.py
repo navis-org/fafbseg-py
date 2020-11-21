@@ -12,6 +12,12 @@
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-from . import flywire, google, xform, synapses, move
 
-__version__ = "1.0.0"
+"""Module containing functions to interact with flywire."""
+
+from .segmentation import *
+from .neuroglancer import *
+from .skeletonize import *
+from .merge import *
+from .meshes import *
+from .utils import *
