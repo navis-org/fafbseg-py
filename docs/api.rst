@@ -20,7 +20,8 @@ Flywire segmentation
     :toctree: generated/
 
     fafbseg.flywire.locs_to_segments
-    fafbseg.flywire.decode_ngl_url
+    fafbseg.flywire.encode_url
+    fafbseg.flywire.decode_url
     fafbseg.flywire.fetch_edit_history
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.skid_to_id

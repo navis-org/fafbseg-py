@@ -5,6 +5,7 @@ navis
 numpy
 pandas
 PyMCubes
+pyperclip
 requests
 requests-futures
 skeletor
