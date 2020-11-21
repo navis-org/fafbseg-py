@@ -177,8 +177,8 @@ def query_spine(x, dataset, query, coordinates='nm', mip=2,
         raise ValueError(f'"{dataset}" not among listed datasets: {ds_str}')
 
     if mip not in SERVICE_INFO[dataset]['scales']:
-        raise ValueError('mip {mip} not available for dataset "{dataset}". '
-                         'Available scales: {SERVICE_INFO[dataset]["scales"]}')
+        raise ValueError(f'mip {mip} not available for dataset "{dataset}". '
+                         f'Available scales: {SERVICE_INFO[dataset]["scales"]}')
 
     if isinstance(x, (navis.NeuronList, navis.TreeNeuron)):
         x = x.nodes[['x', 'y', 'z']].values
