@@ -16,9 +16,12 @@
 import navis
 import json
 import os
+
 from pathlib import Path
+from importlib import reload
 
 import cloudvolume as cv
+
 
 __all__ = ['set_chunkedgraph_secret']
 
@@ -59,6 +62,10 @@ def set_chunkedgraph_secret(token, filepath=None):
     with open(filepath, 'w+') as f:
         json.dump({'token': token}, f)
 
+    # We need to reload cloudvolume for changes to take effect
+    reload(cv.secrets)
+    reload(cv)
+
     # Should also reset the volume after setting the secret
     global fw_vol
     fw_vol = None
@@ -94,6 +101,13 @@ def parse_volume(vol, **kwargs):
                             use_https=True,  # this way google secret is not needed
                             progress=False)
             defaults.update(kwargs)
+
+            # Check if chunkedgraph secret exists
+            secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
+            if not os.path.isfile(secret):
+                # If not secrets but environment variable use this
+                if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
+                    defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
 
             fw_vol = cv.CloudVolume(vol, **defaults)
             fw_vol.path = vol
