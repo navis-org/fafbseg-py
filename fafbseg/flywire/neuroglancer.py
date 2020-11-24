@@ -22,6 +22,7 @@ import uuid
 import webbrowser
 
 import cloudvolume as cv
+import matplotlib.colors as mcl
 import numpy as np
 import pandas as pd
 
@@ -65,8 +66,8 @@ session = None
 
 
 def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
-               dataset='production', scene=None, open_browser=False,
-               to_clipboard=False, short=True):
+               seg_colors=None, dataset='production', scene=None,
+               open_browser=False, to_clipboard=False, short=True):
     """Encode data as flywire neuroglancer scene.
 
     Parameters
@@ -81,6 +82,8 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     (X, Y, Z) pixel coordinates to center on.
     skeletons :     navis.TreeNeuron | navis.CatmaidNeuron | NeuronList
                     Skeleton(s) to add as annotation layer(s).
+    seg_colors :    list | dict
+                    List or dictionary mapping colors to ``segments``.
     dataset :       'production' | 'sandbox'
                     Segmentation dataset to use.
     scene :         dict | str
@@ -152,6 +155,23 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         # Add to, not replace already selected segments
         present = scene['layers'][seg_layer_ix].get('segments', [])
         scene['layers'][seg_layer_ix]['segments'] = present + segments
+
+        # See if we need to assign colors
+        if not isinstance(seg_colors, type(None)):
+            if not isinstance(seg_colors, dict):
+                if not navis.is_iterable(seg_colors):
+                    raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
+                if len(seg_colors) != len(segments):
+                    raise ValueError(f'Got {len(seg_colors)} colors for {len(segments)} segments.')
+
+                # Turn into dictionary
+                seg_colors = dict(zip(segments, seg_colors))
+
+            # Turn colors into hex
+            seg_colors = {s: mcl.to_hex(c) for s, c in seg_colors.items()}
+
+            # Assign colors
+            scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
 
     # Set coordinates if provided
     if not isinstance(coords, type(None)):
