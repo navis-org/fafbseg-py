@@ -125,8 +125,10 @@ def locs_to_supervoxels(locs, mip=2, coordinates='pixel'):
 
     Parameters
     ----------
-    locs :          list-like
-                    Array of x/y/z coordinates.
+    locs :          list-like | pandas.DataFrame
+                    Array of x/y/z coordinates. If DataFrame must contain
+                    'x', 'y', 'z' or 'fw.x', 'fw.y', 'fw.z' columns. If both
+                    present, 'fw.' columns take precedence)!
     mip :           int [2-8]
                     Scale to query. Lower mip = more precise but slower;
                     higher mip = faster but less precise (small supervoxels
@@ -150,6 +152,19 @@ def locs_to_supervoxels(locs, mip=2, coordinates='pixel'):
     array([79801454835332154, 79731086091150780], dtype=uint64)
 
     """
+    if isinstance(locs, pd.DataFrame):
+        if np.all(np.isin(['fw.x', 'fw.y', 'fw.z'], locs.columns)):
+            locs = locs[['fw.x', 'fw.y', 'fw.z']].values
+        elif np.all(np.isin(['x', 'y', 'z'], locs.columns)):
+            locs = locs[['x', 'y', 'z']].values
+        else:
+            raise ValueError('`locs` as pandas.DataFrame must have either [fw.x'
+                             ', fw.y, fw.z] or [x, y, z] columns.')
+
+        # Make sure we are working with numbers
+        if not np.issubdtype(locs.dtype, np.number):
+            locs = locs.astype(np.float64)
+
     return utils.query_spine(locs,
                              dataset='flywire_190410',
                              query='query',
@@ -163,8 +178,10 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
 
     Parameters
     ----------
-    locs :          list-like
-                    Array of x/y/z coordinates.
+    locs :          list-like | pandas.DataFrame
+                    Array of x/y/z coordinates. If DataFrame must contain
+                    'x', 'y', 'z' or 'fw.x', 'fw.y', 'fw.z' columns. If both
+                    present, 'fw.' columns take precedence)!
     root_ids :      bool
                     If True, will return root IDs. If False, will return supervoxel
                     IDs.
