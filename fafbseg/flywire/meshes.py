@@ -15,6 +15,8 @@
 
 import navis
 
+from tqdm.auto import tqdm
+
 from .utils import parse_volume
 
 __all__ = ['get_mesh_neuron']
@@ -46,13 +48,14 @@ def get_mesh_neuron(id, dataset='production'):
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(id):
-        return navis.NeuronList([get_mesh_neuron(n, dataset=dataset) for n in id])
+        return navis.NeuronList([get_mesh_neuron(n, dataset=dataset)
+                                 for n in tqdm(id, desc='Fetching', leave=False)])
 
     # Make sure the ID is integer
     id = int(id)
 
     # Fetch mesh
-    mesh = vol.mesh.get(id)[id]
+    mesh = vol.mesh.get(id, remove_duplicate_vertices=True)[id]
 
     # Turn into meshneuron
     return navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
