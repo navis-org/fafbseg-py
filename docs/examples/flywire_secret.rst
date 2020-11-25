@@ -17,7 +17,8 @@ something like this:
 
   "ghd2nfk67kdndncf5kdmsqwo8kf23md6"
 
-That's your token!
+That's your token! Importantly: whenever you repeat above procedure you will
+be issued with a new token and _any old token will be void_.
 
 Saving the secret
 -----------------
@@ -38,4 +39,4 @@ something like this:
   >>> import fafbseg
   >>> fafbseg.flywire.set_chunkedgraph_secret("ghd2nfk67kdndncf5kdmsqwo8kf23md6")
 
-That's it, your done! You should now be able to query the flywire dataset.
+That's it, you're done! You should now be able to query the flywire dataset.
