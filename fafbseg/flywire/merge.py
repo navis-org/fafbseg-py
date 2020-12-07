@@ -42,8 +42,8 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
 
     Parameters
     ----------
-    id  :               int
-                        ID of the flywire neuron you want to merge.
+    id  :                int
+                         ID of the flywire neuron you want to merge.
     target_instance :    pymaid.CatmaidInstance
                          Instance to merge the neuron into into.
     tag :                str

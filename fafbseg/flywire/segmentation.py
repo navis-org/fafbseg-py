@@ -18,6 +18,7 @@ import navis
 import requests
 import textwrap
 
+import datetime as dt
 import cloudvolume as cv
 import numpy as np
 import pandas as pd
@@ -39,8 +40,81 @@ except ImportError:
 except BaseException:
     raise
 
-__all__ = ['fetch_edit_history', 'locs_to_segments',
+__all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids']
+
+
+def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
+    """Fetch leader board (# of edits).
+
+    Parameters
+    ----------
+    day :           int
+                    Number of days to go back.
+    by_day :        bool
+                    If True, will provide a day-by-day breakdown of # edits.
+    progress :      bool
+                    If True, show progress bar.
+    max_threads :   int
+                    Max number of parallel requests to server.
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> # Fetch leaderboard
+    >>> edits = flywire.fetch_edit_history(720575940621039145)
+    >>> # Group by user
+    >>> edits.groupby('user_name').size()
+    user_name
+    Claire McKellar    47
+    Jay Gager           4
+    Sandeep Kumar       1
+    Sarah Morejohn      6
+    dtype: int64
+
+    """
+    assert isinstance(days, (int, np.int))
+
+    session = requests.Session()
+    if not by_day:
+        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={days}'
+        resp = session.get(url, params=None)
+        resp.raise_for_status()
+        return pd.DataFrame.from_records(resp.json()['entries']).set_index('name')
+
+    future_session = FuturesSession(session=session, max_workers=max_threads)
+    futures = []
+    for i in range(1, days + 1):
+        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={i}'
+        futures.append(future_session.get(url, params=None))
+
+    # Get the responses
+    resp = [f.result() for f in tqdm(futures,
+                                     desc='Fetching',
+                                     disable=not progress or len(futures) == 1,
+                                     leave=False)]
+
+    df = None
+    for i, r in enumerate(resp):
+        date = dt.date.today() - dt.timedelta(days=i)
+        r.raise_for_status()
+        this_df = pd.DataFrame.from_records(r.json()['entries']).set_index('name')
+        this_df.columns = [date]
+        if isinstance(df, type(None)):
+            df = this_df
+        else:
+            df = pd.merge(df, this_df, how='outer', left_index=True, right_index=True)
+        df = df.fillna(0).astype(int)
+
+        if df.shape[1] > 1:
+            df.iloc[:, -1] -= df.iloc[:, :-1].sum(axis=1)
+
+    df = df.iloc[:, ::-1]
+    return df.loc[df.sum(axis=1).sort_values(ascending=False).index]
 
 
 def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
@@ -318,9 +392,9 @@ def update_ids(id,
                     Number (>= 1) or fraction (< 1) of super voxels to sample
                     to guess the most recent version.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+                    Against which flywire dataset to query:
+                      - "production" (current production dataset, fly_v31)
+                      - "sandbox" (i.e. fly_v26)
     progress :      bool
                     If True, shows progress bar.
 
@@ -379,7 +453,7 @@ def update_ids(id,
     # New Id is the most frequent ID
     new_id = unique[sort_ix[-1]]
 
-    # Confidence is the difference between the top and the 2bd most frequent ID
+    # Confidence is the difference between the top and the 2nd most frequent ID
     if len(unique) > 1:
         conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
                      2)

@@ -23,6 +23,7 @@ Flywire segmentation
     fafbseg.flywire.encode_url
     fafbseg.flywire.decode_url
     fafbseg.flywire.fetch_edit_history
+    fafbseg.flywire.fetch_leaderboard
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.skid_to_id
     fafbseg.flywire.update_ids
