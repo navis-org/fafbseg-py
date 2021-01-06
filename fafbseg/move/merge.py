@@ -439,7 +439,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
                                                          remote_instance=target_instance)
 
         # Add annotations
-        if n.has_annotations:
+        if n.__dict__.get('annotations', []):
             _ = __merge_annotations(n, bn, tag, target_instance)
 
         # Update node radii
