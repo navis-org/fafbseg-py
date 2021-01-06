@@ -14,4 +14,4 @@
 #    GNU General Public License for more details.
 from . import flywire, google, xform, synapses, move
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
