@@ -11,4 +11,4 @@ requests-futures
 skeletor
 trimesh
 tqdm
-python-catmaid
+python-catmaid>=2.0.2
