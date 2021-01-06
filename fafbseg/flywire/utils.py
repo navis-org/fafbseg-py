@@ -80,7 +80,7 @@ def parse_volume(vol, **kwargs):
         if not isinstance(vol, str):
             raise ValueError(f'Unable to initialize CloudVolume from "{type(vol)}"')
 
-        if not navis.is_url(vol):
+        if not navis.utils.is_url(vol):
             # We are assuming this is the dataset
             # Map "production" and "sandbox" with to their correct designations
             vol = FLYWIRE_DATASETS.get(vol, vol)
