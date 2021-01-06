@@ -78,17 +78,18 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
 
     """
     assert isinstance(days, (int, np.int))
+    assert days >= 0
 
     session = requests.Session()
     if not by_day:
-        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={days}'
+        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={days-1}'
         resp = session.get(url, params=None)
         resp.raise_for_status()
         return pd.DataFrame.from_records(resp.json()['entries']).set_index('name')
 
     future_session = FuturesSession(session=session, max_workers=max_threads)
     futures = []
-    for i in range(1, days + 1):
+    for i in range(0, days):
         url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={i}'
         futures.append(future_session.get(url, params=None))
 
