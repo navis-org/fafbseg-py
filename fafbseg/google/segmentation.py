@@ -38,7 +38,7 @@ class GSPointLoader(object):
     `Peter Li<https://gist.github.com/chinasaur/5429ef3e0a60aa7a1c38801b0cbfe9bb>_.
     """
 
-    def __init__(self, cloud_volume):
+    def __init__(self, cloud_volume, use_threads=False):
         """Initialize with zero points.
 
         See add_points to queue some.
@@ -46,6 +46,8 @@ class GSPointLoader(object):
         Parameters
         ----------
         cloud_volume :  cloudvolume.CloudVolume
+        use_threads :   bool, optional
+                        If true, a thread pool is used rather than a process pool.
 
         """
         if not isinstance(cloud_volume, CVtype):
@@ -54,6 +56,7 @@ class GSPointLoader(object):
         self._volume = cloud_volume
         self._chunk_map = collections.defaultdict(set)
         self._points = None
+        self._use_threads = use_threads
 
     def add_points(self, points):
         """Add more points to be loaded.
@@ -127,11 +130,16 @@ class GSPointLoader(object):
         """
         progress_state = self._volume.progress
         self._volume.progress = False
+        if self._use_threads:
+            Executor = futures.ThreadPoolExecutor
+        else:
+            Executor = futuses.ProcessPoolExecutor
         with tqdm.tqdm(total=len(self._chunk_map),
                        desc='Segmentation IDs',
                        leave=False,
                        disable=not progress) as pbar:
-            with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
+
+            with Executor(max_workers=max_workers) as ex:
                 point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
                 for f in futures.as_completed(point_futures):
                     pbar.update(1)
@@ -152,7 +160,7 @@ class GSPointLoader(object):
         return points, data
 
 
-def _get_seg_ids_gs(points, volume, max_workers=4, progress=True):
+def _get_seg_ids_gs(points, volume, max_workers=4, progress=True, use_threads=False):
     """Fetch segment IDs using CloudVolume hosted on Google Storage.
 
     This is the default option as it does not require any credentials. Downside:
@@ -174,7 +182,7 @@ def _get_seg_ids_gs(points, volume, max_workers=4, progress=True):
     list :              List of segmentation IDs at given locations.
 
     """
-    pl = GSPointLoader(volume)
+    pl = GSPointLoader(volume, use_threads=use_threads)
     pl.add_points(points)
 
     points, data = pl.load_all(max_workers=max_workers,
@@ -335,9 +343,12 @@ def use_google_storage(volume, max_workers=8, progress=True, **kwargs):
 
         volume = cloudvolume.CloudVolume(url, **defaults)
 
+    use_threads = kwargs.get('use_threads', False)
+
     _get_seg_ids = lambda x: _get_seg_ids_gs(x, volume,
                                              max_workers=max_workers,
-                                             progress=progress)
+                                             progress=progress,
+                                             use_threads=use_threads)
     print('Using Google CloudStorage to retrieve segmentation IDs.')
 
 
