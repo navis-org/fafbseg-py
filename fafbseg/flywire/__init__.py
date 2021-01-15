@@ -20,4 +20,5 @@ from .neuroglancer import *
 from .skeletonize import *
 from .merge import *
 from .meshes import *
+from .synapses import *
 from .utils import *

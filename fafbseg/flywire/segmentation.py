@@ -28,7 +28,7 @@ from requests_futures.sessions import FuturesSession
 from scipy import ndimage
 from tqdm.auto import tqdm
 
-from .. import utils
+from .. import spine
 from .. import xform
 
 from .utils import parse_volume, FLYWIRE_DATASETS
@@ -41,7 +41,8 @@ except BaseException:
     raise
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
-           'locs_to_supervoxels', 'skid_to_id', 'update_ids']
+           'locs_to_supervoxels', 'skid_to_id', 'update_ids',
+           'roots_to_supervoxels', 'supervoxels_to_roots']
 
 
 def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
@@ -109,11 +110,15 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
             df = this_df
         else:
             df = pd.merge(df, this_df, how='outer', left_index=True, right_index=True)
-        df = df.fillna(0).astype(int)
 
-        if df.shape[1] > 1:
-            df.iloc[:, -1] -= df.iloc[:, :-1].sum(axis=1)
+    # Make sure we don't have NAs
+    df = df.fillna(0).astype(int)
 
+    # This breaks it down into days
+    if df.shape[1] > 1:
+        df.iloc[:, 1:] = df.iloc[:, 1:].values - df.iloc[:, :-1].values
+
+    # Reverse such that the right-most entry is the current date
     df = df.iloc[:, ::-1]
     return df.loc[df.sum(axis=1).sort_values(ascending=False).index]
 
@@ -123,7 +128,8 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
 
     Parameters
     ----------
-    x :             int | iterable
+    x :             int | list of int
+                    Segmentation (root) ID(s).
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -193,7 +199,94 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
     return df
 
 
-def locs_to_supervoxels(locs, mip=2, coordinates='pixel'):
+def roots_to_supervoxels(x, dataset='production', progress=True):
+    """Get supervoxels making up given neurons.
+
+    Parameters
+    ----------
+    x :             int | list of int
+                    Segmentation (root) ID(s).
+    dataset :       str | CloudVolume
+                    Against which flywire dataset to query::
+                        - "production" (current production dataset, fly_v31)
+                        - "sandbox" (i.e. fly_v26)
+    progress :      bool
+                    If True, show progress bar.
+
+    Returns
+    -------
+    dict
+                    ``{root_id: [svoxel_id1, svoxelid2, ...], ...}``
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.roots_to_supervoxels(720575940619164912)[720575940619164912]
+    array([78180637324085660, 78180706043394027, 78180706043400870, ...,
+           78743587210799793, 78743587210799781, 78743587210818108],
+          dtype=uint64)
+
+    """
+    # Make sure we are working with an array of integers
+    x = navis.utils.make_iterable(x).astype(int, copy=False)
+
+    if len(x) <= 1:
+        progress = False
+
+    # Get the volume
+    vol = parse_volume(dataset)
+
+    # Get the supervoxels
+    svoxels = {i: vol.get_leaves(i,
+                                 bbox=vol.meta.bounds(0),
+                                 mip=0) for i in tqdm(x,
+                                                      desc='Querying',
+                                                      disable=not progress,
+                                                      leave=False)}
+
+    return svoxels
+
+
+def supervoxels_to_roots(x, dataset='production'):
+    """Get root(s) for given supervoxel(s).
+
+    Parameters
+    ----------
+    x :             int | list of int
+                    Supervoxel ID(s) to find the root(s) for.
+    dataset :       str | CloudVolume
+                    Against which flywire dataset to query::
+                        - "production" (current production dataset, fly_v31)
+                        - "sandbox" (i.e. fly_v26)
+    progress :      bool
+                    If True, show progress bar.
+
+    Returns
+    -------
+    dict
+                    ``{root_id: [svoxel_id1, svoxelid2, ...], ...}``
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.supervoxels_to_roots(78321855915861142)
+
+
+    """
+    # Make sure we are working with an array of integers
+    x = navis.utils.make_iterable(x).astype(int, copy=False)
+
+    # Parse the volume
+    vol = parse_volume(dataset)
+
+    # get_roots() doesn't like to be asked for zeros - causes server error
+    roots = np.zeros(x.shape, dtype=np.int64)
+    roots[x != 0] = vol.get_roots(x[x != 0])
+
+    return roots
+
+
+def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
     """Retrieve flywire supervoxel IDs at given location(s).
 
     Use Eric Perlman's service on spine.
@@ -203,13 +296,13 @@ def locs_to_supervoxels(locs, mip=2, coordinates='pixel'):
     locs :          list-like | pandas.DataFrame
                     Array of x/y/z coordinates. If DataFrame must contain
                     'x', 'y', 'z' or 'fw.x', 'fw.y', 'fw.z' columns. If both
-                    present, 'fw.' columns take precedence)!
+                    present, 'fw.' columns take precedence!
     mip :           int [2-8]
                     Scale to query. Lower mip = more precise but slower;
                     higher mip = faster but less precise (small supervoxels
                     might not show at all).
-    coordinates :   "pixel" | "nm"
-                    Units in which your coordinates are in. "pixel" is assumed
+    coordinates :   "voxel" | "nm"
+                    Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
 
     Returns
@@ -240,16 +333,13 @@ def locs_to_supervoxels(locs, mip=2, coordinates='pixel'):
         if not np.issubdtype(locs.dtype, np.number):
             locs = locs.astype(np.float64)
 
-    return utils.query_spine(locs,
-                             dataset='flywire_190410',
-                             query='query',
-                             coordinates=coordinates,
-                             mip=2)
+    return spine.transform.get_segids(locs, segmentation='flywire_190410',
+                                      coordinates=coordinates, mip=-1)
 
 
 def locs_to_segments(locs, root_ids=True, dataset='production',
-                     coordinates='pixel'):
-    """Retrieve flywire segment IDs at given location(s).
+                     coordinates='voxel'):
+    """Retrieve flywire segment IDs (root IDs) at given location(s).
 
     Parameters
     ----------
@@ -265,8 +355,8 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
                     Only relevant if ``root_ids=True``.
-    coordinates :   "pixel" | "nm"
-                    Units in which your coordinates are in. "pixel" is assumed
+    coordinates :   "voxel" | "nm"
+                    Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
 
     Returns
@@ -288,13 +378,7 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
     if not root_ids:
         return svoxels
 
-    vol = parse_volume(dataset)
-
-    # get_roots() doesn't like to be asked for zeros - causes server error
-    roots = np.zeros(svoxels.shape, dtype=np.int64)
-    roots[svoxels != 0] = vol.get_roots(svoxels[svoxels != 0])
-
-    return roots
+    return supervoxels_to_roots(svoxels, dataset=dataset)
 
 
 def skid_to_id(x,
@@ -443,7 +527,7 @@ def update_ids(id,
         smpl = svoxels[: int(len(svoxels) * sample)]
 
     # Fetch up-to-date root IDs for the sampled supervoxels
-    roots = vol.get_roots(smpl)
+    roots = supervoxels_to_roots(smpl, dataset=vol)
 
     # Find unique Ids and count them
     unique, counts = np.unique(roots, return_counts=True)
@@ -472,7 +556,7 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
 
     Works by:
      1. Fetch segmentation ID for each location and for those with the wrong ID:
-     2. Fetch cube around each loc and snap to the closest pixel with correct ID
+     2. Fetch cube around each loc and snap to the closest voxel with correct ID
 
     Parameters
     ----------
@@ -490,8 +574,8 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
     search_radius : int
                     Radius [nm] around a location to search for a position with
                     the correct ID. Lower values will be faster.
-    coordinates :   "pixel" | "nm"
-                    Coordinate system of `locs`. If "pixel" it is assumed to be
+    coordinates :   "voxel" | "nm"
+                    Coordinate system of `locs`. If "voxel" it is assumed to be
                     4 x 4 x 40 nm.
     max_workers :   int
     verbose :       bool
@@ -503,7 +587,7 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
                 x/y/z locations that are guaranteed to map to the correct ID.
 
     """
-    assert coordinates in ['nm', 'pixel']
+    assert coordinates in ['nm', 'nanometer', 'nanometers', 'voxel', 'voxels']
 
     if isinstance(locs, navis.TreeNeuron):
         locs = locs.nodes[['x', 'y', 'z']].values
@@ -513,7 +597,7 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
     assert locs.ndim == 2 and locs.shape[1] == 3
 
     # From hereon out we are working with nanometers
-    if coordinates == 'pixel':
+    if coordinates in ('voxel', 'voxels'):
         locs *= [4, 4, 40]
 
     root_ids = locs_to_segments(locs, dataset=dataset, coordinates='nm')
@@ -583,7 +667,7 @@ def _process_cutout(loc, id, radius=160, dataset='production'):
                                                      coordinates='nm')
 
     # Generate a mask
-    mask = (cutout == id).astype(int)
+    mask = (cutout == id).astype(int, copy=False)
 
     # Erode so we move our point slightly more inside the segmentation
     mask = ndimage.binary_erosion(mask).astype(mask.dtype)
@@ -600,14 +684,14 @@ def _process_cutout(loc, id, radius=160, dataset='production'):
     dist = np.abs(our_id - center).sum(axis=1)
     closest = our_id[np.argmin(dist)]
 
-    # Convert the cutout offset to absolute 4/4/40 pixel coordinates
+    # Convert the cutout offset to absolute 4/4/40 voxel coordinates
     snapped = closest * res + offset_nm
 
     return snapped
 
 
 def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
-                            coordinates='pixel'):
+                            coordinates='voxel'):
     """Fetch cutout of segmentation.
 
     Parameters
@@ -624,8 +708,8 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
-    coordinates :   "pixel" | "nm"
-                    Units in which your coordinates are in. "pixel" is assumed
+    coordinates :   "voxel" | "nm"
+                    Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
 
     Returns
@@ -633,13 +717,13 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
     cutout :        np.ndarry
                     (N, M) array of segmentation (root or supervoxel) IDs.
     resolution :    (3, ) numpy array
-                    [x, y, z] resolution of pixels in cutout.
+                    [x, y, z] resolution of voxel in cutout.
     nm_offset :     (3, ) numpy array
                     [x, y, z] offset in nanometers of the cutout with respect
                     to the absolute coordinates.
 
     """
-    assert coordinates in ['nm', 'pixel']
+    assert coordinates in ['nm', 'nanometer', 'nanometers', 'voxel', 'voxels']
 
     bbox = np.asarray(bbox)
     assert bbox.ndim == 2
@@ -654,10 +738,10 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
     vol = parse_volume(dataset)
 
     # First convert to nanometers
-    if coordinates == 'pixel':
+    if coordinates in ('voxel', 'voxels'):
         bbox = bbox * [4, 4, 40]
 
-    # Now convert (back to) to [16, 16, 40] pixel
+    # Now convert (back to) to [16, 16, 40] voxel
     bbox = (bbox / vol.scale['resolution']).round().astype(int)
 
     offset_nm = bbox[0] * vol.scale['resolution']
@@ -669,9 +753,9 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
 
     if root_ids:
         svoxels = np.unique(cutout.flatten())
-        roots = vol.get_roots(svoxels[svoxels != 0])
+        roots = supervoxels_to_roots(svoxels, dataset=vol)
 
-        sv2r = dict(zip(svoxels[svoxels != 0], roots))
+        sv2r = dict(zip(svoxels[svoxels != 0], roots[svoxels != 0]))
 
         for k, v in sv2r.items():
             cutout[cutout == k] = v

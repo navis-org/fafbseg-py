@@ -13,4 +13,6 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-"""Module containing low-level functions to work with the Buhmann FAFB synapses."""
+"""Module containing interface with data services on spine.janelia.org"""
+
+from .base import transform, synapses

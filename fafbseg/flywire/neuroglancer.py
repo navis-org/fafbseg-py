@@ -79,7 +79,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     layer. If you need more control over this, see
                     :func:`fafbseg.flywire.add_annotation_layer`.
     coords :        (3, ) array
-                    (X, Y, Z) pixel coordinates to center on.
+                    (X, Y, Z) voxel coordinates to center on.
     skeletons :     navis.TreeNeuron | navis.CatmaidNeuron | NeuronList
                     Skeleton(s) to add as annotation layer(s).
     seg_colors :    list | dict
@@ -224,7 +224,7 @@ def add_skeleton_layer(x, scene):
                     Neuron to generate a URL for. Integers are interpreted as
                     CATMAID skeleton IDs. CatmaidNeurons will automatically be
                     transformed to flywire coordinates. Neurons are expected to
-                    be in nanometers and will be converted to pixels.
+                    be in nanometers and will be converted to voxels.
     scene :         dict
                     Scene to add annotation layer to.
 
@@ -274,7 +274,7 @@ def add_annotation_layer(annotations, scene, connected=False):
     Parameters
     ----------
     annotations :   numpy array
-                    Coordinates [in 4x4x40 pixels] for annotations. The format
+                    Coordinates [in 4x4x40 voxels] for annotations. The format
                     determines the type of annotation::
                         - point: (N, 3) of x/y/z coordinates
                         - line: (N, 2, 3) pairs x/y/z coordinates for start and

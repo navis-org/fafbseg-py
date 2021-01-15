@@ -15,6 +15,6 @@
 
 """Module containing functions to interact with Google segmentation."""
 
-from .meshes import *
-from .search import *
+#from .meshes import *
 from .segmentation import *
+from .synapses import *

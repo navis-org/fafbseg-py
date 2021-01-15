@@ -12,6 +12,10 @@
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-from . import flywire, google, xform, synapses, move
 
-__version__ = "1.0.4"
+__version__ = "1.1.0"
+
+from . import flywire, google, xform, move
+
+# Register FAFB v14 <-> v14.1 transforms
+xform.register_transforms()

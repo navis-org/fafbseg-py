@@ -13,6 +13,8 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
+"""Functions to work with synapse data from a local SQL data base."""
+
 import navis
 import os
 import sqlite3
@@ -24,13 +26,14 @@ import pandas as pd
 from scipy.spatial import cKDTree
 from tqdm.auto import tqdm
 
+from .utils import assign_connectors
 from .. import google
 
 conn = None
 
 
 __all__ = ['query_synapses', 'query_connections', 'get_neuron_synapses',
-           'get_neuron_synapses', 'assign_connectors']
+           'get_neuron_connections']
 
 
 def get_connection(filepath=None, force_reconnect=False):
@@ -623,70 +626,3 @@ def get_neuron_connections(sources, targets=None, agglomerate=True,
         return edges.reset_index(drop=True)
 
     return syn
-
-
-def assign_connectors(synapses, max_dist=300):
-    """Collapse synapses by presynaptic connectors.
-
-    1. Iterate over each unique presynaptic segment ID and ...
-    2. Form pairs of presynapses that are within ``max_dist``
-    3. Use these pairs to create a network graph
-    4. Break graph into connected components
-    3. Give a unique connector ID to all synapses in a connected component
-
-    Parameters
-    ----------
-    synapse :   pandas.DataFrame
-                Must contains ['pre_x', 'pre_y', 'pre_z'] or
-                column.
-    max_dist :  int
-                Max distance at which two presynaptic locations may be
-                collapsed.
-
-    Returns
-    -------
-    None
-                Adds a `connector_id` column to DataFrame.
-
-    """
-    assert isinstance(synapses, pd.DataFrame)
-
-    if all(np.isin(['pre_x', 'pre_y', 'pre_z'], synapses.columns)):
-        loc_cols = ['pre_x', 'pre_y', 'pre_z']
-    elif all(np.isin(['x', 'y', 'z'], synapses.columns)):
-        loc_cols = ['x', 'y', 'z']
-    else:
-        raise ValueError('Need either pre_x/pre_y/pre_z or x/y/z columns.')
-
-    # Iterate over presynaptic IDs
-    cn_id_counter = 1
-    synapses['connector_id'] = None
-    for sid in tqdm(synapses.segmentid_pre.unique(),
-                    leave=False,
-                    desc='Collapsing synapses'):
-        this_sid = synapses.segmentid_pre == sid
-        this = synapses[this_sid]
-
-        if this.shape[0] == 1:
-            synapses.loc[this_sid, 'connector_id'] = cn_id_counter
-            cn_id_counter += 1
-            continue
-
-        # Build KDTree and generate pairs
-        this_locs = this[loc_cols].values
-        tree = cKDTree(this_locs)
-        pairs = tree.query_pairs(r=max_dist)
-
-        # Generate graph from pairs
-        G = nx.Graph()
-        G.add_nodes_from(np.arange(this.shape[0]))  # this is for lone synapses
-        G.add_edges_from(pairs)
-
-        this_cn_ids = np.zeros(this.shape[0])
-        for cc in nx.connected_components(G):
-            this_cn_ids[list(cc)] = cn_id_counter
-            cn_id_counter += 1
-
-        synapses.loc[this_sid, 'connector_id'] = this_cn_ids
-
-    synapses['connector_id'] = synapses.connector_id.astype(np.int32)

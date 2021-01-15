@@ -83,7 +83,7 @@ def get_mesh(x, bbox, vol=None):
 
     # Parse bbox
     bbox = np.array(bbox).reshape(3, 2)
-    # Convert to pixel coords
+    # Convert to voxel coords
     bbox = bbox / np.array(vol.scale['resolution']).reshape(3, 1)
     bbox = np.array([np.floor(bbox[:, 0]), np.ceil(bbox[:, 1])]).astype(int).T
 

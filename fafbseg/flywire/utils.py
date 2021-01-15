@@ -13,7 +13,6 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import navis
 import json
 import os
 
@@ -21,6 +20,8 @@ from pathlib import Path
 from importlib import reload
 
 import cloudvolume as cv
+
+from .. import utils
 
 
 __all__ = ['set_chunkedgraph_secret']
@@ -80,7 +81,7 @@ def parse_volume(vol, **kwargs):
         if not isinstance(vol, str):
             raise ValueError(f'Unable to initialize CloudVolume from "{type(vol)}"')
 
-        if not navis.utils.is_url(vol):
+        if not utils.is_url(vol):
             # We are assuming this is the dataset
             # Map "production" and "sandbox" with to their correct designations
             vol = FLYWIRE_DATASETS.get(vol, vol)

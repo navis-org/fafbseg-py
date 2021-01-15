@@ -18,10 +18,156 @@ import navis
 import numpy as np
 import trimesh as tm
 
-from .. import utils
+from navis.transforms.base import BaseTransform, AliasTransform
+from navis.transforms.affine import AffineTransform
+
+from .. import utils, spine
 use_pbars = utils.use_pbars
 
-__all__ = ['fafb14_to_flywire', 'flywire_to_fafb14']
+__all__ = ['fafb14_to_flywire', 'flywire_to_fafb14', 'register_transforms']
+
+
+class SpineTransform(BaseTransform):
+    """Transform data using the spine web service.
+
+    Parameters
+    ----------
+    fw_dataset :    str
+                    API endpoint for forward transform.
+    inv_dataset :   str
+                    API endpoint for forward transform.
+    direction :     'forward' | 'inverse'
+                    Direction of transform.
+    mip :           int
+                    Resolution to use for forward mip. 0 = highest resolution.
+                    Negative values start counting from the highest possible
+                    resolution: -1 = highest, -2 = second highest, etc.
+    coordinates :   "voxels" | "nanometers"
+                    Whether coordinates of points are expected to be in raw
+                    voxel or in nanometers.
+    on_fail :       "ignore" | "warn" | "raise"
+                    What to do if coordinates fail to transform.
+
+    """
+
+    def __init__(self,
+                 fw_dataset: str,
+                 inv_dataset:  str,
+                 direction: str = 'forward',
+                 mip: int = -1,
+                 coordinates: str = 'voxels',
+                 on_fail: str = 'warn'):
+        """Initialize."""
+        assert isinstance(fw_dataset, str)
+        assert isinstance(inv_dataset, str)
+        assert direction in ('forward', 'inverse')
+        assert isinstance(mip, (int, np.int))
+        assert coordinates in ('voxels', 'nanometers')
+        assert on_fail in ('warn', 'ignore', 'raise')
+
+        self.fw_dataset = fw_dataset
+        self.inv_dataset = inv_dataset
+        self.mip = mip
+        self.coordinates = coordinates
+        self.on_fail = on_fail
+
+        self.direction = direction
+
+    def __neg__(self):
+        """Switch directions."""
+        # Invert direction
+        new_direction = {'forward': 'inverse',
+                         'inverse': 'forward'}[self.direction]
+
+        return SpineTransform(self.fw_dataset,
+                              self.inv_dataset,
+                              direction=new_direction,
+                              mip=self.mip,
+                              coordinates=self.coordinates,
+                              on_fail=self.on_fail)
+
+    def copy(self):
+        """Return copy."""
+        return SpineTransform(self.fw_dataset,
+                              self.inv_dataset,
+                              direction=self.new_direction,
+                              mip=self.mip,
+                              coordinates=self.coordinates,
+                              on_fail=self.on_fail)
+
+    def xform(self, points: np.ndarray) -> np.ndarray:
+        """Transform points.
+
+        Parameters
+        ----------
+        points :    (N, 3) np.ndarray
+                    x/y/z coordinates to transform.
+
+        Returns
+        -------
+        xf :        (N, 3) np.ndarray
+                    Transformed coordinates.
+
+        """
+        if self.direction == 'forward':
+            dataset = self.fw_dataset
+        else:
+            dataset = self.inv_dataset
+
+        # This returns offsets along x and y axis
+        offsets = spine.transform.get_offsets(points,
+                                              transform=dataset,
+                                              coordinates=self.coordinates,
+                                              mip=self.mip,
+                                              on_fail=self.on_fail)
+
+        # We need to cast x to the same type as offsets -> likely float 64
+        # This also makes a copy - do not change that!
+        xf = points.astype(offsets.dtype)
+
+        # Apply offsets
+        xf[:, :2] += offsets
+
+        return xf
+
+
+def register_transforms():
+    """Register spine transforms with navis."""
+    # FAFB14 <-> FAFB14.1 (flywire) - note both of these are in voxels
+    tr = SpineTransform(fw_dataset='flywire_v1',
+                        inv_dataset='flywire_v1_inverse',
+                        coordinates='voxels',
+                        mip=-1)
+    navis.transforms.registry.register_transform(tr,
+                                                 source='FLYWIREraw',
+                                                 target='FAFB14raw',
+                                                 transform_type='bridging')
+
+    # Add transform between FAFB14 (nm) and FAFB14raw (4x4x40nm voxels)
+    # and between FLYWIRE (nm) and FLYWIREraw (4x4x40nm voxels)
+    nm_to_voxel = AffineTransform(np.diag([4, 4, 40, 1]))
+    navis.transforms.registry.register_transform(transform=nm_to_voxel,
+                                                 source='FAFB14raw',
+                                                 target='FAFB14',
+                                                 transform_type='bridging')
+    navis.transforms.registry.register_transform(transform=nm_to_voxel,
+                                                 source='FLYWIREraw',
+                                                 target='FLYWIRE',
+                                                 transform_type='bridging')
+
+    # Add alias transform between FLYWIRE and FAFB14.1 (they are synonymous)
+    navis.transforms.registry.register_transform(transform=AliasTransform(),
+                                                 source='FLYWIREraw',
+                                                 target='FAFB14.1raw',
+                                                 transform_type='bridging')
+    navis.transforms.registry.register_transform(transform=AliasTransform(),
+                                                 source='FLYWIRE',
+                                                 target='FAFB14.1',
+                                                 transform_type='bridging')
+    navis.transforms.registry.register_transform(transform=AliasTransform(),
+                                                 source='FAFB',
+                                                 target='FAFB14',
+                                                 transform_type='bridging')
 
 
 def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn'):
@@ -36,7 +182,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
     mip :           int
                     Resolution of mapping. Lower = more precise but much slower.
                     Currently only mip 4 available!
-    coordinates :   "nm" | "pixel"
+    coordinates :   "nm" | "voxel"
                     Units of the provided data in ``x``.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
@@ -48,7 +194,7 @@ def fafb14_to_flywire(x, coordinates='nm', mip=4, inplace=False, on_fail='warn')
     -------
     xformed data
                     Returns same data type as input. Coordinates are returned
-                    in pixel (at 4x4x40 nm).
+                    in the same coordinate space (voxels or nm) as the input.
 
     """
     return _flycon(x,
@@ -70,10 +216,10 @@ def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn')
                     Data to transform.
     mip :           int
                     Resolution of mapping. Lower = more precise but much slower.
-    coordinates :   None | "nm" | "pixel"
+    coordinates :   None | "nm" | "voxel"
                     Units of the provided data in ``x``. If ``None`` will
                     assume that Neuron/List are in nanometers and everything
-                    else is in pixel.
+                    else is in voxel.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
                     work with a copy.
@@ -83,15 +229,15 @@ def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn')
     Returns
     -------
     xformed data
-                    Returns same data type as input. Coordinates are returned in
-                    nm.
+                    Returns same data type and in the same coordinates space
+                    (nm or voxel) as the input.
 
     """
     if isinstance(coordinates, type(None)):
         if isinstance(x, (navis.BaseNeuron, navis.NeuronList)):
             coordinates = 'nm'
         else:
-            coordinates = 'pixel'
+            coordinates = 'voxel'
 
     xf = _flycon(x,
                  dataset='flywire_v1',
@@ -100,29 +246,12 @@ def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn')
                  on_fail=on_fail,
                  mip=mip)
 
-    # _flycon always returns pixels - we have to convert to back to nanometers
-    if isinstance(xf, navis.NeuronList):
-        for n in xf:
-            if isinstance(n, navis.TreeNeuron):
-                n *= [4, 4, 40, 1]
-            elif isinstance(n, navis.MeshNeuron):
-                n *= [4, 4, 40]
-            xf.units = 'nm'  # manually set the units
-    elif isinstance(xf, navis.TreeNeuron):
-        # The 4th value is the radius and that is assumed to not change
-        xf *= [4, 4, 40, 1]
-        xf.units = 'nm'  # manually set the units
-    elif hasattr(xf, 'vertices'):
-        xf.vertices *= [4, 4, 40]
-    else:
-        xf *= [4, 4, 40]
-
     return xf
 
 
 def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-service',
             coordinates='nm', mip=2, inplace=False, on_fail='warn'):
-    """Transform neurons/coordinates between flywire and FAFB V14.
+    """DEPCREATED! Transform neurons/coordinates between flywire and FAFB V14.
 
     This uses a service hosted by Eric Perlman.
 
@@ -141,7 +270,7 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-servic
     mip :           int
                     Resolution of mapping. Lower = more precise but much slower.
                     Currently only mip >= 2 available.
-    coordinates :   "nm" | "pixel"
+    coordinates :   "nm" | "voxel"
                     Units of the provided coordinates in ``x``.
     inplace :       bool
                     If ``True`` will modify Neuron object(s) in place. If ``False``
@@ -204,11 +333,15 @@ def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-servic
         raise ValueError(f'Expected coordinates of shape (N, 3), got {x.shape}')
 
     # This returns offsets along x and y axis
-    offsets = utils.query_spine(x, dataset,
-                                query='transform',
-                                coordinates=coordinates,
-                                mip=mip,
-                                on_fail=on_fail)
+    offsets = spine.transform.get_offsets(x, transform=dataset,
+                                          coordinates=coordinates,
+                                          mip=mip,
+                                          on_fail=on_fail)
+
+    # `offsets` will always be in voxels - if our data is in nanometers, we have
+    #  to convert them
+    if coordinates in ('nm', 'nanometers', 'nanometres'):
+        offsets *= 4
 
     # We need to cast x to the same type as offsets -> likely float 64
     x = x.astype(offsets.dtype)
