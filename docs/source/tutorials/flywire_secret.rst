@@ -1,16 +1,16 @@
 .. _set_flywire_secret:
 
-Setting the flywire secret
+Setting the FlyWire secret
 ==========================
-Many data queries against flywire use ``cloudvolume`` which provides an
-interface with flywire's chunkedgraph data base. To be able to query that
+Many data queries against FlyWire use ``cloudvolume`` which provides an
+interface with FlyWire's chunkedgraph data base. To be able to query that
 backend you need to generate and save an API token (or "secret") similar to
 CATMAID. This needs to be done only once.
 
 Generate your secret
 --------------------
 Go to https://globalv1.flywire-daf.com/auth/api/v1/refresh_token and log in with
-the account you use for flywire. You should then see a token that looks
+the account you use for FlyWire. You should then see a token that looks
 something like this:
 
 .. code-block:: bat

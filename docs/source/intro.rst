@@ -31,7 +31,7 @@ website for the paper, examples and data. Peter kindly shared skeletons derived
 from the segmentation with the FAFB tracing community early on. These skeletons
 were loaded into CATMAID instances by Tom Kazimiers and Eric Perlman.
 
-To summarize, there are currently 4 "walled garden" FAFB CATMAID instances:
+To summarize, there are currently 5 "walled garden" FAFB CATMAID instances:
 
 1. The main instance at ``fafb/v14/`` (neuropil)
 2. The first Google segmentation at ``fafb/v14-seg`` (neuropil)
@@ -47,12 +47,12 @@ segmentation of FAFB public as `"FlyWire" <https://flywire.ai/>`_.
 Anyone can join this project but community guidelines similar to those for the
 "walled garden" apply.
 
-Important to note is that the FAFB image data was realigned for the flywire
+Important to note is that the FAFB image data was realigned for the FlyWire
 segmentation. This is why x/y/z coordinates typically vary by a micron or so
-between original FAFB (also called "FAFB v14" or just "FAFB14") and flywire
+between original FAFB (also called "FAFB v14" or just "FAFB14") and FlyWire
 (also called "FAFB v14.1" or "FAFB14.1").
 
-Deformation fields mapping between FAFB14 and flywire have been kindly provided
+Deformation fields mapping between FAFB14 and FlyWire have been kindly provided
 by the Seung lab.
 
 Synaptic partner predictions
@@ -64,7 +64,7 @@ for FAFB (`Buhmann et al., 2019 <https://www.biorxiv.org/content/10.1101/2019.12
 
 This data is effectively represented by pairs of x/y/z coordinates where one
 coordinate is pre- and the other one is postsynaptic. In combination with either
-the Google or the flywire segmentation, we can map these connections onto
+the Google or the FlyWire segmentation, we can map these connections onto
 neurons to compile connectivity tables.
 
 The raw data is publicly available: see
@@ -77,32 +77,32 @@ Bringing it all together
 ------------------------
 As the introduction above shows, there are various types of FAFB data (skeletons,
 meshes, segmentations, synapses, synaptic partners) available on various
-platforms (CATMAID, flywire and other web services) and in two different
-spaces (FAFB14 and flywire/FAFB14.1).
+platforms (CATMAID, FlyWire and other web services) and in two different
+spaces (FAFB14 and FlyWire/FAFB14.1).
 
 ``FAFBseg`` and its R analog (`link <https://github.com/natverse/fafbseg>`_)
 provide a single interface to draw from and combine all the FAFB data.
 
 In particular, it enables you to:
 
-- load flywire neurons (e.g. for visualization and analysis)
-- skeletonize flywire neurons
-- query connectivity for flywire or FAFB14 neurons
-- transform data between FAFB14 and flywire
-- move data between manual FAFB14, Google and flywire segmentation (experimental and subject to community guidelines!)
+- load FlyWire neurons (e.g. for visualization and analysis)
+- skeletonize FlyWire neurons
+- query connectivity for FlyWire or FAFB14 neurons
+- transform data between FAFB14 and FlyWire
+- move data between manual FAFB14, Google and FlyWire segmentation (experimental and subject to community guidelines!)
 
 General layout
 **************
 Currently, ``FAFBseg`` is divided into four main modules:
 
-- ``fafbseg.flywire``: work with flywire segmentation
+- ``fafbseg.flywire``: work with FlyWire segmentation
 - ``fafbseg.google``: work with Google segmentation of FAFB14
 - ``fafbseg.move``: import/export/move data around
-- ``fafbseg.xform``: transform data between FAFB14 and flywire
+- ``fafbseg.xform``: transform data between FAFB14 and FlyWire
 
-You will find that certain functions have a version for Google and for flywire.
+You will find that certain functions have a version for Google and for FlyWire.
 For example, :func:`fafbseg.flywire.locs_to_segments` and
 :func:`fafbseg.google.locs_to_segments` let you map locations to segmentation
 IDs for the respective data set.
 
-Check out the tutorials 
+Check out the tutorials
