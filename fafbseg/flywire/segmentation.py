@@ -42,7 +42,8 @@ except BaseException:
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
-           'roots_to_supervoxels', 'supervoxels_to_roots']
+           'roots_to_supervoxels', 'supervoxels_to_roots',
+           'neuron_to_segments']
 
 
 def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
@@ -335,6 +336,62 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
 
     return spine.transform.get_segids(locs, segmentation='flywire_190410',
                                       coordinates=coordinates, mip=-1)
+
+
+def neuron_to_segments(x, dataset='production', coordinates='voxel'):
+    """Get root IDs overlapping with a given neuron.
+
+    Parameters
+    ----------
+    x :                 Neuron/List
+                        Neurons for which to return root IDs. Neurons must be
+                        in flywire (FAFB14.1) space.
+    dataset :           str | CloudVolume
+                        Against which flywire dataset to query::
+                            - "production" (current production dataset, fly_v31)
+                            - "sandbox" (i.e. fly_v26)
+
+    coordinates :       "voxel" | "nm"
+                        Units the neuron(s) are in. "voxel" is assumed to be
+                        4x4x40 (x/y/z) nanometers.
+
+    Returns
+    -------
+    overlap_matrix :    pandas.DataFrame
+                        DataFrame of root IDs (rows) and IDs
+                        (columns) with overlap in nodes as values::
+
+                                 id     id1   id2
+                            root_id
+                            10336680915   5     0
+                            10336682132   0     1
+
+    """
+    if isinstance(x, navis.TreeNeuron):
+        x = navis.NeuronList(x)
+
+    assert isinstance(x, navis.NeuronList)
+
+    # We must not perform this on x.nodes as this is a temporary property
+    nodes = x.nodes
+
+    # Get segmentation IDs
+    nodes['root_id'] = locs_to_segments(nodes[['x', 'y', 'z']].values,
+                                        coordinates=coordinates,
+                                        root_ids=True, dataset=dataset)
+
+    # Count segment IDs
+    seg_counts = nodes.groupby(['neuron', 'root_id'], as_index=False).node_id.count()
+    seg_counts.columns = ['id', 'root_id', 'counts']
+
+    # Remove seg IDs 0
+    seg_counts = seg_counts[seg_counts.root_id != 0]
+
+    # Turn into matrix where columns are skeleton IDs, segment IDs are rows
+    # and values are the overlap counts
+    matrix = seg_counts.pivot(index='root_id', columns='id', values='counts')
+
+    return matrix
 
 
 def locs_to_segments(locs, root_ids=True, dataset='production',
