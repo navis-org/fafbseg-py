@@ -31,40 +31,19 @@ data and the :ref:`tutorials<tutorials>` for code examples.
 .. raw:: html
 
          </div>
-         <div class="col-lg-2">
-            <div class="panel panel-default">
-               <div class="panel-heading">
-                  <h3 class="panel-title">Quicklinks</h3>
-               </div>
-               <div class="panel-body">
-
-.. toctree::
-   :caption: Table of Contents
-   :maxdepth: 1
-
-   examples/index
-   api
-
-
-.. raw:: html
-
-               </div>
-            </div>
-         </div>
-         <div class="col-lg-4">
+         <div class="col-lg-6">
             <div class="panel panel-default">
                <div class="panel-heading">
                   <h3 class="panel-title">Features</h3>
                </div>
                <div class="panel-body">
 
-* map locations to Google segmentation / flywire root IDs
-* transform neurons between FAFB and flywire space
+* map locations to Google segmentation / FlyWire root IDs
+* transform neurons between FAFB and FlyWire space
 * merge neurons from Google autoseg into v14 main CATMAID instance
-* load flywire neurons and skeletonize them
+* load FlyWire neurons and skeletonize them
 * generate connectivity tables using the Buhmann *et al.* synapse predictions
-* en- and decode flywire URLs
-*
+* parse and generate FlyWire URLs
 
 .. raw:: html
 
