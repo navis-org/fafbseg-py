@@ -2,6 +2,6 @@
 ipykernel
 nbsphinx
 numpydoc
-sphinx_materialdesign_theme
+# sphinx_materialdesign_theme
 sphinx>=2.2.0
 PyMCubes

@@ -3,12 +3,10 @@
 API Documentation
 =================
 
-FAFBseg is divided into separate modules dedicated to a single
-data source/type or functionality:
+FAFBseg is divided into separate modules to split functions by data source/type:
 
   - ``fafbseg.flywire`` for FlyWire-related functions
   - ``fafbseg.google`` for Google segmentation-related functions
-  - ``fafbseg.synapses`` for querying Buhmann et al. synapse predictions
   - ``fafbseg.xform`` for transforming spatial data between FAFB14 and flywire's FAFB14.1
   - ``fafbseg.move`` for moving/merging data between data sets
 
@@ -20,6 +18,7 @@ Flywire segmentation
     :toctree: generated/
 
     fafbseg.flywire.locs_to_segments
+    fafbseg.flywire.neuron_to_segments
     fafbseg.flywire.encode_url
     fafbseg.flywire.decode_url
     fafbseg.flywire.fetch_edit_history
@@ -53,12 +52,8 @@ Buhmann synapse predictions
 .. autosummary::
     :toctree: generated/
 
-    fafbseg.synapses.locs_to_segments
-    fafbseg.synapses.query_synapses
-    fafbseg.synapses.query_connections
-    fafbseg.synapses.get_neuron_synapses
-    fafbseg.synapses.get_neuron_synapses
-    fafbseg.synapses.assign_connectors
+    fafbseg.google.synapses.fetch_connectivity
+    fafbseg.flywire.synapses.fetch_connectivity
 
 Spatial transformation
 ----------------------
