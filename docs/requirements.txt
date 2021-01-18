@@ -1,7 +1,13 @@
 ###### Requirements without Version Specifiers ######
 ipykernel
 nbsphinx
+nbconvert
+mock
 numpydoc
-# sphinx_materialdesign_theme
-sphinx>=2.2.0
+sphinx>=3.1
+sphinx-bootstrap-theme
+sphinx-autodoc-typehints
 PyMCubes
+
+# For some odd reason, readthedocs uses a really old version of setuptools
+setuptools~=49.6
