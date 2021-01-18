@@ -128,5 +128,7 @@ def fetch_connectivity(x, dataset='production', clean=True, style='catmaid',
     # Style
     if style == 'catmaid':
         cn_table = catmaid_table(cn_table, ids)
+    else:
+        cn_table.sort_values('weight', ascending=False, inplace=True)
 
     return cn_table

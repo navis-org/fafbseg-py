@@ -17,7 +17,7 @@ import navis
 
 import numpy as np
 
-from .segmentation import locs_to_segments, neuron_to_segments
+from .segmentation import neuron_to_segments
 
 from ..synapses.utils import catmaid_table
 from .. import spine
@@ -81,6 +81,13 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
 
     Examples
     --------
+    >>> import fafbseg
+    >>> import pymaid
+    >>> rm = pymaid.connect_catmaid()
+    >>> # Load a neuron
+    >>> n = pymaid.get_neurons(16)
+    >>> # Get this neuron's synaptic partners
+    >>> cn_table = fafbseg.google.fetch_connectivity(n)
 
     """
     # First we need to map the query to IDs
@@ -91,7 +98,7 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
         ids = {}
         for n in overlaps.columns:
             this = overlaps[overlaps[n] > 0][n]
-            ids.update(dict(zip(this.values, [n] * this.shape[0])))
+            ids.update(dict(zip(this.index.values, [n] * this.shape[0])))
     elif isinstance(x, (int, np.int)):
         ids = {x: x}
     else:
@@ -112,14 +119,16 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
     syn = syn.copy()
 
     # Now map the Google IDs back to the IDs the came from (i.e. skeleton IDs)
-    syn['pre'] = syn.pre.map(ids)
-    syn['post'] = syn.post.map(ids)
+    syn['pre'] = syn.pre.map(lambda x: ids.get(x, x))
+    syn['post'] = syn.post.map(lambda x: ids.get(x, x))
 
     # Turn into connectivity table
     cn_table = syn.groupby(['pre', 'post'], as_index=False).size().to_frame().reset_index(drop=False).rename({0: 'weight'}, axis=1)
 
     # Style
     if style == 'catmaid':
-        cn_table = catmaid_table(cn_table, ids)
+        cn_table = catmaid_table(cn_table, list(set(ids.values())))
+    else:
+        cn_table.sort_values('weight', ascending=False, inplace=True)
 
     return cn_table
