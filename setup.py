@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import re
 
 
-VERSIONFILE = "fafbseg/__init__.py"
+VERSIONFILE = "fafbseg/__version__.py"
 verstrline = open(VERSIONFILE, "rt").read()
 VSRE = r"^__version__ = ['\"]([^'\"]*)['\"]"
 mo = re.search(VSRE, verstrline, re.M)
