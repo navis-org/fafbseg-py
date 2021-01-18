@@ -33,7 +33,7 @@ except BaseException:
 __all__ = ['skeletonize_neuron']
 
 
-def skeletonize_neuron(x, drop_soma_hairball=True, contraction_kws={},
+def skeletonize_neuron(x, drop_soma_hairball=False, contraction_kws={},
                        skeletonization_kws={}, radius_kws={},
                        assert_id_match=False, dataset='production'):
     """Skeletonize flywire neuron.
