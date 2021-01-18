@@ -99,6 +99,8 @@ def fetch_connectivity(x, dataset='production', clean=True, style='catmaid',
     # Now get supervoxels for these root IDs
     # (this is a dict)
     svoxels = roots_to_supervoxels(ids, dataset=dataset, progress=progress)
+    # Turn dict into array of supervoxels
+    svoxels = np.concatenate(list(svoxels.values()))
 
     # Query the synapses
     syn = spine.synapses.get_connectivity(svoxels, segmentation='flywire_supervoxels')
