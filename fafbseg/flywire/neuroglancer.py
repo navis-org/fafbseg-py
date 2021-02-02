@@ -244,8 +244,8 @@ def add_skeleton_layer(x, scene):
         if len(x) > 1:
             raise ValueError(f'Expected a single neuron, got {len(x)}')
 
-    if isinstance(x, pymaid.CatmaidNeuron):
-        x = xform.fafb14_to_flywire(x, coordinates='nm')
+    #if isinstance(x, pymaid.CatmaidNeuron):
+    #    x = xform.fafb14_to_flywire(x, coordinates='nm')
 
     if not isinstance(x, (navis.TreeNeuron, pd.DataFrame)):
         raise TypeError(f'Expected skeleton, got {type(x)}')
