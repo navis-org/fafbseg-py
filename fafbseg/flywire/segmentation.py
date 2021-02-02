@@ -43,7 +43,7 @@ except BaseException:
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
            'roots_to_supervoxels', 'supervoxels_to_roots',
-           'neuron_to_segments']
+           'neuron_to_segments', 'is_latest_root']
 
 
 def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
@@ -514,17 +514,64 @@ def skid_to_id(x,
                         columns=['old_id', 'new_id', 'confidence', 'changed'])
 
 
+def is_latest_root(id, dataset='production', **kwargs):
+    """Check if root is the current one.
+
+    Parameters
+    ----------
+    id :            int | list-like
+                    Single ID or list of flywire (root) IDs.
+    dataset :       str | CloudVolume
+                    Against which flywire dataset to query:
+                      - "production" (current production dataset, fly_v31)
+                      - "sandbox" (i.e. fly_v26)
+
+    Returns
+    -------
+    numpy array
+                    Array of booleans
+
+    See Also
+    --------
+    :func:`~fafbseg.flywire.update_ids`
+                    If you want the new ID.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.is_latest_root(720575940621039145)
+    array([True])
+
+    """
+    dataset = FLYWIRE_DATASETS.get(dataset, dataset)
+
+    id = navis.utils.make_iterable(id).astype(str)
+
+    session = requests.Session()
+    token = cv.secrets.chunkedgraph_credentials['token']
+    session.headers['Authorization'] = f"Bearer {token}"
+
+    url = f'https://prodv1.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
+    post = {'node_ids': id.tolist()}
+    r = session.post(url, json=post)
+
+    r.raise_for_status()
+
+    return np.array(r.json()['is_latest'])
+
+
 def update_ids(id,
                sample=0.1,
                dataset='production',
                progress=True, **kwargs):
-    """Retrieve the most recent version of given flywire neuron(s).
+    """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
-        1. Fetching all supervoxels for a given to-be-updated ID
-        2. Picking a random sample of ``sample`` of these supervoxels
-        3. Fetching the most recent root IDs for the sample supervoxels
-        4. Returning the root ID that was hit the most.
+        1. Checking if ID is outdated (see fafbseg.flywire.is_latest_root)
+        2. Fetching all supervoxels for outdated IDs
+        3. Picking a random sample of ``sample`` of these supervoxels
+        4. Fetching the most recent root IDs for the sample supervoxels
+        5. Returning the root ID that was hit the most.
 
     Parameters
     ----------
@@ -549,6 +596,11 @@ def update_ids(id,
                     0
                     1
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.is_latest_root`
+                    If all you want is to know whether a (root) ID is up-to-date.
+
     Examples
     --------
     >>> from fafbseg import flywire
@@ -559,47 +611,61 @@ def update_ids(id,
     """
     assert sample > 0, '`sample` must be > 0'
 
+    # See if we already check if this was the latest root
+    is_latest = kwargs.pop('is_latest', None)
+
     vol = parse_volume(dataset, **kwargs)
 
     if isinstance(id, (list, set, np.ndarray)):
+        is_latest = is_latest_root(id, dataset=dataset)
         res = [update_ids(x,
-                          vol=vol,
-                          sample=sample) for x in tqdm(id,
-                                                       desc='Updating',
-                                                       leave=False,
-                                                       disable=not progress or len(id) == 1)]
-        return pd.concat(res, axis=0, sort=False)
+                          dataset=vol,
+                          is_latest=il,
+                          sample=sample) for x, il in tqdm(zip(id, is_latest),
+                                                           desc='Updating',
+                                                           leave=False,
+                                                           total=len(id),
+                                                           disable=not progress or len(id) == 1)]
+        return pd.concat(res, axis=0, sort=False, ignore_index=True)
 
-    # Get supervoxel ids - we need to use mip=0 because otherwise small neurons
-    # might not have any (visible) supervoxels
-    svoxels = vol.get_leaves(id, bbox=vol.meta.bounds(0), mip=0)
+    # Check if outdated
+    if isinstance(is_latest, type(None)):
+        is_latest = is_latest_root(id, dataset=dataset)[0]
 
-    # Shuffle voxels
-    np.random.shuffle(svoxels)
+    if not is_latest:
+        # Get supervoxel ids - we need to use mip=0 because otherwise small neurons
+        # might not have any (visible) supervoxels
+        svoxels = vol.get_leaves(id, bbox=vol.meta.bounds(0), mip=0)
 
-    # Generate sample
-    if sample >= 1:
-        smpl = svoxels[: sample]
+        # Shuffle voxels
+        np.random.shuffle(svoxels)
+
+        # Generate sample
+        if sample >= 1:
+            smpl = svoxels[: sample]
+        else:
+            smpl = svoxels[: int(len(svoxels) * sample)]
+
+        # Fetch up-to-date root IDs for the sampled supervoxels
+        roots = supervoxels_to_roots(smpl, dataset=vol)
+
+        # Find unique Ids and count them
+        unique, counts = np.unique(roots, return_counts=True)
+
+        # Get sorted indices
+        sort_ix = np.argsort(counts)
+
+        # New Id is the most frequent ID
+        new_id = unique[sort_ix[-1]]
+
+        # Confidence is the difference between the top and the 2nd most frequent ID
+        if len(unique) > 1:
+            conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
+                         2)
+        else:
+            conf = 1
     else:
-        smpl = svoxels[: int(len(svoxels) * sample)]
-
-    # Fetch up-to-date root IDs for the sampled supervoxels
-    roots = supervoxels_to_roots(smpl, dataset=vol)
-
-    # Find unique Ids and count them
-    unique, counts = np.unique(roots, return_counts=True)
-
-    # Get sorted indices
-    sort_ix = np.argsort(counts)
-
-    # New Id is the most frequent ID
-    new_id = unique[sort_ix[-1]]
-
-    # Confidence is the difference between the top and the 2nd most frequent ID
-    if len(unique) > 1:
-        conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
-                     2)
-    else:
+        new_id = id
         conf = 1
 
     return pd.DataFrame([[id, new_id, conf, id != new_id]],

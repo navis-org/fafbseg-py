@@ -25,6 +25,7 @@ Flywire segmentation
     fafbseg.flywire.fetch_leaderboard
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.skid_to_id
+    fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
     fafbseg.flywire.get_mesh_neuron
     fafbseg.flywire.skeletonize_neuron
