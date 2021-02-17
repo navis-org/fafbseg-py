@@ -14,3 +14,5 @@
 #    GNU General Public License for more details.
 
 """Module containing low-level functions to work with the Buhmann FAFB synapses."""
+
+from .transmitters import plot_nt_predictions, collapse_nt_predictions
