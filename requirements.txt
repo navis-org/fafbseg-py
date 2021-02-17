@@ -4,7 +4,8 @@ inquirer~=2.6
 ipython
 navis>=0.5.1
 numpy
-pandas
+pandas>=1.2.0
+pyarrow>=3.0.0
 PyMCubes
 pyperclip
 requests

@@ -23,7 +23,7 @@ import pandas as pd
 import trimesh as tm
 
 from abc import ABC
-from io import StringIO
+from io import StringIO, BytesIO
 
 use_pbars = True
 
@@ -207,7 +207,8 @@ class SynapseService(SpineService):
         resp.raise_for_status()
         return resp.json()
 
-    def get_connectivity(self, segmentation_ids, segmentation):
+    def get_connectivity(self, segmentation_ids, segmentation, locations=False,
+                         nt_predictions=False):
         """Fetch all connections from/to given segmentation ID(s).
 
         Parameters
@@ -220,6 +221,12 @@ class SynapseService(SpineService):
                               - "fafb-ffn1-20190805" (segment IDs)
                               - "fafb-ffn1-20200412" (segment IDs)
                               - "flywire_supervoxels" (supervoxel IDs)
+        locations :         bool
+                            Whether to also fetch x/y/z locations for each
+                            synapse.
+        nt_predictions :    bool
+                            Whether to also fetch neurotransmitter predictions
+                            for each synapses.
 
         Returns
         -------
@@ -232,14 +239,24 @@ class SynapseService(SpineService):
         # Check if segmentation actually exists
         self.validate_segmentation(segmentation)
 
-        url = self.makeurl('segmentation', segmentation, 'csv')
+        url = self.makeurl('segmentation', segmentation, 'feather')
+
+        param = []
+        if locations:
+            param.append("locations=true")
+        if nt_predictions:
+            param.append("nt=eckstein2020")
+
+        if param:
+            url += f'?{"&".join(param)}'
+
         post = {"query_ids": segmentation_ids.tolist()}
 
         resp = requests.post(url, json=post)
         resp.raise_for_status()
 
         # Read into DataFrame
-        return pd.read_csv(StringIO(resp.content.decode()), sep=',')
+        return pd.read_feather(BytesIO(resp.content))
 
 
 class TransformService(SpineService):
