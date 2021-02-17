@@ -743,7 +743,8 @@ def update_ids(id,
         conf = 1
 
     return pd.DataFrame([[id, new_id, conf, id != new_id]],
-                        columns=['old_id', 'new_id', 'confidence', 'changed'])
+                        columns=['old_id', 'new_id', 'confidence', 'changed']
+                        ).astype({'old_id': int, 'new_id': int})
 
 
 def snap_to_id(locs, id, snap_zero=False, dataset='production',
