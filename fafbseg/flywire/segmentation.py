@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from concurrent import futures
+from diskcache import Cache
 from requests_futures.sessions import FuturesSession
 from scipy import ndimage
 from tqdm.auto import tqdm
@@ -200,13 +201,16 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
     return df
 
 
-def roots_to_supervoxels(x, dataset='production', progress=True):
+def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True):
     """Get supervoxels making up given neurons.
 
     Parameters
     ----------
     x :             int | list of int
                     Segmentation (root) ID(s).
+    use_cache :     bool
+                    Whether to use disk cache to avoid repeated queries for the
+                    same root. Cache is stored in `~/.fafbseg/`.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -237,24 +241,57 @@ def roots_to_supervoxels(x, dataset='production', progress=True):
     # Get the volume
     vol = parse_volume(dataset)
 
-    # Get the supervoxels
-    svoxels = {i: vol.get_leaves(i,
-                                 bbox=vol.meta.bounds(0),
-                                 mip=0) for i in tqdm(x,
-                                                      desc='Querying',
-                                                      disable=not progress,
-                                                      leave=False)}
+    svoxels = {}
+    # See what ewe can get from cache
+    if use_cache:
+        # Cache for root -> supervoxels
+        # Grows to max 1Gb by default and persists across sessions
+        with Cache(directory='~/.fafbseg/svoxel_cache/') as sv_cache:
+            # See if we have any of these roots cached
+            with sv_cache.transact():
+                is_cached = np.isin(x, sv_cache)
+
+            # Add supervoxels from cache if we have any
+            if np.any(is_cached):
+                # Get values from cache
+                with sv_cache.transact():
+                    svoxels.update({i: sv_cache[i] for i in x[is_cached]})
+
+    # Get the supervoxels for the roots that are still missing
+    # We need to convert keys to integer array because otherwise there is a
+    # mismatch in types (int vs np.int?) which causes all root IDs to be in miss
+    # -> I think that's because of the way disk cache works
+    miss = x[~np.isin(x, np.array(list(svoxels.keys())).astype(int))]
+    svoxels.update({i: vol.get_leaves(i,
+                                      bbox=vol.meta.bounds(0),
+                                      mip=0) for i in tqdm(miss,
+                                                           desc='Querying',
+                                                           disable=not progress,
+                                                           leave=False)})
+
+    # Update cache
+    if use_cache:
+        with sv_cache.transact():
+            for i in miss:
+                sv_cache[i] = svoxels[i]
 
     return svoxels
 
 
-def supervoxels_to_roots(x, dataset='production'):
+def supervoxels_to_roots(x, use_cache=False, dataset='production'):
     """Get root(s) for given supervoxel(s).
 
     Parameters
     ----------
     x :             int | list of int
                     Supervoxel ID(s) to find the root(s) for.
+    use_cache :     bool
+                    Whether to use disk cache to avoid repeated queries for the
+                    same supervoxel. The implementation for this is optimized
+                    for a small memory footprint - so it's slow! At this point
+                    only use it if you want to minimize your impact on the
+                    flywire backends and you have time on your hands. The cache
+                    is stored in `~/.fafbseg/`.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -275,14 +312,51 @@ def supervoxels_to_roots(x, dataset='production'):
 
     """
     # Make sure we are working with an array of integers
-    x = navis.utils.make_iterable(x).astype(int, copy=False)
+    x = navis.utils.make_iterable(x).astype(np.int64, copy=False)
 
     # Parse the volume
     vol = parse_volume(dataset)
 
-    # get_roots() doesn't like to be asked for zeros - causes server error
+    # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
-    roots[x != 0] = vol.get_roots(x[x != 0])
+
+    # We can't query supervoxel ID 0
+    not_zero = x != 0
+
+    if use_cache:
+        # Cache for supervoxel -> root map
+        # Grows to max 1Gb by default and persists across sessions
+        with Cache(directory='~/.fafbseg/roots_cache/') as roots_cache:
+            # See if we have any of these supervoxels cached
+            with roots_cache.transact():
+                is_cached = np.isin(x, roots_cache)
+
+            # For cached roots, check if they are latest
+            if np.any(is_cached):
+                # Get values from cache
+                with roots_cache.transact():
+                    cached = np.array([roots_cache[i] for i in x[is_cached]])
+                # Check if cached roots are latest
+                is_latest = is_latest_root(cached, dataset=dataset)
+                # Set roots that are still up-to-date
+                is_cached[is_cached] = is_latest
+                roots[is_cached] = cached[is_latest]
+
+            # To fetch are those supervoxels that are != 0 and are not cached
+            to_fetch = ~is_cached & not_zero
+
+            # Fill in the blanks
+            if np.any(to_fetch):
+                roots[to_fetch] = vol.get_roots(x[to_fetch])
+
+                # Update cache
+                with roots_cache.transact():
+                    for k, v in zip(x[to_fetch], roots[to_fetch]):
+                        roots_cache[k] = v
+
+    else:
+        # get_roots() doesn't like to be asked for zeros - causes server error
+        roots[not_zero] = vol.get_roots(x[not_zero])
 
     return roots
 
