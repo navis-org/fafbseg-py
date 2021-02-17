@@ -42,6 +42,7 @@ MOCK_MODULES = ['pymaid',
                 'scipy.spatial',
                 'sqlite3',
                 'tqdm.auto',
+                'diskcache', 'diskcache.Cache',
                 'inquirer.themes.GreenPassion']
 
 for module in MOCK_MODULES:
