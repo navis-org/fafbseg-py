@@ -55,6 +55,9 @@ Buhmann synapse predictions
 
     fafbseg.google.synapses.fetch_connectivity
     fafbseg.flywire.synapses.fetch_connectivity
+    fafbseg.flywire.synapses.fetch_synapses
+    fafbseg.flywire.synapses.predict_transmitter
+    fafbseg.synapses.plot_nt_predictions 
 
 Spatial transformation
 ----------------------
