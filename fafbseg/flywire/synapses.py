@@ -32,7 +32,7 @@ def predict_transmitter(x, single_pred=False, dataset='production'):
 
     Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
     by Eric Perlman and Davi Bock. The per-synapse predictions are collapsed
-    into per-neuron prediction by calculating the average for confidence for
+    into per-neuron prediction by calculating the average confidence for
     each neurotransmitter across all synapses weighted by the "cleft score".
     Bottom line: higher confidence synapses have more weight than low confidence
     synapses.

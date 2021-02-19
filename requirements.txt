@@ -1,5 +1,7 @@
+annotationframeworkclient
 cloud-volume~=3.1
 diskcache
+fastremap
 inquirer~=2.6
 ipython
 navis>=0.5.1
@@ -8,9 +10,9 @@ pandas>=1.2.0
 pyarrow>=3.0.0
 PyMCubes
 pyperclip
+python-catmaid>=2.0.2
 requests
 requests-futures
 skeletor
 trimesh
 tqdm
-python-catmaid>=2.0.2
