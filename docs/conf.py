@@ -29,25 +29,27 @@ sys.path.insert(0, os.path.abspath('../'))
 
 #This needs to be removed in order to built locally
 import mock
-MOCK_MODULES = ['pymaid',
-                'navis.transforms.base.BaseTransform',
-                'navis.transforms.affine.AliasTransform',
-                'trimesh',
+MOCK_MODULES = ['PyMCubes',
+                'annotationframeworkclient',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
-                'networkx',
+                'diskcache.Cache',
+                'fastremap',
+                'inquirer.themes.GreenPassion',
+                'mcubes',
+                'navis.transforms.affine.AliasTransform',
+                'navis.transforms.base.BaseTransform',
                 'ncollpyde',
-                'PyMCubes', 'mcubes',
+                'networkx',
+                'pandas',
+                'pyarrow',
+                'pymaid',
                 'pyperclip',
                 'requests_futures.sessions',
                 'scipy.spatial',
-                'tqdm.auto',
                 'seaborn',
-                'diskcache', 'diskcache.Cache',
-                'inquirer.themes.GreenPassion',
-                'fastremap',
-                'pyarrow',
-                'pandas',
-                'annotationframeworkclient']
+                'skeletordiskcache',
+                'tqdm.auto',
+                'trimesh']
 
 for module in MOCK_MODULES:
     split = module.split('.')
