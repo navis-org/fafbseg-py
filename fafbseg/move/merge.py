@@ -244,7 +244,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
                 return resp
 
             # Add annotations
-            _ = __merge_annotations(n, resp['skeleton_id'], tag, target_instance)
+            _ = _merge_annotations(n, resp['skeleton_id'], tag, target_instance)
 
             msg = '\nNeuron "{}" successfully uploaded to target instance as "{}" #{}'
             print(msg.format(n.name, n.name, resp['skeleton_id']),
@@ -439,8 +439,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
                                                          remote_instance=target_instance)
 
         # Add annotations
-        if n.__dict__.get('annotations', []):
-            _ = __merge_annotations(n, bn, tag, target_instance)
+        _ = _merge_annotations(n, bn, tag, target_instance)
 
         # Update node radii
         if update_radii and 'radius' in n.nodes.columns and np.all(n.nodes.radius):
@@ -457,7 +456,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
     return
 
 
-def __merge_annotations(n, bn, tag, target_instance):
+def _merge_annotations(n, bn, tag, target_instance):
     """Make sure proper annotations are added."""
     to_add = []
     # Add "{URL} upload {tag} annotation"
@@ -467,8 +466,8 @@ def __merge_annotations(n, bn, tag, target_instance):
             u += " {}".format(tag)
         to_add.append(u)
     # Existing annotation (the individual fragments would not have inherited them)
-    if n.__dict__.get('annotations', []):
-        to_add += n.annotations
+    if n.__dict__.get('_annotations', []):
+        to_add += n._annotations
     # If anything to add
     if to_add:
         _ = pymaid.add_annotations(bn,
