@@ -32,7 +32,7 @@ import mock
 MOCK_MODULES = ['PyMCubes',
                 'annotationframeworkclient',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
-                'diskcache.Cache',
+                'diskcache.Cache', 'diskcache',
                 'fastremap',
                 'inquirer.themes.GreenPassion',
                 'mcubes',
@@ -47,7 +47,7 @@ MOCK_MODULES = ['PyMCubes',
                 'requests_futures.sessions',
                 'scipy.spatial',
                 'seaborn',
-                'skeletordiskcache',
+                'skeletor',
                 'tqdm.auto',
                 'trimesh']
 
