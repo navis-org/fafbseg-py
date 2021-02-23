@@ -40,11 +40,14 @@ MOCK_MODULES = ['pymaid',
                 'pyperclip',
                 'requests_futures.sessions',
                 'scipy.spatial',
-                'sqlite3',
                 'tqdm.auto',
                 'seaborn',
                 'diskcache', 'diskcache.Cache',
-                'inquirer.themes.GreenPassion']
+                'inquirer.themes.GreenPassion',
+                'fastremap',
+                'pyarrow',
+                'pandas',
+                'annotationframeworkclient']
 
 for module in MOCK_MODULES:
     split = module.split('.')
@@ -86,6 +89,7 @@ def remove_hbox(filepath):
         s = re.sub(".. parsed-literal::\n\n.*?HTML\(value=''\)\)\)", '', s)
         with open(filepath, 'w') as f:
             f.write(s)
+
 
 # -- Make execution numbers in Jupyter notebooks ascending -------------------
 source_path = os.path.dirname(os.path.abspath(__file__)) + '/source'
