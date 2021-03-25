@@ -14,12 +14,14 @@
 #    GNU General Public License for more details.
 
 import json
+import navis
 import os
 
 from pathlib import Path
 from importlib import reload
 
 import cloudvolume as cv
+import numpy as np
 
 from .. import utils
 
@@ -72,6 +74,29 @@ def set_chunkedgraph_secret(token, filepath=None):
     fw_vol = None
 
     print("Token succesfully stored in ", filepath)
+
+
+def parse_root_ids(x):
+    """Parse root IDs.
+
+    Always returns an array of integers.
+    """
+    if isinstance(x, navis.BaseNeuron):
+        ids = [x.id]
+    elif isinstance(x, navis.NeuronList):
+        ids = x.id
+    elif isinstance(x, (int, np.int)):
+        ids = [x]
+    else:
+        ids = navis.utils.make_iterable(x)
+
+    # Make sure we are working with proper numerical IDs
+    try:
+        return np.asarray(ids).astype(int)
+    except ValueError:
+        raise ValueError(f'Unable to convert given root IDs to integer: {ids}')
+    except BaseException:
+        raise
 
 
 def parse_volume(vol, **kwargs):

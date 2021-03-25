@@ -18,13 +18,15 @@ import navis
 import numpy as np
 import pandas as pd
 
-from .segmentation import roots_to_supervoxels, supervoxels_to_roots
+from .segmentation import roots_to_supervoxels, supervoxels_to_roots, is_latest_root
+from .utils import parse_root_ids
 
 from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
 from .. import spine
 
-__all__ = ['fetch_synapses', 'fetch_connectivity', 'predict_transmitter']
+__all__ = ['fetch_synapses', 'fetch_connectivity', 'predict_transmitter',
+           'fetch_adjacency']
 
 
 def predict_transmitter(x, single_pred=False, dataset='production'):
@@ -110,23 +112,14 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
     if not pre and not post:
         raise ValueError('`pre` and `post` must not both be False')
 
-    if isinstance(x, navis.BaseNeuron):
-        ids = [x.id]
-        x = navis.NeuronList(x)
-    elif isinstance(x, navis.NeuronList):
-        ids = x.id
-    elif isinstance(x, (int, np.int)):
-        ids = [x]
-    else:
-        ids = navis.utils.make_iterable(x)
+    # Parse root IDs
+    ids = parse_root_ids(x)
 
-    # Make sure we are working with proper numerical IDs
-    try:
-        ids = np.asarray(ids).astype(int)
-    except ValueError:
-        raise ValueError(f'Unable to convert IDs to integer: {ids}')
-    except BaseException:
-        raise
+    # Check if any of these root IDs are outdated
+    not_latest = ids[~is_latest_root(ids, dataset=dataset)]
+    if any(not_latest):
+        print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+              'and connectivity might be inaccurrate.')
 
     # Now get supervoxels for these root IDs
     # (this is a dict)
@@ -156,12 +149,10 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
 
     dct = dict(zip(svoxels, roots))
 
-    # Check if any of the query IDs are outdated in which case the newly
-    # fetch supervoxels->root IDs map might not point to any of the query IDs
-    # anymore: in that case we have to enforce the old root IDs
-    outdated = [str(i) for i in ids if i not in roots]
-    if any(outdated):
-        dct.update({v: r for r in roots2svxl for v in roots2svxl[r]})
+    # If any of the query root IDs are outdated, we have to make sure that
+    # we still map their supervoxels to their root ID and not the current
+    # root
+    dct.update({v: r for r in roots2svxl for v in roots2svxl[r]})
 
     syn['pre'] = syn.pre.map(dct)
     syn['post'] = syn.post.map(dct)
@@ -175,30 +166,27 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
 
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
+            presyn = postsyn = pd.DataFrame([])
             if pre:
-                pre = syn.loc[syn.pre == int(n.id),
-                              ['pre_x', 'pre_y', 'pre_z',
-                               'cleft_scores', 'post']].rename({'pre_x': 'x',
-                                                                'pre_y': 'y',
-                                                                'pre_z': 'z',
-                                                                'post': 'partner_id'},
-                                                               axis=1)
-                pre['type'] = 'pre'
+                presyn = syn.loc[syn.pre == int(n.id),
+                                 ['pre_x', 'pre_y', 'pre_z',
+                                  'cleft_scores', 'post']].rename({'pre_x': 'x',
+                                                                   'pre_y': 'y',
+                                                                   'pre_z': 'z',
+                                                                   'post': 'partner_id'},
+                                                                  axis=1)
+                presyn['type'] = 'pre'
             if post:
-                post = syn.loc[syn.post == int(n.id),
-                               ['post_x', 'post_y', 'post_z',
-                                'cleft_scores', 'pre']].rename({'post_x': 'x',
-                                                                'post_y': 'y',
-                                                                'post_z': 'z',
-                                                                'pre': 'partner_id'},
-                                                               axis=1)
-                post['type'] = 'post'
-            if isinstance(pre, pd.DataFrame) and isinstance(post, pd.DataFrame):
-                connectors = pd.concat((pre, post), axis=0, ignore_index=True)
-            elif isinstance(pre, pd.DataFrame):
-                connectors = pre
-            else:
-                connectors = post
+                postsyn = syn.loc[syn.post == int(n.id),
+                                  ['post_x', 'post_y', 'post_z',
+                                   'cleft_scores', 'pre']].rename({'post_x': 'x',
+                                                                   'post_y': 'y',
+                                                                   'post_z': 'z',
+                                                                   'pre': 'partner_id'},
+                                                                  axis=1)
+                postsyn['type'] = 'post'
+
+            connectors = pd.concat((presyn, postsyn), axis=0, ignore_index=True)
 
             # Turn type column into categorical to save memory
             connectors['type'] = connectors['type'].astype('category')
@@ -214,8 +202,103 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
     return syn
 
 
+def fetch_adjacency(sources, targets=None, min_score=30, dataset='production',
+                    progress=True):
+    """Fetch adjacency matrix.
+
+    Parameters
+    ----------
+    sources :       int | list of int | Neuron/List
+                    Either flywire segment ID (i.e. root ID), a list thereof
+                    or a Neuron/List. For neurons, the ``.id`` is assumed to be
+                    the root ID. If you have a neuron (in FlyWire space) but
+                    don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
+                    first.
+    targets :       int | list of int | Neuron/List, optional
+                    Either flywire segment ID (i.e. root ID), a list thereof
+                    or a Neuron/List. For neurons, the ``.id`` is assumed to be
+                    the root ID. If you have a neuron (in FlyWire space) but
+                    don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
+                    first. If ``None``, will assume ```targets = sources``.
+    min_score :     int
+                    Minimum "cleft score". The default of 30 is what Buhmann et al.
+                    used in the paper.
+    dataset :       str | CloudVolume
+                    Against which flywire dataset to query::
+                        - "production" (current production dataset, fly_v31)
+                        - "sandbox" (i.e. fly_v26)
+
+    Returns
+    -------
+    adjacency :     pd.DataFrame
+                    Adjacency matrix. Rows (sources) and columns (targets) are
+                    in the same order as input.
+
+    """
+    if isinstance(targets, type(None)):
+        targets = sources
+
+    # Parse root IDs
+    sources = parse_root_ids(sources)
+    targets = parse_root_ids(targets)
+    both = np.unique(np.append(sources, targets))
+
+    # Check if any of these root IDs are outdated
+    not_latest = both[~is_latest_root(both, dataset=dataset)]
+    if any(not_latest):
+        print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+              'and connectivity might be inaccurrate.')
+
+    # Get supervoxel IDs
+    # (this is a dict)
+    roots2svxl = roots_to_supervoxels(both, dataset=dataset, progress=progress)
+
+    # Decide which ones to query
+    if len(sources) <= len(targets):
+        query = sources
+    else:
+        query = targets
+
+    # Map queries to supervoxels
+    query_svoxels = np.concatenate([roots2svxl[q] for q in query])
+
+    # Query the synapses by supervoxels
+    syn = spine.synapses.get_connectivity(query_svoxels,
+                                          locations=False,
+                                          nt_predictions=False,
+                                          segmentation='flywire_supervoxels')
+
+    # Drop below-threshold synapses
+    syn = syn[syn.cleft_scores >= min_score]
+
+    # Flip roots to supervoxels dict
+    svxl2roots = {sv: r for r in roots2svxl for sv in roots2svxl[r]}
+
+    # Drop any synapse that does not involve source and targets
+    # Do not change the way this mapping is one - there is something funny
+    # going on with data types usin the usual `syn.pre.isin(svxl2roots)` that
+    # leads to values incorrectly being assumed to be True
+    syn['pre'] = syn.pre.map(lambda x: svxl2roots.get(x, 0)).astype(np.int64)
+    syn['post'] = syn.post.map(lambda x: svxl2roots.get(x, 0)).astype(np.int64)
+    syn = syn[(syn.pre != 0) & (syn.post != 0)]
+    syn = syn[syn.pre.isin(sources) & syn.post.isin(targets)]
+
+    # Aggregate
+    cn = syn.groupby(['pre', 'post']).size().reset_index(drop=False)
+    cn.columns = ['source', 'target', 'weight']
+
+    # Pivot
+    adj = cn.pivot(index='source', columns='target', values='weight').fillna(0)
+
+    # Index to match order and add any missing neurons
+    adj = adj.reindex(index=sources, columns=targets).fillna(0)
+
+    return adj
+
+
 def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
-                       transmitters=False, dataset='production', progress=True):
+                       upstream=True, downstream=True, transmitters=False,
+                       dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
     Uses a service on spine.janelia.org hosted by Eric Perlman and Davi Bock.
@@ -234,11 +317,15 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
                         - drop autapses
                         - drop synapses from/to background (id 0)
 
-    style :             "simple" | "catmaid"
+    style :         "simple" | "catmaid"
                     Style of the returned table.
     min_score :     int
                     Minimum "cleft score". The default of 30 is what Buhmann et al.
                     used in the paper.
+    upstream :      bool
+                    Whether to fetch upstream connectivity of ```x``.
+    downstream :    bool
+                    Whether to fetch downstream connectivity of ```x``.
     transmitter :   bool
                     If True, will attach the best guess for the transmitter
                     for a given connection based on the predictions in Eckstein
@@ -261,22 +348,17 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
                 Connectivity table.
 
     """
-    if isinstance(x, navis.BaseNeuron):
-        ids = [x.id]
-    elif isinstance(x, navis.NeuronList):
-        ids = x.id
-    elif isinstance(x, (int, np.int)):
-        ids = [x]
-    else:
-        ids = navis.utils.make_iterable(x)
+    if not upstream and not downstream:
+        raise ValueError('`upstream` and `downstream` must not both be False')
 
-    # Make sure we are working with proper numerical IDs
-    try:
-        ids = np.asarray(ids).astype(int)
-    except ValueError:
-        raise ValueError(f'Unable to convert IDs to integer: {ids}')
-    except BaseException:
-        raise
+    # Parse root IDs
+    ids = parse_root_ids(x)
+
+    # Check if any of these root IDs are outdated
+    not_latest = ids[~is_latest_root(ids, dataset=dataset)]
+    if any(not_latest):
+        print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+              'and connectivity might be inaccurrate.')
 
     if transmitters and style == 'catmaid':
         raise ValueError('`style` must be "simple" when asking for transmitters')
@@ -291,6 +373,11 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
     syn = spine.synapses.get_connectivity(svoxels,
                                           segmentation='flywire_supervoxels',
                                           nt_predictions=transmitters)
+
+    if not upstream:
+        syn = syn[~syn.post.isin(svoxels)]
+    if not downstream:
+        syn = syn[~syn.pre.isin(svoxels)]
 
     # Next we need to run some clean-up:
     # 1. Drop below threshold connections
@@ -308,12 +395,10 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
 
     dct = dict(zip(svoxels, roots))
 
-    # Check if any of the query IDs are outdated
-    outdated = [i for i in ids if i not in roots]
-    if any(outdated):
-        print(f'Query ID(s) {", ".join(outdated)} are outdated and connectivity'
-              ' might be inaccurrate.')
-        dct.update({v: r for r in roots2svxl for v in roots2svxl[r]})
+    # If any of the query root IDs are outdated, we have to make sure that
+    # we still map their supervoxels to their root ID and not the current
+    # root
+    dct.update({v: r for r in roots2svxl for v in roots2svxl[r]})
 
     syn['pre'] = syn.pre.map(dct)
     syn['post'] = syn.post.map(dct)
@@ -333,6 +418,5 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
 
         cn_table['pred_nt'] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
         cn_table['pred_conf'] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
-
 
     return cn_table
