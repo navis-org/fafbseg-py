@@ -27,7 +27,6 @@ from concurrent import futures
 from diskcache import Cache
 from requests_futures.sessions import FuturesSession
 from scipy import ndimage
-from tqdm.auto import tqdm
 
 from .. import spine
 from .. import xform
@@ -97,10 +96,10 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
         futures.append(future_session.get(url, params=None))
 
     # Get the responses
-    resp = [f.result() for f in tqdm(futures,
-                                     desc='Fetching',
-                                     disable=not progress or len(futures) == 1,
-                                     leave=False)]
+    resp = [f.result() for f in navis.config.tqdm(futures,
+                                                  desc='Fetching',
+                                                  disable=not progress or len(futures) == 1,
+                                                  leave=False)]
 
     df = None
     for i, r in enumerate(resp):
@@ -176,10 +175,10 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
         futures.append(f)
 
     # Get the responses
-    resp = [f.result() for f in tqdm(futures,
-                                     desc='Fetching',
-                                     disable=not progress or len(futures) == 1,
-                                     leave=False)]
+    resp = [f.result() for f in navis.config.tqdm(futures,
+                                                  desc='Fetching',
+                                                  disable=not progress or len(futures) == 1,
+                                                  leave=False)]
 
     df = []
     for r, i in zip(resp, x):
@@ -264,7 +263,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     miss = x[~np.isin(x, np.array(list(svoxels.keys())).astype(int))]
     svoxels.update({i: vol.get_leaves(i,
                                       bbox=vol.meta.bounds(0),
-                                      mip=0) for i in tqdm(miss,
+                                      mip=0) for i in navis.config.tqdm(miss,
                                                            desc='Querying',
                                                            disable=not progress,
                                                            leave=False)})
@@ -695,7 +694,7 @@ def update_ids(id,
         res = [update_ids(x,
                           dataset=vol,
                           is_latest=il,
-                          sample=sample) for x, il in tqdm(zip(id, is_latest),
+                          sample=sample) for x, il in navis.config.tqdm(zip(id, is_latest),
                                                            desc='Updating',
                                                            leave=False,
                                                            total=len(id),
@@ -809,7 +808,7 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
         to_fix = to_fix & not_zero
 
     # Use parallel processes to go over the to-fix nodes
-    with tqdm(desc='Snapping', total=to_fix.sum(), leave=False) as pbar:
+    with navis.config.tqdm(desc='Snapping', total=to_fix.sum(), leave=False) as pbar:
         with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
             loc_futures = [ex.submit(_process_cutout,
                                      id=id,
