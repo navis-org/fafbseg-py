@@ -33,28 +33,21 @@ except BaseException:
 __all__ = ['skeletonize_neuron']
 
 
-def skeletonize_neuron(x, drop_soma_hairball=False, contraction_kws={},
-                       skeletonization_kws={}, radius_kws={},
-                       assert_id_match=False, dataset='production'):
+def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
+                       dataset='production', progress=True):
     """Skeletonize flywire neuron.
 
     Parameters
     ----------
-    x  :                 int | trimesh.TriMesh
-                         ID or trimesh of the flywire neuron you want to
+    x  :                 int | trimesh.TriMesh | list thereof
+                         ID(s) or trimesh of the flywire neuron(s) you want to
                          skeletonize.
-    drop_soma_hairball : bool
+    remove_soma_hairball : bool
                          If True, we will try to drop the hairball that is
-                         typically created inside the soma.
-    contraction_kws :    dict
-                         Optional parameters for the contraction phase. See
-                         ``skeletor.contract``.
-    skeletonization_kws : dict
-                         Optional parameters for the skeletonization phase. See
-                         ``skeletor.skeletonize``.
-    radius_kws :         dict
-                         Optional parameters for the radius extraction phase.
-                         See ``skeletor.radius``.
+                         typically created inside the soma. Note while this
+                         should work just fine for 99% of neurons, it's not very
+                         smart and there is always a chance that we remove stuff
+                         that should not have been removed.
     assert_id_match :    bool
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into
@@ -63,20 +56,39 @@ def skeletonize_neuron(x, drop_soma_hairball=False, contraction_kws={},
                          Against which flywire dataset to query::
                            - "production" (current production dataset, fly_v31)
                            - "sandbox" (i.e. fly_v26)
+    progress :           bool
+                         Whether to show a progress bar or not.
 
     Return
     ------
-    skeleton, simpified_mesh, contracted_mesh
-                        The extraced skeleton, simplified and contracted mesh,
-                        respectively.
+    skeleton :          navis.TreeNeuron
+                        The extracted skeleton.
 
     Examples
     --------
-    >>> tn, simp, cntr = flywire.skeletonize_flywire_neuron(720575940614131061)
+    >>> from fafbseg import flywire
+    >>> tn, simp, cntr = flywire.skeletonize_neuron(720575940614131061)
 
     """
     if not sk:
         raise ImportError('Must install skeletor: pip3 install skeletor')
+
+    if int(sk.__version__.split('.')[0]) < 1:
+        raise ImportError('Please update skeletor to version >= 1.0.0: '
+                          'pip3 install skeletor -U')
+
+    vol = parse_volume(dataset)
+
+    if navis.utils.is_iterable(x):
+        return navis.NeuronList([skeletonize_neuron(n,
+                                                    progress=False,
+                                                    remove_soma_hairball=remove_soma_hairball,
+                                                    assert_id_match=assert_id_match,
+                                                    dataset=dataset)
+                                 for n in navis.config.tqdm(x,
+                                                            desc='Fetching',
+                                                            disable=not progress,
+                                                            leave=False)])
 
     if not navis.utils.is_mesh(x):
         vol = parse_volume(dataset)
@@ -90,48 +102,50 @@ def skeletonize_neuron(x, drop_soma_hairball=False, contraction_kws={},
         mesh = x
         id = getattr(mesh, 'segid', 0)
 
-    # Simplify
-    simp = sk.simplify(mesh, ratio=.2)
+    mesh = sk.utilities.make_trimesh(mesh, validate=False)
 
     # Validate before we detect the soma verts
-    simp = sk.utilities.fix_mesh(simp, inplace=True)
+    # This also drops fluff
+    mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=10)
 
-    # Try detecting the soma
-    if drop_soma_hairball:
-        soma_verts = detect_soma(simp)
+    # Skeletonize
+    s = sk.skeletonize.by_wavefront(mesh, waves=1, step_size=1, progress=progress)
 
-    # Contract
-    defaults = dict(SL=40, WH0=2, epsilon=0.1, precision=1e-7, validate=False)
-    defaults.update(contraction_kws)
-    cntr = sk.contract(simp, **defaults)
+    # Turn into a neuron
+    tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
 
-    # Generate skeleton
-    defaults = dict(method='vertex_clusters', sampling_dist=200, vertex_map=True,
-                    validate=False)
-    defaults.update(skeletonization_kws)
-    swc = sk.skeletonize(cntr, **defaults)
+    # See if we can find a soma
+    soma = detect_soma_skeleton(tn, min_rad=800, N=3)
+    if soma:
+        tn.soma = soma
 
-    # Clean up
-    cleaned = sk.clean(swc, mesh=mesh, validate=False)
+        # Reroot to soma
+        tn.reroot(tn.soma, inplace=True)
 
-    # Extract radii
-    defaults = dict(validate=False)
-    defaults.update(radius_kws)
-    cleaned['radius'] = sk.radii(cleaned, mesh=mesh, **defaults)
+        if remove_soma_hairball:
+            soma = tn.nodes.set_index('node_id').loc[soma]
 
-    # Convert to neuron
-    n = navis.TreeNeuron(cleaned, id=id, units='nm', soma=None)
+            # Find all nodes within 2x the soma radius
+            tree = navis.neuron2KDTree(tn)
+            res = tree.query_ball_point(soma[['x', 'y', 'z']].values,
+                                        max(3000, soma.radius * 2))
 
-    # Drop any nodes that are soma vertices
-    if drop_soma_hairball and soma_verts.shape[0] > 0:
-        keep = n.nodes.loc[~n.nodes.vertex_id.isin(soma_verts),
-                           'node_id'].values
-        n = navis.subset_neuron(n, keep)
+            # Find segments that contain these nodes
+            segs = [s for s in tn.segments if any(np.isin(res, s))]
+
+            # Sort segs by length
+            segs = sorted(segs, key=lambda x: len(x))
+
+            # Keep only the longest segment in that initial list
+            to_drop = np.array([n for s in segs[:-1] for n in s])
+            to_drop = to_drop[~np.isin(to_drop, segs[-1])]
+
+            navis.remove_nodes(tn, to_drop, inplace=True)
 
     if assert_id_match:
         if id == 0:
             raise ValueError('Segmentation ID must not be 0')
-        new_locs = snap_to_id(n.nodes[['x', 'y', 'z']].values,
+        new_locs = snap_to_id(tn.nodes[['x', 'y', 'z']].values,
                               id=id,
                               snap_zero=False,
                               dataset=dataset,
@@ -139,12 +153,56 @@ def skeletonize_neuron(x, drop_soma_hairball=False, contraction_kws={},
                               coordinates='nm',
                               max_workers=4,
                               verbose=True)
-        n.nodes[['x', 'y', 'z']] = new_locs
+        tn.nodes[['x', 'y', 'z']] = new_locs
 
-    return (n, simp, cntr)
+    return tn
 
 
-def detect_soma(mesh):
+def detect_soma_skeleton(s, min_rad=800, N=3):
+    """Try detecting the soma based on radii.
+
+    Parameters
+    ----------
+    s :         navis.TreeNeuron
+    min_rad :   float
+                Minimum radius for a node to be considered a soma candidate.
+    N :         int
+                Number of consecutive nodes with radius > `min_rad` we need in
+                order to consider them soma candidates.
+
+    Returns
+    -------
+    node ID
+
+    """
+    assert isinstance(s, navis.TreeNeuron)
+
+    # For each segment get the radius
+    radii = s.nodes.set_index('node_id').radius.to_dict()
+    candidates = []
+    for seg in s.segments:
+        rad = np.array([radii[s] for s in seg])
+        is_big = np.where(rad > min_rad)[0]
+
+        if not any(is_big):
+            continue
+
+        # Find stretches for consectutively big values
+        for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0]+1):
+            if len(stretch) < N:
+                continue
+            candidates += [seg[i] for i in stretch]
+
+    if not candidates:
+        return None
+
+    # Return largest candidate
+    return sorted(candidates, key=lambda x: radii[x])[-1]
+
+
+
+
+def detect_soma_mesh(mesh):
     """Try detecting the soma based on vertex clusters.
 
     Parameters
