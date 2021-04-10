@@ -120,6 +120,11 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
     # Skeletonize
     s = sk.skeletonize.by_wavefront(mesh, waves=1, step_size=1, progress=progress)
 
+    # Skeletor indexes node IDs at zero but to avoid potential issues we want
+    # node IDs to start at 1
+    s.swc['node_id'] += 1
+    s.swc.loc[s.swc.parent_id >= 0, 'parent_id'] += 1
+
     # Turn into a neuron
     tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
 
