@@ -15,7 +15,10 @@
 
 import navis
 import numbers
+import os
+import requests
 
+import multiprocessing as mp
 import networkx as nx
 import numpy as np
 import trimesh as tm
@@ -30,7 +33,7 @@ except ImportError:
 except BaseException:
     raise
 
-__all__ = ['skeletonize_neuron']
+__all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
 
 def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
@@ -64,6 +67,12 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
     skeleton :          navis.TreeNeuron
                         The extracted skeleton.
 
+    See Also
+    --------
+    :func:`fafbseg.flywire.skeletonize_neuron_parallel`
+                        Use this if you want to skeletonize many neurons in
+                        parallel.
+
     Examples
     --------
     >>> from fafbseg import flywire
@@ -86,7 +95,7 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
                                                     assert_id_match=assert_id_match,
                                                     dataset=dataset)
                                  for n in navis.config.tqdm(x,
-                                                            desc='Fetching',
+                                                            desc='Skeletonizing',
                                                             disable=not progress,
                                                             leave=False)])
 
@@ -200,8 +209,6 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
     return sorted(candidates, key=lambda x: radii[x])[-1]
 
 
-
-
 def detect_soma_mesh(mesh):
     """Try detecting the soma based on vertex clusters.
 
@@ -286,3 +293,71 @@ def divide_local_neighbourhood(mesh, radius):
         nodes = set(sg.nodes)
         patches.append(nodes)
         not_seen -= nodes
+
+
+def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
+    """Work in progress. Skeletonization on parallel cores.
+
+    Parameters
+    ----------
+    ids :       iterable
+                Root IDs of neurons you want to skeletonize.
+    cores :     int
+                Number of cores to use. Don't go too crazy on this as the
+                downloading of meshes becomes a bottle neck if you try to do
+                too many at the same time. Keep your internet speed in
+                mind.
+    **kwargs
+                Keyword arguments are passed on to `skeletonize_neuron`.
+
+    Returns
+    -------
+    navis.NeuronList
+
+    """
+    if cores >= 2 or cores < os.cpu_count():
+        raise ValueError('`cores` must be between 2 and max number of cores.')
+
+    # Make sure IDs are all integers
+    ids = np.asarray(ids).astype(int)
+
+    # Prepare the calls and parameters
+    kwargs['progress'] = False
+    funcs = [skeletonize_neuron] * len(ids)
+    parsed_kwargs = [kwargs] * len(ids)
+    combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
+
+    # Run the actual skeletonization
+    with mp.Pool(cores) as pool:
+        chunksize = 1  # max(int(len(combinations) / 100), 1)
+        res = list(navis.config.tqdm(pool.imap(_worker_wrapper,
+                                               combinations,
+                                               chunksize=chunksize),
+                                     total=len(combinations),
+                                     desc='Skeletonizing',
+                                     disable=False,
+                                     leave=True))
+
+    # Check if any skeletonizations failed
+    failed = np.array([r for r in res if isinstance(r, int)]).astype(str)
+    if any(failed):
+        print(f'{len(failed)} neurons failed to skeletonize: '
+              f'{". ".join(failed)}')
+
+    return navis.NeuronList([r for r in res if isinstance(r, navis.TreeNeuron)])
+
+
+def _worker_wrapper(x):
+    f, args, kwargs = x
+    try:
+        return f(*args, **kwargs)
+    # We implement a single retry in case of HTTP errors
+    except requests.HTTPError:
+        try:
+            return f(*args, **kwargs)
+        except BaseException:
+            # In case of failure return the root ID
+            return args[0]
+    except BaseException:
+        # In case of failure return the root ID
+        return args[0]
