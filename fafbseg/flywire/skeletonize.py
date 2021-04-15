@@ -125,6 +125,11 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
     s.swc['node_id'] += 1
     s.swc.loc[s.swc.parent_id >= 0, 'parent_id'] += 1
 
+    # We will also round the radius and make it an integer to save some
+    # memory. We could do the same with x/y/z coordinates but that could
+    # potentially move nodes outside the mesh
+    s.swc['radius'] = s.swc.radius.round().astype(int)
+
     # Turn into a neuron
     tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
 
