@@ -325,7 +325,7 @@ def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
     navis.NeuronList
 
     """
-    if cores >= 2 or cores < os.cpu_count():
+    if cores < 2 or cores > os.cpu_count():
         raise ValueError('`cores` must be between 2 and max number of cores.')
 
     # Make sure IDs are all integers
@@ -339,7 +339,7 @@ def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
 
     # Run the actual skeletonization
     with mp.Pool(cores) as pool:
-        chunksize = 1  # max(int(len(combinations) / 100), 1)
+        chunksize = 1
         res = list(navis.config.tqdm(pool.imap(_worker_wrapper,
                                                combinations,
                                                chunksize=chunksize),
