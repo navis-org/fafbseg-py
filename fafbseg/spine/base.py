@@ -92,7 +92,7 @@ class SpineService(ABC):
         """Return general info on given service."""
         if not hasattr(self, '_info'):
             url = self.makeurl('info')
-            resp = requests.get(url)
+            resp = self.session.get(url)
             resp.raise_for_status()
             self._info = resp.json()
         return self._info
@@ -128,13 +128,14 @@ class SynapseService(SpineService):
                  base_url='https://spine.janelia.org/app/synapse-service'):
         """Init class."""
         self.base_url = base_url
+        self.session = requests.Session()
 
     @property
     def alignments(self):
         """Return available alignments of synapse data."""
         if not hasattr(self, '_alignments'):
             url = self.makeurl('alignments')
-            resp = requests.get(url)
+            resp = self.session.get(url)
             resp.raise_for_status()
             self._alignments = resp.json()
         return self._alignments
@@ -144,7 +145,7 @@ class SynapseService(SpineService):
         """Return available collections of synapse data."""
         if not hasattr(self, '_collections'):
             url = self.makeurl('collections')
-            resp = requests.get(url)
+            resp = self.session.get(url)
             resp.raise_for_status()
             self._collections = resp.json()
         return self._collections
@@ -154,7 +155,7 @@ class SynapseService(SpineService):
         """Return available segmentations the synapse data is mapped to."""
         if not hasattr(self, '_segmentations'):
             url = self.makeurl('segmentations')
-            resp = requests.get(url)
+            resp = self.session.get(url)
             resp.raise_for_status()
             self._segmentations = resp.json()
         return self._segmentations
@@ -203,7 +204,7 @@ class SynapseService(SpineService):
         self.validate_collection(collection)
 
         url = self.makeurl('collection', collection, 'synapse', synapse_id, 'info')
-        resp = requests.get(url)
+        resp = self.session.get(url)
         resp.raise_for_status()
         return resp.json()
 
@@ -252,7 +253,7 @@ class SynapseService(SpineService):
 
         post = {"query_ids": segmentation_ids.tolist()}
 
-        resp = requests.post(url, json=post)
+        resp = self.session.post(url, json=post)
         resp.raise_for_status()
 
         # Read into DataFrame
@@ -290,6 +291,7 @@ class TransformService(SpineService):
                  base_url='https://spine.janelia.org/app/transform-service'):
         """Init class."""
         self.base_url = base_url
+        self.session = requests.Session()
 
     def validate_dataset(self, dataset):
         """Check if dataset exists for given service."""
@@ -423,7 +425,7 @@ class TransformService(SpineService):
             this_vxl = vxl[ix: ix + limit_request]
 
             # Make request
-            resp = requests.post(url,
+            resp = self.session.post(url,
                                  data=this_vxl.astype(np.single).tobytes(order='C'))
 
             # Check for errors
@@ -498,7 +500,7 @@ class TransformService(SpineService):
             this_vxl = vxl[ix: ix + limit_request]
 
             # Make request
-            resp = requests.post(url,
+            resp = self.session.post(url,
                                  data=this_vxl.astype(np.single).tobytes(order='C'))
 
             # Check for errors
