@@ -15,4 +15,4 @@
 
 """Module containing interface with data services on spine.janelia.org"""
 
-from .base import transform, synapses
+from .base import transform, synapses, flycache 

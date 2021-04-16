@@ -18,6 +18,7 @@ import navis
 import requests
 import warnings
 
+import cloudvolume as cv
 import numpy as np
 import pandas as pd
 import trimesh as tm
@@ -108,6 +109,99 @@ class SpineService(ABC):
     def makeurl(self, *args):
         """Generate URL from base URL and args."""
         return self.urljoin(self.base_url, *args)
+
+
+class FlyCacheService(SpineService):
+    """Interface with cache services."""
+
+    def __init__(self,
+                 base_url='https://services.itanna.io/app/flycache-dev'):
+        """Init class."""
+        self.base_url = base_url
+
+    def get_L2_centroids(self, ids, token=None, as_array=False, chunksize=50,
+                         progress=True):
+        """Fetch centroids of given l2 chunks.
+
+        Coordinates are in nm.
+
+        Parameter
+        ---------
+        ids :           iterable
+                        Iterable with L2 IDs.
+        token :         str, optional
+                        A ChunkedGraph auth token. If not provided will try to
+                        get it via cloudvolume.
+        as_array :      bool
+                        Determines output (see Returns).
+        chunksize :     int
+                        Query L2 IDs in chunks of this size.
+        progress :      bool
+                        Whether to show a progress bar or not.
+
+        Returns
+        -------
+        array
+                        If `as_array=True`: array in same order as queried `ids`.
+                        Missing centroids are returns with coordinate (0, 0, 0).
+        dict
+                        If `as_array=False`: dictionary mapping ID to
+                        centroid `{L2_ID: [x, y, z], ..}`.
+
+        """
+        if not token:
+            token = cv.secrets.chunkedgraph_credentials['token']
+
+        url = self.makeurl('mesh/l2_centroid/flywire_fafb_production/')
+
+        # Make sure we have an array of integers
+        ids = navis.utils.make_iterable(ids).astype(int)
+
+        with navis.config.tqdm(total=len(ids), desc='Fetching centroids',
+                               leave=False, disable=not progress) as pbar:
+
+            # First we will get everything that's cached in a single big query
+            post = {
+                      "token": token,
+                      "query_ids": ids.tolist()
+                    }
+            resp = self.session.post(url + '?cache_only=1', json=post)
+            resp.raise_for_status()
+
+            # Parse response
+            centroids = {int(k): v for k, v in resp.json().items()}
+
+            # Filter to remaining IDs
+            to_fetch = ids[~np.isin(ids, list(centroids))]
+
+            # Update progress bar
+            pbar.update(len(centroids))
+
+            # Now go over the remaining indices in chunks
+            for i in range(0, len(to_fetch), int(chunksize)):
+                this_chunk = to_fetch[i:i+chunksize]
+                post = {
+                          "token": token,
+                          "query_ids": this_chunk.tolist()
+                        }
+
+                resp = self.session.post(url, json=post)
+                resp.raise_for_status()
+
+                # Parse response
+                data = resp.json()
+
+                # IDs will have been returned as strings
+                centroids.update({int(k): v for k, v in data.items()})
+
+                pbar.update(len(this_chunk))
+
+        if not as_array:
+            return centroids
+
+        centroids = np.array([centroids.get(i, [0, 0, 0]) for i in ids])
+
+        return centroids
 
 
 class SynapseService(SpineService):
@@ -655,3 +749,4 @@ def query_spine_transform(x, dataset, query, coordinates='nm', mip=2,
 
 synapses = SynapseService()
 transform = TransformService()
+flycache = FlyCacheService()
