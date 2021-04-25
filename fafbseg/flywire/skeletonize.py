@@ -36,27 +36,37 @@ except BaseException:
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
 
-def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
-                       dataset='production', progress=True):
-    """Skeletonize flywire neuron.
+def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
+                       assert_id_match=False, dataset='production',
+                       progress=True, **kwargs):
+    """Skeletonize FlyWire neuron.
+
+    Note that this is optimized to be primarily fast which comes at the cost
+    of (some) quality.
 
     Parameters
     ----------
     x  :                 int | trimesh.TriMesh | list thereof
-                         ID(s) or trimesh of the flywire neuron(s) you want to
+                         ID(s) or trimesh of the FlyWire neuron(s) you want to
                          skeletonize.
+    shave_skeleton :     bool
+                         If True, we will "shave" the skeleton by removing all
+                         single-node terminal twigs. This should get rid of
+                         hairs on the backbone that can occur if the neurites
+                         are very big.
     remove_soma_hairball : bool
                          If True, we will try to drop the hairball that is
-                         typically created inside the soma. Note while this
+                         typically created inside the soma. Note that while this
                          should work just fine for 99% of neurons, it's not very
                          smart and there is always a chance that we remove stuff
-                         that should not have been removed.
+                         that should not have been removed. Also only works if
+                         the neuron has a recognizable soma.
     assert_id_match :    bool
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into
                          the segment. This is potentially very slow!
     dataset :            str | CloudVolume
-                         Against which flywire dataset to query::
+                         Against which FlyWire dataset to query::
                            - "production" (current production dataset, fly_v31)
                            - "sandbox" (i.e. fly_v26)
     progress :           bool
@@ -93,7 +103,8 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
                                                     progress=False,
                                                     remove_soma_hairball=remove_soma_hairball,
                                                     assert_id_match=assert_id_match,
-                                                    dataset=dataset)
+                                                    dataset=dataset,
+                                                    **kwargs)
                                  for n in navis.config.tqdm(x,
                                                             desc='Skeletonizing',
                                                             disable=not progress,
@@ -113,12 +124,14 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
 
     mesh = sk.utilities.make_trimesh(mesh, validate=False)
 
-    # Validate before we detect the soma verts
+    # Fix things before we skeletonize
     # This also drops fluff
     mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=10)
 
     # Skeletonize
-    s = sk.skeletonize.by_wavefront(mesh, waves=1, step_size=1, progress=progress)
+    defaults = dict(waves=1, step_size=1)
+    defaults.update(kwargs)
+    s = sk.skeletonize.by_wavefront(mesh, progress=progress, **defaults)
 
     # Skeletor indexes node IDs at zero but to avoid potential issues we want
     # node IDs to start at 1
