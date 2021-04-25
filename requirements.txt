@@ -13,6 +13,6 @@ pyperclip
 python-catmaid>=2.0.2
 requests
 requests-futures
-skeletor
+skeletor>=1.0.0
 trimesh
 tqdm
