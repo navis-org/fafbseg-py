@@ -133,6 +133,19 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
     # Turn into a neuron
     tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
 
+    if shave_skeleton:
+        # Get branch points
+        bp = tn.nodes.loc[tn.nodes.type == 'branch', 'node_id'].values
+
+        # Get single-node twigs
+        is_end = tn.nodes.type == 'end'
+        parent_is_bp = tn.nodes.parent_id.isin(bp)
+        twigs = tn.nodes.loc[is_end & parent_is_bp, 'node_id'].values
+
+        # Drop terminal twigs
+        tn._nodes = tn.nodes.loc[~tn.nodes.node_id.isin(twigs)].copy()
+        tn._clear_temp_attr()
+
     # See if we can find a soma
     soma = detect_soma_skeleton(tn, min_rad=800, N=3)
     if soma:
@@ -146,11 +159,14 @@ def skeletonize_neuron(x, remove_soma_hairball=False, assert_id_match=False,
 
             # Find all nodes within 2x the soma radius
             tree = navis.neuron2KDTree(tn)
-            res = tree.query_ball_point(soma[['x', 'y', 'z']].values,
-                                        max(3000, soma.radius * 2))
+            ix = tree.query_ball_point(soma[['x', 'y', 'z']].values,
+                                       max(4000, soma.radius * 2))
+
+            # Translate indices into node IDs
+            ids = tn.nodes.iloc[ix].node_id.values
 
             # Find segments that contain these nodes
-            segs = [s for s in tn.segments if any(np.isin(res, s))]
+            segs = [s for s in tn.segments if any(np.isin(ids, s))]
 
             # Sort segs by length
             segs = sorted(segs, key=lambda x: len(x))
@@ -203,10 +219,11 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
         rad = np.array([radii[s] for s in seg])
         is_big = np.where(rad > min_rad)[0]
 
+        # Skip if no above-threshold radii in this segment
         if not any(is_big):
             continue
 
-        # Find stretches for consectutively big values
+        # Find stretches of consectutive above-threshold radii
         for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0]+1):
             if len(stretch) < N:
                 continue
@@ -306,7 +323,7 @@ def divide_local_neighbourhood(mesh, radius):
 
 
 def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
-    """Work in progress. Skeletonization on parallel cores.
+    """Skeletonization on parallel cores [WIP].
 
     Parameters
     ----------
