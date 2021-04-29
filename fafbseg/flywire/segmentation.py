@@ -31,7 +31,7 @@ from scipy import ndimage
 from .. import spine
 from .. import xform
 
-from .utils import parse_volume, FLYWIRE_DATASETS
+from .utils import parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret
 
 try:
     import skeletor as sk
@@ -164,7 +164,8 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
 
     session = requests.Session()
     future_session = FuturesSession(session=session, max_workers=max_threads)
-    token = cv.secrets.chunkedgraph_credentials['token']
+
+    token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
 
     futures = []
@@ -621,7 +622,7 @@ def is_latest_root(id, dataset='production', **kwargs):
     id = navis.utils.make_iterable(id).astype(str)
 
     session = requests.Session()
-    token = cv.secrets.chunkedgraph_credentials['token']
+    token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
 
     url = f'https://prodv1.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'

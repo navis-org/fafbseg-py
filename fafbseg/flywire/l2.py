@@ -31,7 +31,7 @@ import trimesh as tm
 from annotationframeworkclient import FrameworkClient
 from concurrent.futures import ThreadPoolExecutor
 
-from .utils import parse_volume
+from .utils import parse_volume, get_chunkedgraph_secret
 from .. import spine
 
 __all__ = ['l2_skeleton']
@@ -140,7 +140,9 @@ def l2_skeleton(root_id, refine=False, drop_missing=True,
 
     if refine:
         if use_flycache:
+            token = get_chunkedgraph_secret()
             centroids = spine.flycache.get_L2_centroids(l2_ids,
+                                                        token=token,
                                                         progress=progress)
 
             # Drop missing (i.e. [0,0,0]) meshes

@@ -367,7 +367,7 @@ def decode_url(url, ret='brief'):
 
     if 'json_url' in query:
         # Fetch state
-        token = cv.secrets.chunkedgraph_credentials['token']
+        token = utils.get_chunkedgraph_secret()
         r = requests.get(query['json_url'][0], headers={'Authorization': f"Bearer {token}"})
         r.raise_for_status()
 
@@ -411,11 +411,7 @@ def shorten_url(scene, refresh_session=False):
     if not session or refresh_session:
         session = requests.Session()
         # Load token
-        if not cv.secrets.chunkedgraph_credentials:
-            raise ValueError('No chunkedgraph secret found. Please see '
-                             'fafbseg.flywire.set_chunkedgraph_secret to set your '
-                             'secret.')
-        token = cv.secrets.chunkedgraph_credentials['token']
+        token = utils.get_chunkedgraph_secret()
 
         # Generate header and cookie
         auth_header = {"Authorization": f"Bearer {token}"}

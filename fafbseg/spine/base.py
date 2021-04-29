@@ -119,7 +119,7 @@ class FlyCacheService(SpineService):
         """Init class."""
         self.base_url = base_url
 
-    def get_L2_centroids(self, ids, token=None, as_array=False, chunksize=50,
+    def get_L2_centroids(self, ids, token, as_array=False, chunksize=50,
                          progress=True):
         """Fetch centroids of given l2 chunks.
 
@@ -129,9 +129,8 @@ class FlyCacheService(SpineService):
         ---------
         ids :           iterable
                         Iterable with L2 IDs.
-        token :         str, optional
-                        A ChunkedGraph auth token. If not provided will try to
-                        get it via cloudvolume.
+        token :         str
+                        A ChunkedGraph/CAVE auth token.
         as_array :      bool
                         Determines output (see Returns).
         chunksize :     int
@@ -149,9 +148,6 @@ class FlyCacheService(SpineService):
                         centroid `{L2_ID: [x, y, z], ..}`.
 
         """
-        if not token:
-            token = cv.secrets.chunkedgraph_credentials['token']
-
         url = self.makeurl('mesh/l2_centroid/flywire_fafb_production/')
 
         # Make sure we have an array of integers

@@ -23,7 +23,7 @@ be issued with a new token and _any old token will be void_.
 Saving the secret
 -----------------
 Your token must then be must be saved in a file in
-``~/.cloudvolume/secrets/chunkedgraph-secret.json``. That file needs to look
+``~/.cloudvolume/secrets/prodv1.flywire-daf.com-cave-secret.json``. That file needs to look
 something like this:
 
 .. code-block:: bat

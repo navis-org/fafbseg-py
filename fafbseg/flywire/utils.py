@@ -26,14 +26,47 @@ import numpy as np
 from .. import utils
 
 
-__all__ = ['set_chunkedgraph_secret']
+__all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26'}
 
 
-def set_chunkedgraph_secret(token, filepath=None):
-    """Set chunked graph secret.
+def get_chunkedgraph_secret(domain='prodv1.flywire-daf.com'):
+    """Get chunked graph secret.
+
+    Parameters
+    ----------
+    domain :    str
+                Domain to get the secret for. Only relevant for
+                ``cloudvolume>=3.11.0``.
+
+    Returns
+    -------
+    token :     str
+
+    """
+    if hasattr(cv.secrets, 'cave_credentials'):
+        token = cv.secrets.cave_credentials('prodv1.flywire-daf.com'
+                                            ).get('token', None)
+        if not token:
+            raise ValueError(f'No chunkedgraph secret for domain {domain} '
+                             'found. Please see '
+                             'fafbseg.flywire.set_chunkedgraph_secret to set '
+                             'your secret.')
+    else:
+        try:
+            token = cv.secrets.chunkedgraph_credentials['token']
+        except BaseException:
+            raise ValueError('No chunkedgraph secret found. Please see '
+                             'fafbseg.flywire.set_chunkedgraph_secret to set your '
+                             'secret.')
+    return token
+
+
+def set_chunkedgraph_secret(token, filepath=None,
+                            domain='prodv1.flywire-daf.com'):
+    """Set chunked graph secret (called "cave credentials" now).
 
     Parameters
     ----------
@@ -42,15 +75,17 @@ def set_chunkedgraph_secret(token, filepath=None):
                 https://globalv1.flywire-daf.com/auth/api/v1/refresh_token
     filepath :  str filepath
                 Path to secret file. If not provided will store in default path:
-                ``~/.cloudvolume/secrets/chunkedgraph-secret.json``
+                ``~/.cloudvolume/secrets/{domain}-cave-secret.json``
+    domain :    str
+                The domain (incl subdomain) this secret is for.
 
     """
     assert isinstance(token, str), f'Token must be string, got "{type(token)}"'
 
     if not filepath:
-        filepath = '~/.cloudvolume/secrets/chunkedgraph-secret.json'
+        filepath = f'~/.cloudvolume/secrets/{domain}-cave-secret.json'
     elif not filepath.endswith('/chunkedgraph-secret.json'):
-        filepath = f'{filepath}/chunkedgraph-secret.json'
+        filepath = os.path.join(filepath, f'{domain}-cave-secret.json')
     elif not filepath.endswith('.json'):
         filepath = f'{filepath}.json'
 
@@ -113,8 +148,12 @@ def parse_volume(vol, **kwargs):
 
             # Below is supposedly the "old" api (/1.0/)
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
-            # This is the new url (/table/)
+
+            # This is the new url
             vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/table/{vol}'
+
+            # This might eventually become the new url
+            # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation_proc/table/{vol}'
 
         if not vol.startswith('graphene://'):
             vol = f'graphene://{vol}'
