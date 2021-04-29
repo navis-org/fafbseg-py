@@ -37,6 +37,52 @@ from .. import spine
 __all__ = ['l2_skeleton']
 
 
+def l2_graph(root_id, progress=True, dataset='production'):
+    """Fetch L2 graph(s).
+
+    Parameters
+    ----------
+    root_id  :          int | list of ints
+                        FlyWire root ID(s) for which to fetch the L2 graphs.
+
+    Returns
+    -------
+    networkx.Graph
+                        The L2 graph.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> n = flywire.l2_graph(720575940614131061)
+
+    """
+    if navis.utils.is_iterable(root_id):
+        graphs = []
+        for id in navis.config.tqdm(root_id, desc='Fetching',
+                                    disable=not progress, leave=False):
+            n = l2_graph(id, dataset=dataset)
+            graphs.append(n)
+        return graphs
+
+    # Hard-coded datastack names
+    ds = {"production": "flywire_fafb_production",
+          "sandbox": "flywire_fafb_sandbox"}
+    # Note that the default server url is https://global.daf-apis.com/info/
+    client = FrameworkClient(ds.get(dataset, dataset))
+
+    # Load the L2 graph for given root ID
+    # This is a (N,2) array of edges
+    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_id))
+
+    # Drop duplicate edges
+    l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
+
+    G = nx.Graph()
+    G.add_edges_from(l2_eg)
+
+    return G
+
+
 def l2_skeleton(root_id, refine=False, drop_missing=True,
                 threads=10, progress=True, dataset='production', **kwargs):
     """Generate skeleton from L2 graph.
