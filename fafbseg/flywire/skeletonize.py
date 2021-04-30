@@ -163,11 +163,11 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
         if remove_soma_hairball:
             soma = tn.nodes.set_index('node_id').loc[soma]
+            soma_loc = soma[['x', 'y', 'z']].values
 
             # Find all nodes within 2x the soma radius
             tree = navis.neuron2KDTree(tn)
-            ix = tree.query_ball_point(soma[['x', 'y', 'z']].values,
-                                       max(4000, soma.radius * 2))
+            ix = tree.query_ball_point(soma_loc, max(4000, soma.radius * 2))
 
             # Translate indices into node IDs
             ids = tn.nodes.iloc[ix].node_id.values
@@ -180,7 +180,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
             # Keep only the longest segment in that initial list
             to_drop = np.array([n for s in segs[:-1] for n in s])
-            to_drop = to_drop[~np.isin(to_drop, segs[-1])]
+            to_drop = to_drop[~np.isin(to_drop, segs[-1] + [soma.name])]
 
             navis.remove_nodes(tn, to_drop, inplace=True)
 
