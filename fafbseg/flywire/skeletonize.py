@@ -21,17 +21,12 @@ import requests
 import multiprocessing as mp
 import networkx as nx
 import numpy as np
+import skeletor as sk
 import trimesh as tm
 
 from .segmentation import snap_to_id
 from .utils import parse_volume
 
-try:
-    import skeletor as sk
-except ImportError:
-    sk = None
-except BaseException:
-    raise
 
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
@@ -86,11 +81,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> tn, simp, cntr = flywire.skeletonize_neuron(720575940614131061)
+    >>> n = flywire.skeletonize_neuron(720575940614131061)
 
     """
-    if not sk:
-        raise ImportError('Must install skeletor: pip3 install skeletor')
 
     if int(sk.__version__.split('.')[0]) < 1:
         raise ImportError('Please update skeletor to version >= 1.0.0: '
@@ -117,7 +110,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         id = int(x)
 
         # Download the mesh
-        mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
+        mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False,
+                            remove_duplicate_vertices=True)[id]
     else:
         mesh = x
         id = getattr(mesh, 'segid', 0)
@@ -126,7 +120,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
     # Fix things before we skeletonize
     # This also drops fluff
-    mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=10)
+    mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=100)
 
     # Skeletonize
     defaults = dict(waves=1, step_size=1)
