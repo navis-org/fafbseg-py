@@ -90,7 +90,7 @@ class SpineTransform(BaseTransform):
         """Return copy."""
         return SpineTransform(self.fw_dataset,
                               self.inv_dataset,
-                              direction=self.new_direction,
+                              direction=self.direction,
                               mip=self.mip,
                               coordinates=self.coordinates,
                               on_fail=self.on_fail)
