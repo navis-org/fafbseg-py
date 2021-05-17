@@ -19,6 +19,7 @@ from .. import xform
 from ..move import merge_into_catmaid
 
 from .skeletonize import skeletonize_neuron
+from .utils import parse_volume
 
 try:
     import skeletor as sk
