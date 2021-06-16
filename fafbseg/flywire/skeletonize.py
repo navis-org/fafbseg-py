@@ -17,6 +17,7 @@ import navis
 import numbers
 import os
 import requests
+import inspect
 
 import multiprocessing as mp
 import networkx as nx
@@ -329,14 +330,14 @@ def divide_local_neighbourhood(mesh, radius):
         not_seen -= nodes
 
 
-def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
+def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
     """Skeletonization on parallel cores [WIP].
 
     Parameters
     ----------
     ids :       iterable
                 Root IDs of neurons you want to skeletonize.
-    cores :     int
+    n_cores :   int
                 Number of cores to use. Don't go too crazy on this as the
                 downloading of meshes becomes a bottle neck if you try to do
                 too many at the same time. Keep your internet speed in
@@ -349,8 +350,14 @@ def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
     navis.NeuronList
 
     """
-    if cores < 2 or cores > os.cpu_count():
-        raise ValueError('`cores` must be between 2 and max number of cores.')
+    if n_cores < 2 or n_cores > os.cpu_count():
+        raise ValueError('`n_cores` must be between 2 and max number of cores.')
+
+    sig = inspect.signature(skeletonize_neuron)
+    for k in kwargs:
+        if k not in sig.parameters:
+            raise ValueError('unexpected keyword argument for '
+                             f'`skeletonize_neuron`: {k}')
 
     # Make sure IDs are all integers
     ids = np.asarray(ids).astype(int)
@@ -362,7 +369,7 @@ def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
 
     # Run the actual skeletonization
-    with mp.Pool(cores) as pool:
+    with mp.Pool(n_cores) as pool:
         chunksize = 1
         res = list(navis.config.tqdm(pool.imap(_worker_wrapper,
                                                combinations,
@@ -373,7 +380,7 @@ def skeletonize_neuron_parallel(ids, cores=os.cpu_count() // 2, **kwargs):
                                      leave=True))
 
     # Check if any skeletonizations failed
-    failed = np.array([r for r in res if isinstance(r, int)]).astype(str)
+    failed = np.array([r for r in res if not isinstance(r, navis.TreeNeuron)]).astype(str)
     if any(failed):
         print(f'{len(failed)} neurons failed to skeletonize: '
               f'{". ".join(failed)}')
