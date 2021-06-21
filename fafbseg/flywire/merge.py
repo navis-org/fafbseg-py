@@ -33,25 +33,32 @@ __all__ = ['merge_flywire_neuron']
 
 def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
                          assert_id_match=True, drop_soma_hairball=True, **kwargs):
-    """Merge flywire neuron into FAFB.
+    """Merge FlyWire neuron into FAFB CATMAID.
 
-    This function (1) fetches a mesh from flywire, (2) turns it into a skeleton,
-    (3) maps the coordinates to FAFB 14 and (4) runs ``fafbseg.merge_neuron``
-    to merge the skeleton into CATMAID. See Examples below on how to run these
-    individual steps yourself if you want more control over e.g. how the mesh
-    is skeletonized.
+    This function (1) fetches a mesh from FlyWire, (2) turns it into a skeleton,
+    (3) maps the coordinates to FAFB v14 space and (4) runs
+    ``fafbseg.merge_neuron`` to merge the skeleton into CATMAID.
+
+    Disclaimer:
+
+     1. It is your responsibility to make sure that your export of FlyWire data
+        does not conflict with the FlyWire community guidelines. Mass export of
+        reconstructions is not OK!
+     2. As with all imports to CATMAID, the importing user is responsible for
+        the quality of the imported skeleton and to make sure no existing
+        tracings (including annotations) are negatively impacted.
 
     Parameters
     ----------
     id  :                int
-                         ID of the flywire neuron you want to merge.
+                         ID of the FlyWire neuron you want to merge.
     target_instance :    pymaid.CatmaidInstance
                          Instance to merge the neuron into into.
     tag :                str
                          You personal tag to add as annotation once import into
                          CATMAID is complete.
     dataset :            str | CloudVolume
-                         Against which flywire dataset to query::
+                         Against which FlyWire dataset to query::
                             - "production" (current production dataset, fly_v31)
                             - "sandbox" (i.e. fly_v26)
     assert_id_match :    bool
@@ -66,11 +73,11 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
 
     Examples
     --------
-    # Import flywire neuron
-    >>> _ = merge_flywire_neuron(id=720575940610453042,
-    ...                          cvpath='graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v26',
-    ...                          target_instance=manual,
-    ...                          tag='WTCam')
+    Import a FlyWire neuron:
+
+    >>> _ = fafbseg.flywire.merge_flywire_neuron(id=720575940610453042,
+    ...                                          target_instance=manual,
+    ...                                          tag='WTCam')
 
     """
     if not sk:
@@ -85,10 +92,10 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
 
     # Convert to neuron
-    n_fw, simp, cntr = skeletonize_neuron(mesh,
-                                          drop_soma_hairball=drop_soma_hairball,
-                                          dataset=flywire_dataset,
-                                          assert_id_match=assert_id_match)
+    n_fw = skeletonize_neuron(mesh,
+                              remove_soma_hairball=drop_soma_hairball,
+                              dataset=flywire_dataset,
+                              assert_id_match=assert_id_match)
 
     # Confirm
     viewer = navis.Viewer(title='Confirm skeletonization')
@@ -99,7 +106,7 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     viewer.add(n_fw, color='r')
 
     msg = """
-    Please carefully inspect the skeletonization of the flywire mesh.
+    Please carefully inspect the skeletonization of the FlyWire neuron.
     Hit ENTER to proceed if happy or CTRL-C to cancel.
     """
 
