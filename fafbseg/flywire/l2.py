@@ -32,7 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .utils import parse_volume, get_cave_client
 
-__all__ = ['l2_skeleton', 'l2_graph']
+__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph']
 
 
 def l2_graph(root_id, progress=True, dataset='production'):
@@ -90,19 +90,16 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
     refine :            bool
                         If True, will refine skeleton nodes by moving them in
                         the center of their corresponding chunk meshes.
-
-    Only relevant if ``refine=True``:
-
     drop_missing :      bool
-                        If True, will drop nodes that don't have a corresponding
-                        chunk mesh. These are typically chunks that are very
-                        small and dropping them might actually be benefitial.
-    threads :           int
-                        How many parallel threads to use for fetching the
-                        chunk meshes. Reduce the number if you run into
-                        ``HTTPErrors``. Only relevant if `use_flycache=False`.
+                        Only relevant if ``refine=True``: if True, will drop
+                        nodes that don't have a corresponding chunk mesh. These
+                        are typically chunks that are either very small or very
+                        new.
     progress :          bool
                         Whether to show a progress bar.
+    **kwargs
+                        Keyword arguments are passed through to Dotprops
+                        initialization. Use to e.g. set extra properties.
 
     Returns
     -------
@@ -124,7 +121,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
         for id in navis.config.tqdm(root_id, desc='Skeletonizing',
                                     disable=not progress, leave=False):
             n = l2_skeleton(id, refine=refine, drop_missing=drop_missing,
-                            progress=progress, dataset=dataset)
+                            progress=progress, dataset=dataset, **kwargs)
             nl.append(n)
         return navis.NeuronList(nl)
 
@@ -183,15 +180,72 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
         swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
 
         # Turn into a proper neuron
-        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm')
+        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
 
         # Drop nodes that are still at their unrefined chunk position
         if drop_missing:
             tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
     else:
-        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm')
+        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
 
     return tn
+
+
+def l2_dotprops(root_id, progress=True, dataset='production', **kwargs):
+    """Generate dotprops from L2 chunks.
+
+    Parameters
+    ----------
+    root_id  :          int | list of ints
+                        Root ID(s) of the FlyWire neuron(s) you want to
+                        dotprops for.
+    progress :          bool
+                        Whether to show a progress bar.
+    **kwargs
+                        Keyword arguments are passed through to Dotprops
+                        initialization. Use to e.g. set extra properties.
+
+    Returns
+    -------
+    dps :               navis.Dotprops
+                        The extracted dotprops.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> n = flywire.l2_dotprops(720575940614131061)
+
+    """
+    # TODO:
+    # - add option to drop small chunks
+
+    if navis.utils.is_iterable(root_id):
+        nl = []
+        for id in navis.config.tqdm(root_id, desc='Dotpropping',
+                                    disable=not progress, leave=False):
+            n = l2_dotprops(id, progress=progress, dataset=dataset, **kwargs)
+            nl.append(n)
+        return navis.NeuronList(nl)
+
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
+
+    # Load the L2 graph for given root ID
+    # This is a (N,2) array of edges
+    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_id))
+
+    # Unique L2 IDs
+    l2_ids = np.unique(l2_eg)
+
+    # Get the L2 representative coordinates and vectors
+    l2_info = client.l2cache.get_l2data(l2_ids.tolist(),
+                                        attributes=['rep_coord_nm', 'pca'])
+
+    pts = np.vstack([v['rep_coord_nm'] for v in l2_info.values() if v])
+    vec = np.vstack([v['pca'][0] for v in l2_info.values() if v])
+
+    return navis.Dotprops(points=pts, vect=vec, id=root_id, k=None,
+                          units='1 nm', **kwargs)
 
 
 def get_L2_centroids(l2_ids, vol, threads=10, progress=True):

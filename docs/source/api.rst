@@ -24,6 +24,7 @@ Flywire segmentation
     fafbseg.flywire.fetch_edit_history
     fafbseg.flywire.fetch_leaderboard
     fafbseg.flywire.l2_graph
+    fafbseg.flywire.l2_dotprops
     fafbseg.flywire.l2_skeleton
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.skid_to_id
