@@ -23,12 +23,15 @@ Flywire segmentation
     fafbseg.flywire.decode_url
     fafbseg.flywire.fetch_edit_history
     fafbseg.flywire.fetch_leaderboard
+    fafbseg.flywire.l2_graph
+    fafbseg.flywire.l2_skeleton
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.skid_to_id
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
     fafbseg.flywire.get_mesh_neuron
     fafbseg.flywire.skeletonize_neuron
+    fafbseg.flywire.skeletonize_neuron_parallel
     fafbseg.flywire.generate_open_ends_url
     fafbseg.flywire.merge_flywire_neuron
 

@@ -17,6 +17,7 @@ import json
 import navis
 import os
 
+from caveclient import CAVEclient
 from pathlib import Path
 from importlib import reload
 
@@ -26,10 +27,45 @@ import numpy as np
 from .. import utils
 
 
-__all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret']
+__all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
+           'get_cave_client']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26'}
+
+CAVE_DATASETS = {'production': 'flywire_fafb_production',
+                 'sandbox': 'flywire_fafb_sandbox'}
+
+# Initialize without a volume
+fw_vol = None
+cave_clients = {}
+
+
+def get_cave_client(dataset='production', token=None, force_new=False):
+    """Get CAVE client.
+
+    Parameters
+    ----------
+    dataset :   str
+                Data set to create client for.
+    token :     str, optional
+                Your chunked graph secret (i.e. "CAVE secret"). If not provided
+                will try reading via cloud-volume.
+
+    Returns
+    -------
+    CAVEclient
+
+    """
+    if not token:
+        token = get_chunkedgraph_secret()
+
+    datastack = CAVE_DATASETS.get(dataset, dataset)
+
+    if datastack not in cave_clients or force_new:
+        cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
+
+    return cave_clients[datastack]
 
 
 def get_chunkedgraph_secret(domain='prodv1.flywire-daf.com'):
@@ -179,7 +215,3 @@ def parse_volume(vol, **kwargs):
     else:
         fw_vol = vol
     return fw_vol
-
-
-# Initialize without a volume
-fw_vol = None

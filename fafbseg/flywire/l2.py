@@ -28,13 +28,11 @@ import numpy as np
 import skeletor as sk
 import trimesh as tm
 
-from annotationframeworkclient import FrameworkClient
 from concurrent.futures import ThreadPoolExecutor
 
-from .utils import parse_volume, get_chunkedgraph_secret
-from .. import spine
+from .utils import parse_volume, get_cave_client
 
-__all__ = ['l2_skeleton']
+__all__ = ['l2_skeleton', 'l2_graph']
 
 
 def l2_graph(root_id, progress=True, dataset='production'):
@@ -64,11 +62,8 @@ def l2_graph(root_id, progress=True, dataset='production'):
             graphs.append(n)
         return graphs
 
-    # Hard-coded datastack names
-    ds = {"production": "flywire_fafb_production",
-          "sandbox": "flywire_fafb_sandbox"}
-    # Note that the default server url is https://global.daf-apis.com/info/
-    client = FrameworkClient(ds.get(dataset, dataset))
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
 
     # Load the L2 graph for given root ID
     # This is a (N,2) array of edges
@@ -83,14 +78,14 @@ def l2_graph(root_id, progress=True, dataset='production'):
     return G
 
 
-def l2_skeleton(root_id, refine=False, drop_missing=True,
-                threads=10, progress=True, dataset='production', **kwargs):
+def l2_skeleton(root_id, refine=True, drop_missing=True,
+                progress=True, dataset='production', **kwargs):
     """Generate skeleton from L2 graph.
 
     Parameters
     ----------
     root_id  :          int | list of ints
-                        Root ID(s) of the flywire neuron(s) you want to
+                        Root ID(s) of the FlyWire neuron(s) you want to
                         skeletonize.
     refine :            bool
                         If True, will refine skeleton nodes by moving them in
@@ -124,29 +119,20 @@ def l2_skeleton(root_id, refine=False, drop_missing=True,
     # - drop duplicate nodes in unrefined skeleton
     # - use L2 graph to find soma: highest degree is typically the soma
 
-    use_flycache = kwargs.get('use_flycache', False)
-
-    if refine and use_flycache and dataset != 'production':
-        raise ValueError('Unable to use fly cache to fetch L2 centroids for '
-                         'sandbox dataset. Please set `use_flycache=False`.')
-
     if navis.utils.is_iterable(root_id):
         nl = []
         for id in navis.config.tqdm(root_id, desc='Skeletonizing',
                                     disable=not progress, leave=False):
             n = l2_skeleton(id, refine=refine, drop_missing=drop_missing,
-                            threads=threads, progress=progress, dataset=dataset)
+                            progress=progress, dataset=dataset)
             nl.append(n)
         return navis.NeuronList(nl)
 
     # Get the cloudvolume
     vol = parse_volume(dataset)
 
-    # Hard-coded datastack names
-    ds = {"production": "flywire_fafb_production",
-          "sandbox": "flywire_fafb_sandbox"}
-    # Note that the default server url is https://global.daf-apis.com/info/
-    client = FrameworkClient(ds.get(dataset, dataset))
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
 
     # Load the L2 graph for given root ID
     # This is a (N,2) array of edges
@@ -185,19 +171,10 @@ def l2_skeleton(root_id, refine=False, drop_missing=True,
     swc[['x', 'y', 'z']] = chunks_to_nm(xyz, vol) + ch_dims / 2
 
     if refine:
-        if use_flycache:
-            token = get_chunkedgraph_secret()
-            centroids = spine.flycache.get_L2_centroids(l2_ids,
-                                                        token=token,
-                                                        progress=progress)
-
-            # Drop missing (i.e. [0,0,0]) meshes
-            centroids = {k: v for k, v in centroids.items() if v != [0, 0, 0]}
-        else:
-            # Get the centroids
-            centroids = get_L2_centroids(l2_ids, vol, threads=threads, progress=progress)
-
-        new_co = {l2dict[k]: v for k, v in centroids.items()}
+        # Get the L2 representative coordinates
+        l2_info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm'])
+        # Missing L2 chunks will be {'id': {}}
+        new_co = {l2dict[int(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
 
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
