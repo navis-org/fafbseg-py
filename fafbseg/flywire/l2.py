@@ -191,24 +191,33 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
     return tn
 
 
-def l2_dotprops(root_id, progress=True, dataset='production', **kwargs):
+def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
+                dataset='production', **kwargs):
     """Generate dotprops from L2 chunks.
 
     Parameters
     ----------
-    root_id  :          int | list of ints
+    root_ids  :         int | list of ints
                         Root ID(s) of the FlyWire neuron(s) you want to
                         dotprops for.
+    min_size :          int, optional
+                        Minimum size (in nm^3) for the L2 chunks. Smaller chunks
+                        will be ignored. This is useful to de-emphasise the
+                        finer terminal neurites which typically break into more,
+                        smaller chunks and are hence overrepresented. A good
+                        value appears to be around 1,000,000.
     progress :          bool
                         Whether to show a progress bar.
+    max_threads :       int
+                        Number of parallel requests to make.
     **kwargs
                         Keyword arguments are passed through to Dotprops
                         initialization. Use to e.g. set extra properties.
 
     Returns
     -------
-    dps :               navis.Dotprops
-                        The extracted dotprops.
+    dps :               navis.NeuronList
+                        List of Dotprops.
 
     Examples
     --------
@@ -216,39 +225,75 @@ def l2_dotprops(root_id, progress=True, dataset='production', **kwargs):
     >>> n = flywire.l2_dotprops(720575940614131061)
 
     """
-    # TODO:
-    # - add option to drop small chunks
-
-    if navis.utils.is_iterable(root_id):
-        nl = []
-        for id in navis.config.tqdm(root_id, desc='Dotpropping',
-                                    disable=not progress, leave=False):
-            n = l2_dotprops(id, progress=progress, dataset=dataset, **kwargs)
-            nl.append(n)
-        return navis.NeuronList(nl)
+    if not navis.utils.is_iterable(root_ids):
+        root_ids = [root_ids]
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
-    # Load the L2 graph for given root ID
-    # This is a (N,2) array of edges
-    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_id))
+    # Load the L2 IDs
+    # Note that we are using the L2 graph endpoint as I have not yet found a
+    # faster way to query the IDs.
+    with ThreadPoolExecutor(max_workers=max_threads) as pool:
+        futures = pool.map(client.chunkedgraph.level2_chunk_graph, root_ids)
+        l2_eg = [f for f in navis.config.tqdm(futures,
+                                              desc='Fetching L2 IDs',
+                                              total=len(root_ids),
+                                              disable=not progress,
+                                              leave=False)]
 
-    # Unique L2 IDs
-    l2_ids = np.unique(l2_eg)
+    # Unique L2 IDs per root ID
+    l2_ids = [np.unique(g).astype(str) for g in l2_eg]
 
-    # Get the L2 representative coordinates and vectors
-    l2_info = client.l2cache.get_l2data(l2_ids.tolist(),
-                                        attributes=['rep_coord_nm', 'pca'])
+    # Flatten into a list of all L2 IDs
+    l2_ids_all = np.unique([i for l in l2_ids for i in l])
 
-    pts = np.vstack([v['rep_coord_nm'] for v in l2_info.values() if v])
-    vec = np.vstack([v['pca'][0] for v in l2_info.values() if v])
+    # Get the L2 representative coordinates, vectors and (if required) volume
+    chunk_size = 2000  # no. of L2 IDs per query (doesn't seem have big impact)
+    attributes = ['rep_coord_nm', 'pca']
+    if min_size:
+        attributes.append('size_nm3')
 
-    return navis.Dotprops(points=pts, vect=vec, id=root_id, k=None,
-                          units='1 nm', **kwargs)
+    l2_info = {}
+    with navis.config.tqdm(desc='Fetching vectors',
+                           disable=not progress,
+                           total=len(l2_ids_all),
+                           leave=False) as pbar:
+        for chunk_ix in np.arange(0, len(l2_ids_all), chunk_size):
+            chunk = l2_ids_all[chunk_ix: chunk_ix + chunk_size]
+            l2_info.update(client.l2cache.get_l2data(chunk.tolist(),
+                                                     attributes=attributes))
+            pbar.update(len(chunk))
+
+    # L2 chunks without info will show as empty dictionaries
+    # Let's drop them to make our life easier
+    l2_info_ids = [k for k, v in l2_info.items() if v]
+
+    # Generate dotprops
+    dps = []
+    for root, ids in zip(root_ids, l2_ids):
+        # Find out for which IDs we have info
+        ids = ids[np.isin(ids, l2_info_ids)]
+
+        # Get xyz points and the first component of the PCA as vector
+        pts = np.vstack([l2_info[i]['rep_coord_nm'] for i in ids])
+        vec = np.vstack([l2_info[i]['pca'][0] for i in ids])
+
+        # Apply min size filter if requested
+        if min_size:
+            sizes = np.array([l2_info[i]['size_nm3'] for i in ids])
+            pts = pts[sizes >= min_size]
+            vec = vec[sizes >= min_size]
+
+        # Generate the actual dotprops
+        dps.append(navis.Dotprops(points=pts, vect=vec, id=root, k=None,
+                                  units='1 nm', **kwargs))
+
+    return navis.NeuronList(dps)
 
 
 def get_L2_centroids(l2_ids, vol, threads=10, progress=True):
+    """Fetch L2 meshes and to compute centroid."""
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = [pool.submit(vol.mesh.get, i,
                                allow_missing=True,
@@ -306,11 +351,8 @@ def l2_soma(x, dataset='production', progress=True):
     # Get the cloudvolume
     vol = parse_volume(dataset)
 
-    # Hard-coded datastack names
-    ds = {"production": "flywire_fafb_production",
-          "sandbox": "flywire_fafb_sandbox"}
-    # Note that the default server url is https://global.daf-apis.com/info/
-    client = FrameworkClient(ds.get(dataset, dataset))
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
 
     if not isinstance(x, nx.Graph):
         # Load the L2 graph for given root ID
