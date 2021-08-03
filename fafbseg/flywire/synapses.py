@@ -197,6 +197,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
                 dist, ix = tree.query(connectors[['x', 'y', 'z']].values)
                 connectors['node_id'] = n.nodes.node_id.values[ix]
 
+            # Add an ID column for navis' sake
+            connectors.insert(0, 'connector_id', np.arange(connectors.shape[0]))
+
             n.connectors = connectors
 
     return syn
