@@ -109,7 +109,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     # If scene provided as str, decode into dictionary
     if isinstance(scene, str):
-        scene = decode_url(scene)
+        scene = decode_url(scene, ret='full')
     elif isinstance(scene, dict):
         # Do not modify original scene! We need to deepcopy here!
         scene = copy.deepcopy(scene)
