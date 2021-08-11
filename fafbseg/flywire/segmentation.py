@@ -540,7 +540,7 @@ def skid_to_id(x,
     pandas.DataFrame
                     Mapping of flywire IDs to skeleton IDs with confidence::
 
-                      flywire_id   skeleton_id   confidence
+                      skeleton_id   flywire_id   confidence
                     0
                     1
 
@@ -550,13 +550,21 @@ def skid_to_id(x,
     if not isinstance(x, (navis.TreeNeuron, navis.NeuronList)):
         x = pymaid.get_neuron(x)
 
+    if isinstance(x, navis.NeuronList) and len(x) == 1:
+        x = x[0]
+
     if isinstance(x, navis.TreeNeuron):
         nodes = x.nodes[['x', 'y', 'z']].copy()
         nodes['skeleton_id'] = x.id
     elif isinstance(x, navis.NeuronList):
-        nodes = x.nodes[['x', 'y', 'z']].copy()
+        res = []
+        for n in navis.config.tqdm(x, desc='Searching',
+                                   disable=not progress,
+                                   leave=False):
+            res.append(skid_to_id(n, dataset=dataset))
+        return pd.concat(res, axis=0)
     else:
-        raise TypeError(f'Unable to data of type "{type(x)}"')
+        raise TypeError(f'Unable to use data of type "{type(x)}"')
 
     # XForm coordinates from FAFB14 to FAFB14.1
     xformed = xform.fafb14_to_flywire(nodes[['x', 'y', 'z']].values,
@@ -574,7 +582,7 @@ def skid_to_id(x,
     # Get sorted indices
     sort_ix = np.argsort(counts)
 
-    # New Id is the most frequent ID
+    # The "correct" ID is assumed to be the frequent ID
     new_id = unique[sort_ix[-1]]
 
     # Confidence is the difference between the top and the 2nd most frequent ID
@@ -584,8 +592,8 @@ def skid_to_id(x,
     else:
         conf = 1
 
-    return pd.DataFrame([[x.id, new_id, conf, x.id != new_id]],
-                        columns=['old_id', 'new_id', 'confidence', 'changed'])
+    return pd.DataFrame([[x.id, new_id, conf]],
+                        columns=['skeleton_id', 'flywire_id', 'confidence'])
 
 
 def is_latest_root(id, dataset='production', **kwargs):
