@@ -21,14 +21,12 @@ import requests
 import uuid
 import webbrowser
 
-import cloudvolume as cv
 import matplotlib.colors as mcl
 import numpy as np
 import pandas as pd
 
 from urllib.parse import urlparse, parse_qs, quote
 
-from .. import xform
 from . import utils
 
 __all__ = ['decode_url', 'encode_url']
@@ -66,27 +64,29 @@ session = None
 
 
 def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
-               seg_colors=None, dataset='production', scene=None,
+               seg_colors=None, invis_segs=None, dataset='production', scene=None,
                open_browser=False, to_clipboard=False, short=True):
     """Encode data as flywire neuroglancer scene.
 
     Parameters
     ----------
-    segments :      int | list of int
+    segments :      int | list of int, optional
                     Segment IDs to have selected.
-    annotations :   (N, 3) array
+    annotations :   (N, 3) array, optional
                     2d of xyz coordinates that will be added as annotation
                     layer. If you need more control over this, see
                     :func:`fafbseg.flywire.add_annotation_layer`.
-    coords :        (3, ) array
+    coords :        (3, ) array, optional
                     (X, Y, Z) voxel coordinates to center on.
     skeletons :     navis.TreeNeuron | navis.CatmaidNeuron | NeuronList
                     Skeleton(s) to add as annotation layer(s).
-    seg_colors :    list | dict
+    seg_colors :    list | dict, optional
                     List or dictionary mapping colors to ``segments``.
+    invis_segs :    int | list, optional
+                    Selected but invisible segments.
     dataset :       'production' | 'sandbox'
                     Segmentation dataset to use.
-    scene :         dict | str
+    scene :         dict | str, optional
                     If you want to edit an existing scene, provide it either
                     as already decoded dictionary or as string that can be
                     interpreted by :func:`fafbseg.flywire.decode_url`.
@@ -142,36 +142,41 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     # If provided, add segments
     if not isinstance(segments, type(None)):
-        if isinstance(segments, str):
-            if not segments.isnumeric():
-                raise ValueError(f'"{segments}" is not numeric.')
-            segments = [segments]
-        if isinstance(segments, int):
-            segments = [str(segments)]
-
-        # Segment IDs need to be strings
-        segments = np.asarray(segments).astype(str).tolist()
+        # Force to list and make strings
+        segments = navis.utils.make_iterable(segments, force_type=str).tolist()
 
         # Add to, not replace already selected segments
         present = scene['layers'][seg_layer_ix].get('segments', [])
         scene['layers'][seg_layer_ix]['segments'] = present + segments
 
-        # See if we need to assign colors
-        if not isinstance(seg_colors, type(None)):
-            if not isinstance(seg_colors, dict):
-                if not navis.utils.is_iterable(seg_colors):
-                    raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
-                if len(seg_colors) != len(segments):
-                    raise ValueError(f'Got {len(seg_colors)} colors for {len(segments)} segments.')
+    if not isinstance(invis_segs, type(None)):
+        # Force to list and make strings
+        invis_segs = navis.utils.make_iterable(invis_segs, force_type=str).tolist()
 
-                # Turn into dictionary
-                seg_colors = dict(zip(segments, seg_colors))
+        # Add to, not replace already selected segments
+        present = scene['layers'][seg_layer_ix].get('hiddenSegments', [])
+        scene['layers'][seg_layer_ix]['hiddenSegments'] = present + invis_segs
 
-            # Turn colors into hex
-            seg_colors = {s: mcl.to_hex(c) for s, c in seg_colors.items()}
+    # All present segments
+    seg_layer = scene['layers'][seg_layer_ix]
+    all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
 
-            # Assign colors
-            scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
+    # See if we need to assign colors
+    if not isinstance(seg_colors, type(None)):
+        if not isinstance(seg_colors, dict):
+            if not navis.utils.is_iterable(seg_colors):
+                raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
+            if len(seg_colors) != len(all_segs):
+                raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
+
+            # Turn into dictionary
+            seg_colors = dict(zip(all_segs, seg_colors))
+
+        # Turn colors into hex
+        seg_colors = {s: mcl.to_hex(c) for s, c in seg_colors.items()}
+
+        # Assign colors
+        scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
 
     # Set coordinates if provided
     if not isinstance(coords, type(None)):
