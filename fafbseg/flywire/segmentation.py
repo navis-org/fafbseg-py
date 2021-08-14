@@ -513,6 +513,7 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
 
 
 def skid_to_id(x,
+               sample=None,
                dataset='production',
                progress=True, **kwargs):
     """Find the flywire ID(s) corresponding to given CATMAID skeleton ID(s).
@@ -528,6 +529,10 @@ def skid_to_id(x,
     x :             int | list-like | str | TreeNeuron/List
                     Anything that's not a TreeNeuron/List will be passed
                     directly to ``pymaid.get_neuron``.
+    sample :        int | float, optional
+                    Number (>= 1) or fraction (< 1) of super nodes to sample
+                    to find flywire IDs. If ``None`` (default), will use all
+                    nodes.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -545,24 +550,26 @@ def skid_to_id(x,
                     1
 
     """
-    vol = parse_volume(dataset, **kwargs)
-
     if not isinstance(x, (navis.TreeNeuron, navis.NeuronList)):
         x = pymaid.get_neuron(x)
 
     if isinstance(x, navis.NeuronList) and len(x) == 1:
         x = x[0]
 
-    if isinstance(x, navis.TreeNeuron):
-        nodes = x.nodes[['x', 'y', 'z']].copy()
-        nodes['skeleton_id'] = x.id
-    elif isinstance(x, navis.NeuronList):
+    if isinstance(x, navis.NeuronList):
         res = []
         for n in navis.config.tqdm(x, desc='Searching',
                                    disable=not progress,
                                    leave=False):
             res.append(skid_to_id(n, dataset=dataset))
         return pd.concat(res, axis=0)
+    elif isinstance(x, navis.TreeNeuron):
+        nodes = x.nodes[['x', 'y', 'z']]
+        if sample:
+            if sample < 1:
+                nodes = nodes.sample(frac=sample, random_state=1985)
+            else:
+                nodes = nodes.sample(n=sample, random_state=1985)
     else:
         raise TypeError(f'Unable to use data of type "{type(x)}"')
 
@@ -571,7 +578,7 @@ def skid_to_id(x,
                                       coordinates='nm')
 
     # Get the root IDs for each of these locations
-    roots = locs_to_segments(xformed, coordinates='nm')
+    roots = locs_to_segments(xformed, coordinates='nm', dataset=dataset)
 
     # Drop zeros
     roots = roots[roots != 0]
@@ -582,7 +589,7 @@ def skid_to_id(x,
     # Get sorted indices
     sort_ix = np.argsort(counts)
 
-    # The "correct" ID is assumed to be the frequent ID
+    # The "correct" ID is assumed to be the most frequent ID
     new_id = unique[sort_ix[-1]]
 
     # Confidence is the difference between the top and the 2nd most frequent ID
