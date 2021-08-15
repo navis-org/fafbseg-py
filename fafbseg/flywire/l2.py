@@ -22,26 +22,100 @@ Heavily borrows from code from Casey Schneider-Mizell's "pcg_skel"
 
 import navis
 import fastremap
+import time
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 import skeletor as sk
 import trimesh as tm
 
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from .utils import parse_volume, get_cave_client
 
-__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph']
+__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info']
 
 
-def l2_graph(root_id, progress=True, dataset='production'):
+def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
+    """Fetch basic info for given neuron(s) using the L2 cache.
+
+    Parameters
+    ----------
+    root_ids  :         int | list of ints
+                        FlyWire root ID(s) for which to fetch L2 infos.
+    progress :          bool
+                        Whether to show a progress bar.
+    max_threads :       int
+                        Number of parallel requests to make.
+
+    Returns
+    -------
+    DataFrame
+                        Pandas DataFrame with basic info (see Examples).
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> info = flywire.l2_info(720575940614131061)
+    >>> info
+                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um
+    0  720575940614131061        286               2  2364.39616  132.467837     60.271
+
+    """
+    if navis.utils.is_iterable(root_ids):
+        info = []
+        with ThreadPoolExecutor(max_workers=max_threads) as pool:
+            func = retry_on_fail(partial(l2_info, dataset=dataset))
+            futures = pool.map(func, root_ids)
+            info = [f for f in navis.config.tqdm(futures,
+                                                 desc='Fetching L2 info',
+                                                 total=len(root_ids),
+                                                 disable=not progress or len(root_ids) == 1,
+                                                 leave=False)]
+        return pd.concat(info, axis=0)
+
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
+
+    l2_ids = client.chunkedgraph.get_leaves(root_ids, stop_layer=2)
+
+    attributes = ['area_nm2', 'size_nm3', 'max_dt_nm']
+    info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=attributes)
+    n_miss = len([v for v in info.values() if not v])
+
+    row = [root_ids, len(l2_ids), n_miss]
+    info_df = pd.DataFrame([row],
+                           columns=['root_id', 'l2_chunks', 'chunks_missing'])
+
+    # Collect L2 attributes
+    for at in attributes:
+        summed = sum([v.get(at, 0) for v in info.values()])
+        if at.endswith('3'):
+            summed /= 1000**3
+        elif at.endswith('2'):
+            summed /= 1000**2
+        else:
+            summed /= 1000
+
+        info_df[at.replace('_nm', '_um')] = [summed]
+
+    info_df.rename({'max_dt_um': 'length_um'},
+                   axis=1, inplace=True)
+
+    return info_df
+
+
+def l2_graph(root_ids, progress=True, dataset='production'):
     """Fetch L2 graph(s).
 
     Parameters
     ----------
-    root_id  :          int | list of ints
+    root_ids  :         int | list of ints
                         FlyWire root ID(s) for which to fetch the L2 graphs.
+    progress :          bool
+                        Whether to show a progress bar.
 
     Returns
     -------
@@ -54,9 +128,9 @@ def l2_graph(root_id, progress=True, dataset='production'):
     >>> n = flywire.l2_graph(720575940614131061)
 
     """
-    if navis.utils.is_iterable(root_id):
+    if navis.utils.is_iterable(root_ids):
         graphs = []
-        for id in navis.config.tqdm(root_id, desc='Fetching',
+        for id in navis.config.tqdm(root_ids, desc='Fetching',
                                     disable=not progress, leave=False):
             n = l2_graph(id, dataset=dataset)
             graphs.append(n)
@@ -67,7 +141,7 @@ def l2_graph(root_id, progress=True, dataset='production'):
 
     # Load the L2 graph for given root ID
     # This is a (N,2) array of edges
-    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_id))
+    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_ids))
 
     # Drop duplicate edges
     l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
@@ -239,7 +313,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
         l2_eg = [f for f in navis.config.tqdm(futures,
                                               desc='Fetching L2 IDs',
                                               total=len(root_ids),
-                                              disable=not progress,
+                                              disable=not progress or len(root_ids) == 1,
                                               leave=False)]
 
     # Unique L2 IDs per root ID
@@ -293,7 +367,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
 
 
 def get_L2_centroids(l2_ids, vol, threads=10, progress=True):
-    """Fetch L2 meshes and to compute centroid."""
+    """Fetch L2 meshes and compute centroid."""
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = [pool.submit(vol.mesh.get, i,
                                allow_missing=True,
@@ -407,3 +481,29 @@ def chunks_to_nm(xyz_ch, vol, voxel_resolution=[4, 4, 40]):
         * voxel_resolution
         * mip_scaling
     )
+
+
+def retry_on_fail(func, cooldown=2, n_retries=3):
+    """Wrap function to retry call on fail.
+
+    Parameters
+    ----------
+    cooldown :  int | float
+                Cooldown period in seconds between attempts.
+    n_retries : int
+                Number of retries before we give up.
+
+    """
+    def wrapper(*args, **kwargs):
+        i = 0
+        while True:
+            i += 1
+            try:
+                res = func(*args, **kwargs)
+                break
+            except BaseException:
+                if i > n_retries:
+                    raise
+            time.sleep(cooldown)
+        return res
+    return wrapper

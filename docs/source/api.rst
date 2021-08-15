@@ -23,6 +23,7 @@ Flywire segmentation
     fafbseg.flywire.decode_url
     fafbseg.flywire.fetch_edit_history
     fafbseg.flywire.fetch_leaderboard
+    fafbseg.flywire.l2_info
     fafbseg.flywire.l2_graph
     fafbseg.flywire.l2_dotprops
     fafbseg.flywire.l2_skeleton
