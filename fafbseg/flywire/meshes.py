@@ -29,8 +29,7 @@ from .utils import parse_volume
 __all__ = ['get_mesh_neuron']
 
 
-def get_mesh_neuron(id, with_synapses=False, l2_mapping=False, progress=True,
-                    dataset='production'):
+def get_mesh_neuron(id, with_synapses=False, progress=True, dataset='production'):
     """Fetch flywire neuron as navis.MeshNeuron.
 
     Parameters
@@ -42,9 +41,6 @@ def get_mesh_neuron(id, with_synapses=False, l2_mapping=False, progress=True,
                         synapse predicted by Buhmann et al. (2020).
                         A "synapse score" (confidence) threshold of 30 is
                         applied.
-    l2_mapping :        bool
-                        If True, will also produce a mapping of vertices to
-                        L2 IDs (see examples).
     dataset :           str | CloudVolume
                         Against which flywire dataset to query::
                           - "production" (currently fly_v31)
@@ -67,7 +63,6 @@ def get_mesh_neuron(id, with_synapses=False, l2_mapping=False, progress=True,
         if 0 in id:
             raise ValueError('Root ID 0 among the queried IDs')
         return navis.NeuronList([get_mesh_neuron(n, dataset=dataset,
-                                                 l2_mapping=l2_mapping,
                                                  with_synapses=with_synapses)
                                  for n in navis.config.tqdm(id,
                                                             desc='Fetching',
@@ -82,18 +77,6 @@ def get_mesh_neuron(id, with_synapses=False, l2_mapping=False, progress=True,
 
     # Turn into meshneuron
     n = navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
-
-    if l2_mapping:
-        # Get the L2 graph
-        n.l2_graph = l2 = l2_graph(id, dataset=dataset)
-
-        # Now get the fragments for this mesh
-        level = vol.mesh.meta.meta.decode_layer_id(id)
-        fragment_filenames =  vol.mesh.get_fragment_filenames(id,
-                                                              level=level,
-                                                              bbox=None,
-                                                              bypass=False)
-
 
     if with_synapses:
         _ = fetch_synapses(n, attach=True, min_score=30, dataset=dataset,
