@@ -333,10 +333,10 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
                            disable=not progress,
                            total=len(l2_ids_all),
                            leave=False) as pbar:
+        func = retry_on_fail(client.l2cache.get_l2data)
         for chunk_ix in np.arange(0, len(l2_ids_all), chunk_size):
             chunk = l2_ids_all[chunk_ix: chunk_ix + chunk_size]
-            l2_info.update(client.l2cache.get_l2data(chunk.tolist(),
-                                                     attributes=attributes))
+            l2_info.update(func(chunk.tolist(), attributes=attributes))
             pbar.update(len(chunk))
 
     # L2 chunks without info will show as empty dictionaries
