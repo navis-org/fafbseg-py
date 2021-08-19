@@ -33,6 +33,7 @@ MOCK_MODULES = ['PyMCubes',
                 'annotationframeworkclient',
                 'caveclient',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
+                'cloudvolume.mesh'
                 'diskcache.Cache', 'diskcache',
                 'fastremap',
                 'inquirer.themes.GreenPassion',
