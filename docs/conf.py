@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.abspath('../'))
 import mock
 MOCK_MODULES = ['PyMCubes',
                 'annotationframeworkclient',
+                'caveclient',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
                 'diskcache.Cache', 'diskcache',
                 'fastremap',
