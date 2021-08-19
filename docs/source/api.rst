@@ -12,7 +12,7 @@ FAFBseg is divided into separate modules to split functions by data source/type:
 
 See below for a by-module breakdown:
 
-Flywire segmentation
+FlyWire segmentation
 --------------------
 .. autosummary::
     :toctree: generated/
@@ -32,6 +32,7 @@ Flywire segmentation
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
     fafbseg.flywire.get_mesh_neuron
+    fafbseg.flywire.get_somas
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
     fafbseg.flywire.generate_open_ends_url
