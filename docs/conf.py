@@ -32,8 +32,10 @@ import mock
 MOCK_MODULES = ['PyMCubes',
                 'annotationframeworkclient',
                 'caveclient',
+                'cloudvolume',
                 'cloudvolume.frontends.precomputed.CloudVolumePrecomputed',
-                'cloudvolume.mesh'
+                'cloudvolume.Mesh',
+                'cloudvolume.mesh.Mesh'
                 'diskcache.Cache', 'diskcache',
                 'fastremap',
                 'inquirer.themes.GreenPassion',
