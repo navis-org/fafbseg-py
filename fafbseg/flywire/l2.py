@@ -52,19 +52,24 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
 
     Returns
     -------
-    DataFrame
-                        Pandas DataFrame with basic info (see Examples).
+    pandas.DataFrame
+                        DataFrame with basic info (also see Examples):
+                          - `length_um` is the sum of the max diameter across
+                            all L2 chunks
+                          - `bounds_nm` is a very rough bounding box based on the
+                            representative coordinates of the L2 chunks
 
     Examples
     --------
     >>> from fafbseg import flywire
     >>> info = flywire.l2_info(720575940614131061)
     >>> info
-                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um
-    0  720575940614131061        286               2  2364.39616  132.467837     60.271
+                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um   bounds_nm
+    0  720575940614131061        286               2  2364.39616  132.467837     60.271   [305456, 311184, ...
 
     """
     if navis.utils.is_iterable(root_ids):
+        root_ids = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
             func = retry_on_fail(partial(l2_info, dataset=dataset))
@@ -81,7 +86,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
 
     l2_ids = client.chunkedgraph.get_leaves(root_ids, stop_layer=2)
 
-    attributes = ['area_nm2', 'size_nm3', 'max_dt_nm']
+    attributes = ['area_nm2', 'size_nm3', 'max_dt_nm', 'rep_coord_nm']
     info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=attributes)
     n_miss = len([v for v in info.values() if not v])
 
@@ -91,6 +96,9 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
 
     # Collect L2 attributes
     for at in attributes:
+        if at in ('rep_coord_nm'):
+            continue
+
         summed = sum([v.get(at, 0) for v in info.values()])
         if at.endswith('3'):
             summed /= 1000**3
@@ -100,6 +108,22 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
             summed /= 1000
 
         info_df[at.replace('_nm', '_um')] = [summed]
+
+    # Check bounding box
+    pts = np.array([v['rep_coord_nm'] for v in info.values() if v])
+
+    if len(pts) > 1:
+        bounds = [v for l in zip(pts.min(axis=0), pts.max(axis=0)) for v in l]
+    elif len(pts) == 1:
+        pt = pts[0]
+        rad = [v['max_dt_nm'] for v in info.values() if v][0] / 2
+        bounds = [pt[0] - rad, pt[0] + rad,
+                  pt[1] - rad, pt[1] + rad,
+                  pt[2] - rad, pt[2] + rad]
+        bounds = [int(co) for co in bounds]
+    else:
+        bounds = None
+    info_df['bounds_nm'] = [bounds]
 
     info_df.rename({'max_dt_um': 'length_um'},
                    axis=1, inplace=True)
@@ -283,7 +307,8 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
     progress :          bool
                         Whether to show a progress bar.
     max_threads :       int
-                        Number of parallel requests to make.
+                        Number of parallel requests to make when fetching the
+                        L2 IDs (but not the L2 info).
     **kwargs
                         Keyword arguments are passed through to Dotprops
                         initialization. Use to e.g. set extra properties.
