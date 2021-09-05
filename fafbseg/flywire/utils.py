@@ -83,8 +83,7 @@ def get_chunkedgraph_secret(domain='prodv1.flywire-daf.com'):
 
     """
     if hasattr(cv.secrets, 'cave_credentials'):
-        token = cv.secrets.cave_credentials('prodv1.flywire-daf.com'
-                                            ).get('token', None)
+        token = cv.secrets.cave_credentials(domain).get('token', None)
         if not token:
             raise ValueError(f'No chunkedgraph secret for domain {domain} '
                              'found. Please see '
