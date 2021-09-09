@@ -27,6 +27,8 @@ import trimesh as tm
 
 from .segmentation import snap_to_id
 from .utils import parse_volume
+from .meshes import detect_soma
+from .annotations import get_somas
 
 
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
@@ -48,15 +50,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     shave_skeleton :     bool
                          If True, we will "shave" the skeleton by removing all
                          single-node terminal twigs. This should get rid of
-                         hairs on the backbone that can occur if the neurites
+                         bristles on the backbone that can occur if the neurites
                          are very big.
     remove_soma_hairball : bool
                          If True, we will try to drop the hairball that is
                          typically created inside the soma. Note that while this
                          should work just fine for 99% of neurons, it's not very
-                         smart and there is always a chance that we remove stuff
-                         that should not have been removed. Also only works if
-                         the neuron has a recognizable soma.
+                         smart and there is always a small chance that we
+                         remove stuff that should not have been removed. Also
+                         only works if the neuron has it's nucleus annotated
+                         (see `flywire.get_somas`).
     assert_id_match :    bool
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into
@@ -115,7 +118,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                             remove_duplicate_vertices=True)[id]
     else:
         mesh = x
-        id = getattr(mesh, 'segid', 0)
+        id = getattr(mesh, 'segid', getattr(mesh, 'id', 0))
 
     mesh = sk.utilities.make_trimesh(mesh, validate=False)
 
@@ -154,8 +157,14 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         tn._nodes = tn.nodes.loc[~tn.nodes.node_id.isin(twigs)].copy()
         tn._clear_temp_attr()
 
-    # See if we can find a soma
-    soma = detect_soma_skeleton(tn, min_rad=800, N=3)
+    # See if we can find a soma based on the nucleus segmentation
+    soma = get_somas(id, dataset=dataset)
+    if not soma.empty:
+        soma = tn.snap(soma.iloc[0].pt_position)[0]
+    else:
+        # If no nucleus, try to detect the soma like this
+        soma = detect_soma_skeleton(tn, min_rad=800, N=3)
+
     if soma:
         tn.soma = soma
 
