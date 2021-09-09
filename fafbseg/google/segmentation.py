@@ -309,16 +309,16 @@ def find_autoseg_fragments(x, autoseg_instance, min_node_overlap=3, min_nodes=1,
     >>> auto = pymaid.CatmaidInstance('AUTO_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
     >>> # Call one of the fafbseg.use_... to set a source for segmentation IDs
-    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find autoseg fragments overlapping with a manually traced neuron:
 
     >>> x = pymaid.get_neuron(16, remote_instance=manual)
-    >>> frags_of_x = fafbseg.find_autoseg_fragments(x, remote_instance=auto)
+    >>> frags_of_x = fafbseg.google.find_autoseg_fragments(x, remote_instance=auto)
 
     See Also
     --------
-    fafbseg.find_fragments
+    fafbseg.google.find_fragments
                         Generalization of this function that can find neurons
                         independent of whether they have a reference to the
                         segmentation ID in e.g. their name or annotations. Use
@@ -431,16 +431,16 @@ def find_fragments(x, remote_instance, min_node_overlap=3, min_nodes=1,
     >>> auto = pymaid.CatmaidInstance('AUTO_SERVER_URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
     >>> # Set a source for segmentation data
-    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find manually traced fragments overlapping with an autoseg neuron:
 
     >>> x = pymaid.get_neuron(204064470, remote_instance=auto)
-    >>> frags_of_x = fafbseg.find_fragments(x, remote_instance=manual)
+    >>> frags_of_x = fafbseg.google.find_fragments(x, remote_instance=manual)
 
     See Also
     --------
-    fafbseg.find_autoseg_fragments
+    fafbseg.google.find_autoseg_fragments
                         Use this function if you are looking for autoseg
                         fragments overlapping with a given neuron. Because we
                         can use the reference to segment IDs (via names &
@@ -644,7 +644,7 @@ def find_missed_branches(x, autoseg_instance, tag=False, tag_size_thresh=10,
     >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
     >>> # Set a source for segmentation data
-    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Find missed branches and tag them
 
@@ -653,7 +653,7 @@ def find_missed_branches(x, autoseg_instance, tag=False, tag_size_thresh=10,
     >>> # Find and tag missed branches
     >>> (summary,
     ...  fragments,
-    ...  branches) = fafbseg.find_missed_branches(x, autoseg_instance=auto)
+    ...  branches) = fafbseg.google.find_missed_branches(x, autoseg_instance=auto)
 
     >>> # Show summary of missed branches
     >>> summary.head()

@@ -128,7 +128,7 @@ extensions = [
     'sphinx.ext.napoleon',
     #'sphinx.ext.mathjax', # mathjax is interactive and configurable but can also misbehave when rendering - switched to imgmath instead
     'sphinx.ext.imgmath',
-    'sphinx_autodoc_typehints',  # unfortunately this does not play nicely with mocking
+    #'sphinx_autodoc_typehints',  # unfortunately this does not play nicely with mocking
     #'numpydoc'
 ]
 

@@ -56,6 +56,13 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
         4. Join uploaded and existing tracings into a single continuous
            neuron. This will also upload connectors but no node tags.
 
+    Disclaimer:
+
+     As with all imports to CATMAID, the importing user is responsible for
+     the quality of the imported skeleton and to make sure no existing
+     tracings (including annotations) are negatively impacted. Also note that
+     import requires special CATMAID user permissions.
+
     Parameters
     ----------
     x :                 pymaid.CatmaidNeuron/List | navis.TreeNeuron/List
@@ -138,7 +145,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
     >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
 
     >>> # Set a segmentation data source
-    >>> fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
     Merge a neuron from autoseg into v14
 
@@ -150,7 +157,7 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
 
     >>> # Start the commit
     >>> # See online documentation for video of merge process
-    >>> resp = fafbseg.merge_neuron(x, target_instance=manual)
+    >>> resp = fafbseg.move.merge_neuron(x, target_instance=manual)
 
     """
     if not isinstance(x, navis.NeuronList):

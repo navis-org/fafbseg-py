@@ -42,7 +42,7 @@ of your neuron).
 
 
 Now get everything that overlaps with this neuron in ``autoseg``. See
-:func:`fafbseg.find_autoseg_fragments` on how to fine tune this step.
+:func:`fafbseg.google.find_autoseg_fragments` on how to fine tune this step.
 
 .. code-block:: python
 

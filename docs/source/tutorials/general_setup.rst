@@ -95,12 +95,12 @@ Using Google Storage
 ********************
 
 This is the easiest solution as it does not need special permission. To set it
-up run :func:`fafbseg.use_google_storage` at start up:
+up run :func:`fafbseg.google.use_google_storage` at start up:
 
 .. code-block:: python
 
   # Accessing the most recent autoseg data
-  fafbseg.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+  fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
 
 
 Using local copy
@@ -116,7 +116,7 @@ so:
 .. code-block:: python
 
   # Accessing the most recent autoseg data
-  fafbseg.use_local_data("path/to/segmentation")
+  fafbseg.google.use_local_data("path/to/segmentation")
 
 
 Using brainmaps
@@ -130,7 +130,7 @@ library for this. If you haven't already installed it, run this in a terminal:
     pip3 install git+git://github.com/schlegelp/brainmappy@master
 
 To tell ``fafbseg`` to use brainmaps to query segmentation data use
-:func:`fafbseg.use_brainmaps` (see
+:func:`fafbseg.google.use_brainmaps` (see
 `brainmappy <https://github.com/schlegelp/brainmappy>`_ for explanation
 on credentials).
 
@@ -139,14 +139,14 @@ If you are doing this for the very first time you also need to provide a
 
 .. code-block:: python
 
-  fafbseg.use_brainmaps('772153499790:fafb_v14:fafb-ffn1-20190805',
-                        client_secret='path/to/client_secret.json')
+  fafbseg.google.use_brainmaps('772153499790:fafb_v14:fafb-ffn1-20190805',
+                               client_secret='path/to/client_secret.json')
 
 From now on credentials are stored locally and in the future you can simply run:
 
 .. code-block:: python
 
-  fafbseg.use_brainmaps('772153499790:fafb_v14:fafb-ffn1-20190805')
+  fafbseg.google.use_brainmaps('772153499790:fafb_v14:fafb-ffn1-20190805')
 
 .. tip::
 
@@ -159,13 +159,13 @@ Using self-hosted remote solution
 *********************************
 
 If you are self-hosting the data, you will need to pass a URL
-to :func:`fafbseg.use_remote_service`. The service behind the URL has to
+to :func:`fafbseg.google.use_remote_service`. The service behind the URL has to
 accept a list of x/y/z locations as POST and return a list of segmentation IDs
 in the same order:
 
 .. code-block:: python
 
-  fafbseg.use_remote_service('https://my-server.com/seg/values')
+  fafbseg.google.use_remote_service('https://my-server.com/seg/values')
 
 Alternatively, set an environment variable:
 
@@ -177,7 +177,7 @@ If you have an environment variable set, you an simply run:
 
 .. code-block:: python
 
-  fafbseg.use_remote_service()
+  fafbseg.google.use_remote_service()
 
 
 If you have set up one of the above explained means to access the segmentation

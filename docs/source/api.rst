@@ -35,7 +35,6 @@ FlyWire segmentation
     fafbseg.flywire.get_somas
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
-    fafbseg.flywire.generate_open_ends_url
     fafbseg.flywire.merge_flywire_neuron
 
 For interaction with the annotation/materialization engine:
