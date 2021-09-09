@@ -38,6 +38,19 @@ FlyWire segmentation
     fafbseg.flywire.generate_open_ends_url
     fafbseg.flywire.merge_flywire_neuron
 
+For interaction with the annotation/materialization engine:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.get_materialization_versions
+    fafbseg.flywire.create_annotation_table
+    fafbseg.flywire.get_annotation_tables
+    fafbseg.flywire.get_annotation_table_info
+    fafbseg.flywire..get_annotations
+    fafbseg.flywire.delete_annotations
+    fafbseg.flywire.upload_annotations
+
 Google segmentation
 -------------------
 .. autosummary::
