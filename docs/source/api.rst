@@ -47,7 +47,7 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.create_annotation_table
     fafbseg.flywire.get_annotation_tables
     fafbseg.flywire.get_annotation_table_info
-    fafbseg.flywire..get_annotations
+    fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
 
