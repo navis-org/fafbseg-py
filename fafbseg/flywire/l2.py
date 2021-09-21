@@ -257,6 +257,9 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
         G = sk.skeletonize.utils.edges_to_graph(eg_arr_rm)
         swc = sk.skeletonize.utils.make_swc(G, coords=coords, reindex=False)
 
+    # Set radius to 0
+    swc['radius'] = 0
+
     # Convert to Euclidian space
     # Dimension of a single chunk
     ch_dims = chunks_to_nm([1, 1, 1], vol) - chunks_to_nm([0, 0, 0], vol)
