@@ -109,8 +109,9 @@ def collapse_nt_predictions(pred, single_pred=False, id_col=None):
         raise ValueError('No synapses with transmitter predictions.')
 
     # Generate series with weighted confidence for all transmitters
-    if pred.cleft_scores.sum() > 0:
-        pred_weight = pd.Series({t: np.average(pred[t], weights=pred.cleft_scores)
+    score_col = 'cleft_scores' if 'cleft_scores' in pred.columns else 'cleft_score'
+    if pred[score_col].sum() > 0:
+        pred_weight = pd.Series({t: np.average(pred[t], weights=pred[score_col])
                                  for t in trans}, name='confidence')
     else:
         pred_weight = pd.Series({t: 0 for t in trans}, name='confidence')
