@@ -48,7 +48,7 @@ Note that by default :func:`fafbseg.flywire.decode_url` returns only parts of th
        'blend': 'default',
        'shaderControls': {},
        'name': 'Production-image'},
-      {'source': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31',
+      {'source': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v31',
        'type': 'segmentation_with_graph',
        'segments': ['720575940618780781'],
        'skeletonRendering': {'mode2d': 'lines_and_points', 'mode3d': 'lines'},

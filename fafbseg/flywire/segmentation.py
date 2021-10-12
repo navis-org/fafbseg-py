@@ -19,7 +19,6 @@ import requests
 import textwrap
 
 import datetime as dt
-import cloudvolume as cv
 import numpy as np
 import pandas as pd
 
@@ -33,12 +32,6 @@ from .. import xform
 
 from .utils import parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret
 
-try:
-    import skeletor as sk
-except ImportError:
-    sk = None
-except BaseException:
-    raise
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
@@ -171,7 +164,7 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
     futures = []
     for id in x:
         dataset = FLYWIRE_DATASETS.get(dataset, dataset)
-        url = f'https://prodv1.flywire-daf.com/segmentation/api/v1/table/{dataset}/root/{id}/tabular_change_log'
+        url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/root/{id}/tabular_change_log'
         f = future_session.get(url, params=None)
         futures.append(f)
 
@@ -308,7 +301,6 @@ def supervoxels_to_roots(x, use_cache=False, dataset='production'):
     --------
     >>> from fafbseg import flywire
     >>> flywire.supervoxels_to_roots(78321855915861142)
-
 
     """
     # Make sure we are working with an array of integers
@@ -640,7 +632,7 @@ def is_latest_root(id, dataset='production', **kwargs):
     token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
 
-    url = f'https://prodv1.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
+    url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
     post = {'node_ids': id.tolist()}
     r = session.post(url, json=post)
 

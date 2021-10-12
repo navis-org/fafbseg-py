@@ -68,7 +68,7 @@ def get_cave_client(dataset='production', token=None, force_new=False):
     return cave_clients[datastack]
 
 
-def get_chunkedgraph_secret(domain='prodv1.flywire-daf.com'):
+def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
     """Get chunked graph secret.
 
     Parameters
@@ -100,7 +100,7 @@ def get_chunkedgraph_secret(domain='prodv1.flywire-daf.com'):
 
 
 def set_chunkedgraph_secret(token, filepath=None,
-                            domain='prodv1.flywire-daf.com'):
+                            domain='prod.flywire-daf.com'):
     """Set chunked graph secret (called "cave credentials" now).
 
     Parameters
@@ -185,7 +185,7 @@ def parse_volume(vol, **kwargs):
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
 
             # This is the new url
-            vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/table/{vol}'
+            vol = f'graphene://https://prod.flywire-daf.com/segmentation/table/{vol}'
 
             # This might eventually become the new url
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation_proc/table/{vol}'

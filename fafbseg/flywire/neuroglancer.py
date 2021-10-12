@@ -38,7 +38,7 @@ MINIMAL_SCENE = {'layers': [{'source': 'precomputed://gs://microns-seunglab/dros
                              'shaderControls': {},
                              'name': 'Production-image'
                              },
-                            {'source': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{dataset}',
+                            {'source': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/{dataset}',
                              'type': 'segmentation_with_graph',
                              'selectedAlpha': 0.14,
                              'segments': [],
