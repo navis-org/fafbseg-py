@@ -56,7 +56,8 @@ def synapse_counts(x, batch_size=10, dataset='production'):
     pass
 
 
-def predict_transmitter(x, single_pred=False, dataset='production'):
+def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
+                        dataset='production'):
     """Fetch neurotransmitter predictions for neurons.
 
     Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
@@ -77,6 +78,13 @@ def predict_transmitter(x, single_pred=False, dataset='production'):
     single_pred :   bool
                     Whether to only return the highest probability transmitter
                     for each neuron.
+    weighted :      bool
+                    If True, will weight predictions based on confidence: higher
+                    cleft score = more weight.
+    live_query :    bool
+                    Whether to query against the live data or against the latest
+                    materialized table. The latter is useful if you are working
+                    with IDs that you got from another annotation table.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -95,10 +103,11 @@ def predict_transmitter(x, single_pred=False, dataset='production'):
     """
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
-                         transmitters=True)
+                         transmitters=True, live_query=live_query)
 
     # Get the predictions
-    return collapse_nt_predictions(syn, single_pred=single_pred, id_col='pre')
+    return collapse_nt_predictions(syn, single_pred=single_pred,
+                                   weighted=weighted, id_col='pre')
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
@@ -179,15 +188,15 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
                        split_positions=True,
                        select_columns=columns)
     else:
-        func = partial(client.materialize.live_table,
+        func = partial(client.materialize.query_table,
                        table=client.materialize.synapse_table,
                        split_positions=True,
                        select_columns=columns)
 
     syn = []
     for i in trange(0, len(ids), batch_size,
-                    desc='Fetching connectivity',
-                    disable=not progress):
+                    desc='Fetching synapses',
+                    disable=not progress or len(ids) <= batch_size):
         batch = ids[i:i+batch_size]
         if post:
             syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
@@ -336,14 +345,14 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
     else:
-        func = partial(client.materialize.live_table,
+        func = partial(client.materialize.query_table,
                        table=client.materialize.synapse_table,
                        select_columns=columns)
 
     syn = []
     for i in trange(0, len(sources), batch_size,
-                    desc='Fetching connectivity',
-                    disable=not progress):
+                    desc='Fetching adjacency',
+                    disable=not progress or len(sources) <= batch_size):
         source_batch = sources[i:i+batch_size]
         for k in range(0, len(targets), batch_size):
             target_batch = targets[k:k+batch_size]
@@ -463,14 +472,14 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
     else:
-        func = partial(client.materialize.live_table,
+        func = partial(client.materialize.query_table,
                        table=client.materialize.synapse_table,
                        select_columns=columns)
 
     syn = []
     for i in trange(0, len(ids), batch_size,
                     desc='Fetching connectivity',
-                    disable=not progress):
+                    disable=not progress or len(ids) <= batch_size):
         batch = ids[i:i+batch_size]
         if upstream:
             syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
@@ -511,6 +520,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         cn_table = catmaid_table(cn_table, query_ids=ids)
     else:
         cn_table.sort_values('weight', ascending=False, inplace=True)
+        cn_table.reset_index(drop=True, inplace=True)
 
     if transmitters:
         # Avoid copy warning

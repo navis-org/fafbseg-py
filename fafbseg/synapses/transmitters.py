@@ -24,6 +24,8 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from collections import namedtuple
+
 
 # transmitters + colors
 trans = ['gaba', 'acetylcholine', 'glutamate', 'octopamine', 'serotonin',
@@ -35,8 +37,10 @@ colors = [(0.8352941176470589, 0.6588235294117647, 0.2823529411764706),
           (0.5490196078431373, 0.3843137254901961, 0.5843137254901961),
           (0.7215686274509804, 0.4745098039215686, 0.4117647058823529)]
 
+prediction = namedtuple('prediction', ['transmitter', 'probability'])
 
-def collapse_nt_predictions(pred, single_pred=False, id_col=None):
+
+def collapse_nt_predictions(pred, single_pred=False, weighted=True, id_col=None):
     """Collapses predictions using a weighted average.
 
     We use the `cleft_scores` as weights. Note that if there are no
@@ -54,6 +58,9 @@ def collapse_nt_predictions(pred, single_pred=False, id_col=None):
                     for every unique value in that column. Use this to point to
                     a column containing neuron IDs to get a prediction for
                     individual neurons.
+    weighted :      bool
+                    If True, will weight predictions based on confidence: higher
+                    cleft score = more weight.
 
     Returns
     -------
@@ -90,7 +97,8 @@ def collapse_nt_predictions(pred, single_pred=False, id_col=None):
         # Collapse predictions for every unique value of id_col
         ids = pred[id_col].unique()
         res = {i: collapse_nt_predictions(pred[pred[id_col] == i],
-                                          single_pred=single_pred) for i in ids}
+                                          single_pred=single_pred,
+                                          weighted=weighted) for i in ids}
 
         # Combine results
         if not single_pred:
@@ -108,18 +116,21 @@ def collapse_nt_predictions(pred, single_pred=False, id_col=None):
     if pred.empty:
         raise ValueError('No synapses with transmitter predictions.')
 
-    # Generate series with weighted confidence for all transmitters
-    score_col = 'cleft_scores' if 'cleft_scores' in pred.columns else 'cleft_score'
-    if pred[score_col].sum() > 0:
-        pred_weight = pd.Series({t: np.average(pred[t], weights=pred[score_col])
-                                 for t in trans}, name='confidence')
+    # Generate series with confidence for all transmitters
+    if weighted:
+        weight_col = 'cleft_scores' if 'cleft_scores' in pred.columns else 'cleft_score'
+        if pred[weight_col].sum() > 0:
+            pred_weight = pd.Series({t: np.average(pred[t], weights=pred[weight_col])
+                                     for t in trans}, name='confidence')
+        else:
+            pred_weight = pd.Series({t: 0 for t in trans}, name='confidence')
     else:
-        pred_weight = pd.Series({t: 0 for t in trans}, name='confidence')
+        pred_weight = pd.Series({t: pred[t].mean() for t in trans})
 
     if single_pred:
         # Get the highest predicted transmitter
         top_ix = np.argmax(pred_weight)
-        return (pred_weight.index[top_ix], pred_weight.iloc[top_ix])
+        return prediction(pred_weight.index[top_ix], pred_weight.iloc[top_ix])
 
     return pred_weight
 
