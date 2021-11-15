@@ -58,9 +58,11 @@ def create_annotation_table(name: str,
 
     This is just a thin-wrapper around `CAVEclient.annotation.create_table`.
 
-    Note that newly created tables will not show up
+    Note that newly created tables will not show up as materialized until the
+    next round of materialization. Unfortuntately, there is currently no way to
+    query un-materialized tables.
 
-    Existing tables can be browser
+    Existing tables can be browsed
     `here <https://prod.flywire-daf.com/annotation/views/aligned_volume/fafb_seung_alignment_v0>`_.
 
     Parameters
@@ -164,7 +166,8 @@ def get_annotation_table_info(table_name: str,
 
 def get_annotations(table_name: str,
                     update_roots: bool = False,
-                    materialization = 'latest',
+                    materialization='latest',
+                    split_positions=False,
                     drop_invalid: bool = True,
                     dataset='production',
                     **filters):
@@ -182,6 +185,8 @@ def get_annotations(table_name: str,
                         provide an ID (int) for a specific materialization
                         version (see ``get_materialization_versions``). Set to
                         False to fetch the non-materialized version.
+    split_positions :   bool
+                        Whether to split x/y/z positions into separate columns.
     drop_invalid :      bool
                         Whether to drop invalid (i.e. deleted or updated)
                         annotations.
@@ -208,6 +213,7 @@ def get_annotations(table_name: str,
 
         data = client.materialize.query_table(table=table_name,
                                               materialization_version=materialization,
+                                              split_positions=split_positions,
                                               **filters)
 
     if drop_invalid and 'valid' in data.columns:
@@ -219,6 +225,9 @@ def get_annotations(table_name: str,
         for pos_col in ['pt_position', 'pre_pt', 'post_pt']:
             if pos_col in data.columns:
                 locs = np.vstack(data[pos_col])
+                data[f'{pos_col}_root_id'] = locs_to_segments(locs)
+            elif f'{pos_col}_x' in data.columns:
+                locs = data[[f'{pos_col}_{co}' for co in ['x', 'y', 'z']]].values
                 data[f'{pos_col}_root_id'] = locs_to_segments(locs)
 
     return data
@@ -340,7 +349,7 @@ def upload_annotations(table_name: str,
     return resp
 
 
-def get_somas(root_ids, mat_id=None, dataset='production'):
+def get_somas(root_ids, split_positions=False, dataset='production'):
     """Fetch nuclei segmentation for given neuron(s).
 
     A couple notes:
@@ -359,6 +368,8 @@ def get_somas(root_ids, mat_id=None, dataset='production'):
     root_ids  :         int | list of ints | None
                         FlyWire root ID(s) for which to fetch soma infos. Use
                         ``None`` to fetch complete list of annotated nuclei.
+    split_positions :   bool
+                        Whether to have separate columns for x/y/z position.
 
     Returns
     -------
@@ -387,12 +398,22 @@ def get_somas(root_ids, mat_id=None, dataset='production'):
         filter_in_dict = {'pt_root_id': root_ids}
 
     nuc = client.materialize.query_table('nuclei_v1',
+                                         split_positions=split_positions,
                                          filter_in_dict=filter_in_dict)
 
     # Add estimated radius based on nucleus
     if not nuc.empty:
-        start = np.vstack(nuc.bb_start_position)
-        end = np.vstack(nuc.bb_end_position)
+        if not split_positions:
+            start = np.vstack(nuc.bb_start_position)
+            end = np.vstack(nuc.bb_end_position)
+            nuc.drop(['bb_start_position', 'bb_end_position'],
+                     inplace=True, axis=1)
+        else:
+            start_cols = [f'bb_start_position_{co}' for co in ['x', 'y', 'z']]
+            end_cols = [f'bb_end_position_{co}' for co in ['x', 'y', 'z']]
+            start = nuc[start_cols].values
+            end = nuc[end_cols].values
+            nuc.drop(start_cols + end_cols, inplace=True, axis=1)
         nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2
 
-    return nuc.drop(['bb_start_position', 'bb_end_position'], axis=1)
+    return nuc
