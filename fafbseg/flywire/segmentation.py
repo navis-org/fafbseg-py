@@ -17,6 +17,7 @@ import pymaid
 import navis
 import requests
 import textwrap
+import time
 
 import datetime as dt
 import numpy as np
@@ -26,6 +27,7 @@ from concurrent import futures
 from diskcache import Cache
 from requests_futures.sessions import FuturesSession
 from scipy import ndimage
+from tqdm.auto import trange
 
 from .. import spine
 from .. import xform
@@ -258,9 +260,9 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     svoxels.update({i: vol.get_leaves(i,
                                       bbox=vol.meta.bounds(0),
                                       mip=0) for i in navis.config.tqdm(miss,
-                                                           desc='Querying',
-                                                           disable=not progress,
-                                                           leave=False)})
+                                                                        desc='Querying',
+                                                                        disable=not progress,
+                                                                        leave=False)})
 
     # Update cache
     if use_cache:
@@ -271,22 +273,25 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     return svoxels
 
 
-def supervoxels_to_roots(x, use_cache=False, dataset='production'):
+def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
+                         retry=True, progress=True, dataset='production'):
     """Get root(s) for given supervoxel(s).
 
     Parameters
     ----------
     x :             int | list of int
                     Supervoxel ID(s) to find the root(s) for.
-    use_cache :     bool
-                    Whether to use disk cache to avoid repeated queries for the
-                    same supervoxel. The implementation for this is optimized
-                    for a small memory footprint - so it's slow! At this point
-                    only use it if you want to minimize your impact on the
-                    flywire backends and you have time on your hands. The cache
-                    is stored in `~/.fafbseg/`.
+    timestamp :     int | str | datetime
+                    Get roots at given date (and time). Int must be unix
+                    timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    If timestamp is given, will ignore `use_cache`.
+    batch_size :    int
+                    Max number of supervoxel IDs per query. Reduce batch size if
+                    you experience time outs.
+    retry :         bool
+                    Whether to retry if a batched query fails.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     progress :      bool
@@ -294,8 +299,8 @@ def supervoxels_to_roots(x, use_cache=False, dataset='production'):
 
     Returns
     -------
-    dict
-                    ``{root_id: [svoxel_id1, svoxelid2, ...], ...}``
+    roots  :        numpy array
+                    Roots corresponding to supervoxels in `x`.
 
     Examples
     --------
@@ -312,49 +317,29 @@ def supervoxels_to_roots(x, use_cache=False, dataset='production'):
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
 
-    # We can't query supervoxel ID 0
-    not_zero = x != 0
+    for i in trange(0, len(x), batch_size,
+                    desc='Roots',
+                    disable=not progress or len(x) < batch_size):
+        # This batch
+        batch = x[i:i+batch_size]
 
-    if use_cache:
-        # Cache for supervoxel -> root map
-        # Grows to max 1Gb by default and persists across sessions
-        with Cache(directory='~/.fafbseg/roots_cache/') as roots_cache:
-            # See if we have any of these supervoxels cached
-            with roots_cache.transact():
-                is_cached = np.isin(x, roots_cache)
-
-            # For cached roots, check if they are latest
-            if np.any(is_cached):
-                # Get values from cache
-                with roots_cache.transact():
-                    cached = np.array([roots_cache[i] for i in x[is_cached]])
-                # Check if cached roots are latest
-                is_latest = is_latest_root(cached, dataset=dataset)
-                # Set roots that are still up-to-date
-                is_cached[is_cached] = is_latest
-                roots[is_cached] = cached[is_latest]
-
-            # To fetch are those supervoxels that are != 0 and are not cached
-            to_fetch = ~is_cached & not_zero
-
-            # Fill in the blanks
-            if np.any(to_fetch):
-                roots[to_fetch] = vol.get_roots(x[to_fetch])
-
-                # Update cache
-                with roots_cache.transact():
-                    for k, v in zip(x[to_fetch], roots[to_fetch]):
-                        roots_cache[k] = v
-
-    else:
         # get_roots() doesn't like to be asked for zeros - causes server error
-        roots[not_zero] = vol.get_roots(x[not_zero])
+        not_zero = batch != 0
+        try:
+            roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                            timestamp=timestamp)
+        except BaseException:
+            if not retry:
+                raise
+            time.sleep(1)
+            roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                            timestamp=timestamp)
 
     return roots
 
 
 def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
-    """Retrieve flywire supervoxel IDs at given location(s).
+    """Retrieve FlyWire supervoxel IDs at given location(s).
 
     Use Eric Perlman's service on spine.
 
@@ -703,10 +688,10 @@ def update_ids(id,
                           dataset=vol,
                           is_latest=il,
                           sample=sample) for x, il in navis.config.tqdm(zip(id, is_latest),
-                                                           desc='Updating',
-                                                           leave=False,
-                                                           total=len(id),
-                                                           disable=not progress or len(id) == 1)]
+                                                                        desc='Updating',
+                                                                        leave=False,
+                                                                        total=len(id),
+                                                                        disable=not progress or len(id) == 1)]
         return pd.concat(res, axis=0, sort=False, ignore_index=True)
 
     # Check if outdated
