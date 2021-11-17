@@ -318,7 +318,7 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
     roots = np.zeros(x.shape, dtype=np.int64)
 
     for i in trange(0, len(x), batch_size,
-                    desc='Roots',
+                    desc='Fetching roots',
                     disable=not progress or len(x) < batch_size):
         # This batch
         batch = x[i:i+batch_size]
@@ -613,17 +613,24 @@ def is_latest_root(id, dataset='production', **kwargs):
 
     id = navis.utils.make_iterable(id).astype(str)
 
+    # The server doesn't like being asked for zeros
+    not_zero = id != '0'
+
+    is_latest = np.ones(len(id)).astype(bool)
+
     session = requests.Session()
     token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
 
     url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
-    post = {'node_ids': id.tolist()}
+    post = {'node_ids': id[not_zero].tolist()}
     r = session.post(url, json=post)
 
     r.raise_for_status()
 
-    return np.array(r.json()['is_latest'])
+    is_latest[not_zero] = np.array(r.json()['is_latest'])
+
+    return is_latest
 
 
 def update_ids(id,
