@@ -18,6 +18,7 @@ framework and the materialization engine."""
 
 import navis
 
+import datetime as dt
 import numpy as np
 import pandas as pd
 
@@ -165,8 +166,7 @@ def get_annotation_table_info(table_name: str,
 
 
 def get_annotations(table_name: str,
-                    update_roots: bool = False,
-                    materialization='latest',
+                    materialization='live',
                     split_positions=False,
                     drop_invalid: bool = True,
                     dataset='production',
@@ -177,10 +177,7 @@ def get_annotations(table_name: str,
     ----------
     table_name :        str
                         Name of the table.
-    update_roots :      bool
-                        Whether to update roots. Use this is you need up to
-                        the minute IDs. Slow for large tables!
-    materialization :   "latest" | int | bool
+    materialization :   "live" | "latest" | int | bool
                         Which materialization version to fetch. You can also
                         provide an ID (int) for a specific materialization
                         version (see ``get_materialization_versions``). Set to
@@ -192,7 +189,7 @@ def get_annotations(table_name: str,
                         annotations.
     **filters
                         Additional filter queries. See Examples. This works only
-                        if ``materialized!=False``.
+                        if ``materialization!=False``.
 
     Returns
     -------
@@ -204,31 +201,27 @@ def get_annotations(table_name: str,
 
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
 
-    if not materialization:
-        raise ValueError('It is currently not yet possible to query the non-'
-                         'materialized tables.')
-    else:
+    if materialization == 'live':
+        data = client.materialize.live_query(table=table_name,
+                                             timestamp=dt.datetime.utcnow(),
+                                             split_positions=split_positions,
+                                             **filters)
+    elif materialization:
         if materialization == 'latest':
             materialization = get_materialization_versions(dataset=dataset).version.max()
 
-        data = client.materialize.query_table(table=table_name,
-                                              materialization_version=materialization,
-                                              split_positions=split_positions,
-                                              **filters)
+        data = client.materialize.query_table(
+                       materialization_version=materialization,
+                       table=table_name,
+                       split_positions=split_positions,
+                       **filters)
+    else:
+        raise ValueError('It is currently not possible to query the non-'
+                         'materialized tables.')
 
     if drop_invalid and 'valid' in data.columns:
         data = data[data.valid == 't'].copy()
         data.drop('valid', axis=1, inplace=True)
-
-    if update_roots:
-        # Check which schema this is
-        for pos_col in ['pt_position', 'pre_pt', 'post_pt']:
-            if pos_col in data.columns:
-                locs = np.vstack(data[pos_col])
-                data[f'{pos_col}_root_id'] = locs_to_segments(locs)
-            elif f'{pos_col}_x' in data.columns:
-                locs = data[[f'{pos_col}_{co}' for co in ['x', 'y', 'z']]].values
-                data[f'{pos_col}_root_id'] = locs_to_segments(locs)
 
     return data
 
@@ -349,25 +342,19 @@ def upload_annotations(table_name: str,
     return resp
 
 
-def get_somas(root_ids, split_positions=False, dataset='production'):
+def get_somas(root_ids=None, materialization='live', split_positions=False, dataset='production'):
     """Fetch nuclei segmentation for given neuron(s).
-
-    A couple notes:
-      1. This uses the materialization engine to search for root IDs. This
-         engine is always slightly lagging behind the live data. If you need
-         to-the-minute info your best bet is to fetch the entire table (with
-         `root_ids=None`) and update the roots based on the supervoxel
-         associated with each nucleus (`flywire.supervoxels_to_roots`).
-      2. Since this is a nucleus detection you will find that some neurons do
-         not have an entry despite having a soma. This is due to the
-         "avocado problem" where the nucleus is separate from the rest of the
-         soma.
 
     Parameters
     ----------
-    root_ids  :         int | list of ints | None
+    root_ids :          int | list of ints, optional
                         FlyWire root ID(s) for which to fetch soma infos. Use
                         ``None`` to fetch complete list of annotated nuclei.
+    materialization :   "live" | "latest" | int | bool
+                        Which materialization version to fetch. You can also
+                        provide an ID (int) for a specific materialization
+                        version (see ``get_materialization_versions``). Set to
+                        False to fetch the non-materialized version.
     split_positions :   bool
                         Whether to have separate columns for x/y/z position.
 
@@ -389,17 +376,16 @@ def get_somas(root_ids, split_positions=False, dataset='production'):
     1  7415013     t  83038760463398837  720575940632921242  53.711176  [722912, 244032, 65200]   2640.0
 
     """
-    # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
-
     filter_in_dict = None
     if not isinstance(root_ids, type(None)):
         root_ids = navis.utils.make_iterable(root_ids)
         filter_in_dict = {'pt_root_id': root_ids}
 
-    nuc = client.materialize.query_table('nuclei_v1',
-                                         split_positions=split_positions,
-                                         filter_in_dict=filter_in_dict)
+    nuc = get_annotations('nuclei_v1',
+                          materialization=materialization,
+                          split_positions=split_positions,
+                          dataset=dataset,
+                          filter_in_dict=filter_in_dict)
 
     # Add estimated radius based on nucleus
     if not nuc.empty:
