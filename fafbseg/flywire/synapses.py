@@ -185,13 +185,10 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     client = get_cave_client(dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score',
-               'pre_pt_position', 'post_pt_position']
+               'pre_pt_position', 'post_pt_position', 'id']
 
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
-
-    if neuropils:
-        columns += ['id']
 
     if live_query:
         func = partial(retry(client.materialize.live_query),
@@ -217,6 +214,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
 
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
+
+    # Depending on how queries were batched, we need to drop duplicate synapses
+    syn.drop_duplicates('id', inplace=True)
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post',
@@ -255,7 +255,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     if neuropils:
         syn['neuropil'] = get_synapse_areas(syn['id'].values)
         syn['neuropil'] = syn.neuropil.astype('category')
-        syn.drop('id', axis=1, inplace=True)
+
+    # Drop ID column
+    syn.drop('id', axis=1, inplace=True)
 
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
