@@ -362,7 +362,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
         attributes.append('size_nm3')
 
     l2_info = {}
-    with navis.config.tqdm(desc='Fetching vectors',
+    with navis.config.tqdm(desc='Fetching L2 vectors',
                            disable=not progress,
                            total=len(l2_ids_all),
                            leave=False) as pbar:
@@ -378,7 +378,11 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
 
     # Generate dotprops
     dps = []
-    for root, ids in zip(root_ids, l2_ids):
+    for root, ids in navis.config.tqdm(zip(root_ids, l2_ids),
+                                       desc='Creating dotprops',
+                                       total=len(root_ids),
+                                       disable=not progress or len(root_ids) == 1,
+                                       leave=False):
         # Find out for which IDs we have info
         ids = ids[np.isin(ids, l2_info_ids)]
 
