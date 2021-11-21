@@ -257,7 +257,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
         syn['neuropil'] = syn.neuropil.astype('category')
 
     # Drop ID column
-    syn.drop('id', axis=1, inplace=True)
+    # syn.drop('id', axis=1, inplace=True)
 
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
