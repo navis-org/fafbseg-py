@@ -13,9 +13,12 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
+import functools
 import json
 import navis
 import os
+import time
+import requests
 
 from caveclient import CAVEclient
 from pathlib import Path
@@ -39,6 +42,39 @@ CAVE_DATASETS = {'production': 'flywire_fafb_production',
 # Initialize without a volume
 fw_vol = None
 cave_clients = {}
+
+# Data stuff
+fp = Path(__file__).parent
+data_path = fp.parent / 'data'
+area_ids = None
+vol_names = None
+
+
+def get_synapse_areas(ind):
+    """Lazy-load synapse areas.
+
+    Parameters
+    ----------
+    ind :       (N, ) iterable
+                Synapse indices (shows up as `id` in synapse table).
+
+    Returns
+    -------
+    areas :     (N, ) array
+                Array with neuropil name for each synapse. Unassigned synapses
+                come back as "NA".
+
+    """
+    global area_ids, vol_names
+
+    if isinstance(area_ids, type(None)):
+        area_ids = np.load(data_path / 'global_area_ids.npy.zip')['global_area_ids']
+        with open(data_path / 'volume_name_dict.json') as f:
+            vol_names = json.load(f)
+            vol_names = {int(k): v for k, v in vol_names.items()}
+            vol_names[-1] = 'NA'
+
+    return np.array([vol_names[i] for i in area_ids[ind]])
 
 
 def get_cave_client(dataset='production', token=None, force_new=False):
@@ -214,3 +250,29 @@ def parse_volume(vol, **kwargs):
     else:
         fw_vol = vol
     return fw_vol
+
+
+def retry(func, retries=3, cooldown=2):
+    """Retry function on HTTPError.
+
+    Parameters
+    ----------
+    cooldown :  int | float
+                Cooldown period in seconds between attempts.
+    retries :   int
+                Number of retries before we give up.
+
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        for i in range(1, retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except requests.HTTPError:
+                if i >= retries:
+                    raise
+            except BaseException:
+                raise
+            time.sleep(cooldown)
+    return wrapper
+    return wrapper

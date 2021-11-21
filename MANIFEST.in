@@ -1,0 +1,3 @@
+include fafbseg/data/*.zip
+include fafbseg/data/*.json
+include fafbseg/data/*.md

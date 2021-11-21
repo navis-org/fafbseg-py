@@ -33,7 +33,7 @@ import trimesh as tm
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
-from .utils import parse_volume, get_cave_client
+from .utils import parse_volume, get_cave_client, retry
 
 __all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info']
 
@@ -72,7 +72,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
         root_ids = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
-            func = retry_on_fail(partial(l2_info, dataset=dataset))
+            func = retry(partial(l2_info, dataset=dataset))
             futures = pool.map(func, root_ids)
             info = [f for f in navis.config.tqdm(futures,
                                                  desc='Fetching L2 info',
@@ -337,7 +337,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
     # Note that we are using the L2 graph endpoint as I have not yet found a
     # faster way to query the IDs.
     with ThreadPoolExecutor(max_workers=max_threads) as pool:
-        futures = pool.map(client.chunkedgraph.level2_chunk_graph, root_ids)
+        futures = pool.map(retry(client.chunkedgraph.level2_chunk_graph), root_ids)
         l2_eg = [f for f in navis.config.tqdm(futures,
                                               desc='Fetching L2 IDs',
                                               total=len(root_ids),
@@ -361,7 +361,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
                            disable=not progress,
                            total=len(l2_ids_all),
                            leave=False) as pbar:
-        func = retry_on_fail(client.l2cache.get_l2data)
+        func = retry(client.l2cache.get_l2data)
         for chunk_ix in np.arange(0, len(l2_ids_all), chunk_size):
             chunk = l2_ids_all[chunk_ix: chunk_ix + chunk_size]
             l2_info.update(func(chunk.tolist(), attributes=attributes))
@@ -509,29 +509,3 @@ def chunks_to_nm(xyz_ch, vol, voxel_resolution=[4, 4, 40]):
         * voxel_resolution
         * mip_scaling
     )
-
-
-def retry_on_fail(func, cooldown=2, n_retries=3):
-    """Wrap function to retry call on fail.
-
-    Parameters
-    ----------
-    cooldown :  int | float
-                Cooldown period in seconds between attempts.
-    n_retries : int
-                Number of retries before we give up.
-
-    """
-    def wrapper(*args, **kwargs):
-        i = 0
-        while True:
-            i += 1
-            try:
-                res = func(*args, **kwargs)
-                break
-            except BaseException:
-                if i > n_retries:
-                    raise
-            time.sleep(cooldown)
-        return res
-    return wrapper

@@ -20,10 +20,11 @@ import numpy as np
 import pandas as pd
 
 from functools import partial
+from pathlib import Path
 from tqdm.auto import trange
 
 from .segmentation import is_latest_root
-from .utils import parse_root_ids, get_cave_client
+from .utils import parse_root_ids, get_cave_client, retry, get_synapse_areas
 
 from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
@@ -111,8 +112,8 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
-                   transmitters=False, live_query=True, batch_size=100,
-                   dataset='production', progress=True):
+                   transmitters=False, neuropils=False, live_query=True,
+                   batch_size=100, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
     Parameters
@@ -130,6 +131,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     transmitters :  bool
                     Whether to also load per-synapse neurotransmitter predictions
                     from Eckstein et al. (2020).
+    neuropils :     bool
+                    Whether to add a column indicating which neuropil a synapse
+                    is in.
     attach :        bool
                     If True and ``x`` is Neuron/List, the synapses will be added
                     as ``.connectors`` table. For TreeNeurons (skeletons), the
@@ -158,6 +162,11 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     Returns
     -------
     pandas.DataFrame
+                    Note that each synapse (or rather synaptic connection)
+                    will show up only once. Depending on the query neurons
+                    (`x`), a given row might represent a presynapse for one and
+                    a postsynapse for another neuron. 
+
 
     """
     if not pre and not post:
@@ -181,14 +190,17 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
+    if neuropils:
+        columns += ['id']
+
     if live_query:
-        func = partial(client.materialize.live_query,
+        func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
                        split_positions=True,
                        select_columns=columns)
     else:
-        func = partial(client.materialize.query_table,
+        func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
                        split_positions=True,
                        select_columns=columns)
@@ -239,6 +251,10 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
 
     # Avoid copy warning
     syn = syn.copy()
+
+    if neuropils:
+        syn['neuropil'] = get_synapse_areas(syn['id'].values)
+        syn.drop('id', axis=1, inplace=True)
 
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
@@ -340,12 +356,12 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
     if live_query:
-        func = partial(client.materialize.live_query,
+        func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
     else:
-        func = partial(client.materialize.query_table,
+        func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
                        select_columns=columns)
 
@@ -467,12 +483,12 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
     if live_query:
-        func = partial(client.materialize.live_query,
+        func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
     else:
-        func = partial(client.materialize.query_table,
+        func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
                        select_columns=columns)
 

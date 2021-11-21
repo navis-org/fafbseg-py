@@ -22,7 +22,7 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
-from .utils import get_cave_client
+from .utils import get_cave_client, retry
 from .segmentation import locs_to_segments
 
 

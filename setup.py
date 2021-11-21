@@ -42,5 +42,6 @@ setup(
     install_requires=requirements,
     extras_require={},
     python_requires='>=3.6',
-    zip_safe=False
+    zip_safe=False,
+    include_package_data=True
 )
