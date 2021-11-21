@@ -330,6 +330,11 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
     if not navis.utils.is_iterable(root_ids):
         root_ids = [root_ids]
 
+    root_ids = np.asarray(root_ids)
+
+    if '0' in root_ids or 0 in root_ids:
+        raise ValueError('Unable to produce dotprops for root ID 0.')
+
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
