@@ -119,7 +119,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
     Parameters
     ----------
     x :             int | list of int | Neuron/List
-                    Either a flywire segment ID (i.e. root ID), a list thereof
+                    Either a FlyWire segment ID (i.e. root ID), a list thereof
                     or a Neuron/List. For neurons, the ``.id`` is assumed to be
                     the root ID. If you have a neuron (in FlyWire space) but
                     don't know its ID, use
@@ -165,7 +165,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
                     Note that each synapse (or rather synaptic connection)
                     will show up only once. Depending on the query neurons
                     (`x`), a given row might represent a presynapse for one and
-                    a postsynapse for another neuron. 
+                    a postsynapse for another neuron.
 
 
     """
@@ -254,6 +254,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
 
     if neuropils:
         syn['neuropil'] = get_synapse_areas(syn['id'].values)
+        syn['neuropil'] = syn.neuropil.astype('category')
         syn.drop('id', axis=1, inplace=True)
 
     if attach and isinstance(x, navis.NeuronList):
