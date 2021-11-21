@@ -252,7 +252,7 @@ def parse_volume(vol, **kwargs):
     return fw_vol
 
 
-def retry(func, retries=3, cooldown=2):
+def retry(func, retries=5, cooldown=2):
     """Retry function on HTTPError.
 
     Parameters
@@ -260,7 +260,8 @@ def retry(func, retries=3, cooldown=2):
     cooldown :  int | float
                 Cooldown period in seconds between attempts.
     retries :   int
-                Number of retries before we give up.
+                Number of retries before we give up. Every subsequent retry
+                will delay by an additional `retry`.
 
     """
     @functools.wraps(func)
@@ -273,6 +274,6 @@ def retry(func, retries=3, cooldown=2):
                     raise
             except BaseException:
                 raise
-            time.sleep(cooldown)
+            time.sleep(cooldown * i)
     return wrapper
     return wrapper
