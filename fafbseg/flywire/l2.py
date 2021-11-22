@@ -387,12 +387,13 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
         ids = ids[np.isin(ids, l2_info_ids)]
 
         # Get xyz points and the first component of the PCA as vector
-        pts = np.vstack([l2_info[i]['rep_coord_nm'] for i in ids])
-        vec = np.vstack([l2_info[i]['pca'][0] for i in ids])
+        this_info = [l2_info[i] for i in ids]
+        pts = np.vstack([i['rep_coord_nm'] for i in this_info])
+        vec = np.vstack([i['pca'][0] for i in this_info])
 
         # Apply min size filter if requested
         if min_size:
-            sizes = np.array([l2_info[i]['size_nm3'] for i in ids])
+            sizes = np.array([i['size_nm3'] for i in this_info])
             pts = pts[sizes >= min_size]
             vec = vec[sizes >= min_size]
 
