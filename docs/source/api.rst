@@ -28,6 +28,7 @@ FlyWire segmentation
     fafbseg.flywire.l2_dotprops
     fafbseg.flywire.l2_skeleton
     fafbseg.flywire.locs_to_supervoxels
+    fafbseg.flywire.supervoxels_to_roots
     fafbseg.flywire.skid_to_id
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
