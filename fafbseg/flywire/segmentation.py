@@ -317,7 +317,10 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
 
-    for i in trange(0, len(x), batch_size,
+    if isinstance(timestamp. np.datetime64):
+        timestamp = str(timestamp)
+
+    for i in trange(0, len(x), int(batch_size),
                     desc='Fetching roots',
                     disable=not progress or len(x) < batch_size):
         # This batch
@@ -445,7 +448,7 @@ def neuron_to_segments(x, dataset='production', coordinates='voxel'):
     return matrix
 
 
-def locs_to_segments(locs, root_ids=True, dataset='production',
+def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
                      coordinates='voxel'):
     """Retrieve flywire segment IDs (root IDs) at given location(s).
 
@@ -458,6 +461,10 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
     root_ids :      bool
                     If True, will return root IDs. If False, will return supervoxel
                     IDs.
+    timestamp :     int | str | datetime, optional
+                    Get roots at given date (and time). Int must be unix
+                    timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    If timestamp is given, will ignore `use_cache`.
     dataset :       str | CloudVolume
                     Against which flywire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -486,7 +493,7 @@ def locs_to_segments(locs, root_ids=True, dataset='production',
     if not root_ids:
         return svoxels
 
-    return supervoxels_to_roots(svoxels, dataset=dataset)
+    return supervoxels_to_roots(svoxels, timestamp=timestamp, dataset=dataset)
 
 
 def skid_to_id(x,
