@@ -265,19 +265,19 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
             if pre:
                 presyn = syn.loc[syn.pre == int(n.id),
                                  ['pre_x', 'pre_y', 'pre_z',
-                                  'cleft_scores', 'post']].rename({'pre_x': 'x',
-                                                                   'pre_y': 'y',
-                                                                   'pre_z': 'z',
-                                                                   'post': 'partner_id'},
+                                  'cleft_score', 'post']].rename({'pre_x': 'x',
+                                                                  'pre_y': 'y',
+                                                                  'pre_z': 'z',
+                                                                  'post': 'partner_id'},
                                                                   axis=1)
                 presyn['type'] = 'pre'
             if post:
                 postsyn = syn.loc[syn.post == int(n.id),
                                   ['post_x', 'post_y', 'post_z',
-                                   'cleft_scores', 'pre']].rename({'post_x': 'x',
-                                                                   'post_y': 'y',
-                                                                   'post_z': 'z',
-                                                                   'pre': 'partner_id'},
+                                   'cleft_score', 'pre']].rename({'post_x': 'x',
+                                                                  'post_y': 'y',
+                                                                  'post_z': 'z',
+                                                                  'pre': 'partner_id'},
                                                                   axis=1)
                 postsyn['type'] = 'post'
 
