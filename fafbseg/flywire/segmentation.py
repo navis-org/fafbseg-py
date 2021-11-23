@@ -258,12 +258,13 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     # mismatch in types (int vs np.int?) which causes all root IDs to be in miss
     # -> I think that's because of the way disk cache works
     miss = x[~np.isin(x, np.array(list(svoxels.keys())).astype(int))]
-    svoxels.update({i: vol.get_leaves(i,
-                                      bbox=vol.meta.bounds(0),
-                                      mip=0) for i in navis.config.tqdm(miss,
-                                                                        desc='Querying',
-                                                                        disable=not progress,
-                                                                        leave=False)})
+    get_leaves = retry(vol.get_leaves)
+    svoxels.update({i: get_leaves(i,
+                                  bbox=vol.meta.bounds(0),
+                                  mip=0) for i in navis.config.tqdm(miss,
+                                                                    desc='Querying',
+                                                                    disable=not progress,
+                                                                    leave=False)})
 
     # Update cache
     if use_cache:
