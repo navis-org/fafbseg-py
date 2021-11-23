@@ -319,7 +319,7 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
 
-    if isinstance(timestamp. np.datetime64):
+    if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
 
     for i in trange(0, len(x), int(batch_size),
