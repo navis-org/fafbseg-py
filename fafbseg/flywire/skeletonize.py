@@ -259,7 +259,6 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
     return sorted(candidates, key=lambda x: radii[x])[-1]
 
 
-def detect_soma_mesh(mesh):
     """Try detecting the soma based on vertex clusters.
 
     Parameters
