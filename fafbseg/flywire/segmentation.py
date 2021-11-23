@@ -647,11 +647,13 @@ def update_ids(id,
     """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
-        1. Checking if ID is outdated (see fafbseg.flywire.is_latest_root)
-        2. Fetching all supervoxels for outdated IDs
-        3. Picking a random sample of ``sample`` of these supervoxels
+        1. Check if ID is outdated (see fafbseg.flywire.is_latest_root)
+        2. See if we can map outdated IDs to a single up-to-date root (works
+           if neuron has only seen merges)
+        3. For uncertain IDs, fetch all supervoxels
+        3. Picking a random sample (see ``sample`` parameter) of supervoxels
         4. Fetching the most recent root IDs for the sample supervoxels
-        5. Returning the root ID that was hit the most.
+        5. Returning the root ID that was hit the most
 
     Parameters
     ----------
@@ -697,9 +699,10 @@ def update_ids(id,
     vol = parse_volume(dataset, **kwargs)
 
     if isinstance(id, (list, set, np.ndarray)):
+        # Run is_latest once for all roots
         is_latest = is_latest_root(id, dataset=dataset)
         res = [update_ids(x,
-                          dataset=vol,
+                          dataset=dataset,
                           is_latest=il,
                           sample=sample) for x, il in navis.config.tqdm(zip(id, is_latest),
                                                                         desc='Updating',
@@ -713,37 +716,45 @@ def update_ids(id,
         is_latest = is_latest_root(id, dataset=dataset)[0]
 
     if not is_latest:
-        # Get supervoxel ids - we need to use mip=0 because otherwise small neurons
-        # might not have any (visible) supervoxels
-        svoxels = vol.get_leaves(id, bbox=vol.meta.bounds(0), mip=0)
+        client = get_cave_client(dataset=dataset)
+        pot_roots = client.chunkedgraph.get_latest_roots(id)
 
-        # Shuffle voxels
-        np.random.shuffle(svoxels)
-
-        # Generate sample
-        if sample >= 1:
-            smpl = svoxels[: sample]
-        else:
-            smpl = svoxels[: int(len(svoxels) * sample)]
-
-        # Fetch up-to-date root IDs for the sampled supervoxels
-        roots = supervoxels_to_roots(smpl, dataset=vol)
-
-        # Find unique Ids and count them
-        unique, counts = np.unique(roots, return_counts=True)
-
-        # Get sorted indices
-        sort_ix = np.argsort(counts)
-
-        # New Id is the most frequent ID
-        new_id = unique[sort_ix[-1]]
-
-        # Confidence is the difference between the top and the 2nd most frequent ID
-        if len(unique) > 1:
-            conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
-                         2)
-        else:
+        if len(pot_roots) == 1:
+            new_id = pot_roots[0]
             conf = 1
+        else:
+            # Get supervoxel ids - we need to use mip=0 because otherwise small
+            # neurons might not have any (visible) supervoxels
+            svoxels = roots_to_supervoxels(id, progress=False)[int(id)]
+
+            # Shuffle voxels
+            np.random.shuffle(svoxels)
+
+            # Generate sample
+            if sample >= 1:
+                smpl = svoxels[: sample]
+            else:
+                smpl = svoxels[: int(len(svoxels) * sample)]
+
+            # Fetch up-to-date root IDs for the sampled supervoxels
+            roots = supervoxels_to_roots(smpl, dataset=vol, progress=False)
+
+            # Find unique Ids and count them
+            unique, counts = np.unique(roots, return_counts=True)
+
+            # Get sorted indices
+            sort_ix = np.argsort(counts)
+
+            # New Id is the most frequent ID
+            new_id = unique[sort_ix[-1]]
+
+            # Confidence is the difference between the top and the 2nd most
+            # frequent ID
+            if len(unique) > 1:
+                conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
+                             2)
+            else:
+                conf = 1
     else:
         new_id = id
         conf = 1
