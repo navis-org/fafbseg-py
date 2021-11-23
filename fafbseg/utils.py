@@ -14,8 +14,10 @@
 #    GNU General Public License for more details.
 """Collection of utility functions."""
 
+import requests
+
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 use_pbars = True
 
@@ -53,3 +55,38 @@ def is_url(x):
         return all([result.scheme, result.netloc, result.path])
     except BaseException:
         return False
+
+
+def make_url(*args, **GET):
+    """Generate URL.
+
+    Parameters
+    ----------
+    *args
+                Will be turned into the URL. For example::
+
+                    >>> make_url('http://my-server.com', 'skeleton', 'list')
+                    'http://my-server.com/skeleton/list'
+
+    **GET
+                Keyword arguments are assumed to be GET request queries
+                and will be encoded in the url. For example::
+
+                    >>> make_url('http://my-server.com', 'skeleton', node_gt: 100)
+                    'http://my-server.com/skeleton?node_gt=100'
+
+    Returns
+    -------
+    url :       str
+
+    """
+    # Generate the URL
+    url = args[0]
+    for arg in args[1:]:
+        arg_str = str(arg)
+        joiner = '' if url.endswith('/') else '/'
+        relative = arg_str[1:] if arg_str.startswith('/') else arg_str
+        url = requests.compat.urljoin(url + joiner, relative)
+    if GET:
+        url += '?{}'.format(urlencode(GET))
+    return url
