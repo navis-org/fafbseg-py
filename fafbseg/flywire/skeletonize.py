@@ -25,7 +25,7 @@ import numpy as np
 import skeletor as sk
 import trimesh as tm
 
-from .segmentation import snap_to_id
+from .segmentation import snap_to_id, is_latest_root
 from .utils import parse_volume
 from .meshes import detect_soma
 from .annotations import get_somas
@@ -40,7 +40,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     """Skeletonize FlyWire neuron.
 
     Note that this is optimized to be primarily fast which comes at the cost
-    of (some) quality.
+    of (some) quality. Also note that soma detection is using the nucleus
+    segmentation and falls back to a radius-based heuristic if no nucleus is
+    found.
 
     Parameters
     ----------
@@ -158,7 +160,11 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         tn._clear_temp_attr()
 
     # See if we can find a soma based on the nucleus segmentation
-    soma = get_somas(id, dataset=dataset)
+    if is_latest_root(id):
+        materialization = 'live'
+    else:
+        materialization = 'latest'
+    soma = get_somas(id, dataset=dataset, materialization=materialization)
     if not soma.empty:
         soma = tn.snap(soma.iloc[0].pt_position)[0]
     else:
