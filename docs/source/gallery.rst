@@ -24,6 +24,7 @@ function. There you will also find more examples.
    tutorials/neuroglancer
    tutorials/flywire_neurons
    tutorials/flywire_segments
+   tutorials/flywire_connectivity
    tutorials/merge_flywire_neuron
 
 .. raw:: html

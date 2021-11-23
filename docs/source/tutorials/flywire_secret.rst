@@ -2,10 +2,10 @@
 
 Setting the FlyWire secret
 ==========================
-Many data queries against FlyWire use ``cloudvolume`` which provides an
-interface with FlyWire's chunkedgraph data base. To be able to query that
-backend you need to generate and save an API token (or "secret") similar to
-CATMAID. This needs to be done only once.
+Many data queries against FlyWire use ``cloudvolume`` or ``caveclient`` which
+provides interfaces with FlyWire's chunkedgraph and annotation backend,
+respectively. To be able to make those query you need to generate and store
+an API token (or "secret"). This needs to be done only once.
 
 Generate your secret
 --------------------
@@ -18,13 +18,13 @@ something like this:
   "ghd2nfk67kdndncf5kdmsqwo8kf23md6"
 
 That's your token! Importantly: whenever you repeat above procedure you will
-be issued with a new token and _any old token will be void_.
+be issued with a new token and `any old token will become void!`.
 
 Saving the secret
 -----------------
-Your token must then be must be saved in a file in
-``~/.cloudvolume/secrets/prodv1.flywire-daf.com-cave-secret.json``. That file needs to look
-something like this:
+Your token must then be must be saved on your computer in a file in
+``~/.cloudvolume/secrets/prodv1.flywire-daf.com-cave-secret.json``. That file
+needs to look something like this:
 
 .. code-block:: bat
 
@@ -39,4 +39,4 @@ something like this:
   >>> import fafbseg
   >>> fafbseg.flywire.set_chunkedgraph_secret("ghd2nfk67kdndncf5kdmsqwo8kf23md6")
 
-That's it, you're done! You should now be able to query the flywire dataset.
+That's it, you're done! You should now be able to query the FlyWire dataset.

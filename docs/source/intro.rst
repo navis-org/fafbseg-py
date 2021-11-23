@@ -45,7 +45,9 @@ As of mid 2020, the Seung and Murthy labs at Princeton have made their
 segmentation of FAFB public as `"FlyWire" <https://flywire.ai/>`_.
 
 Anyone can join this project but community guidelines similar to those for the
-"walled garden" apply.
+"walled garden" apply. Importantly, newly joined users will be confined to a
+"sandbox" dataset for training and only be admitted to the production dataset
+after passing a quick test.
 
 Important to note is that the FAFB image data was realigned for the FlyWire
 segmentation. This is why x/y/z coordinates typically vary by a micron or so
@@ -69,9 +71,8 @@ neurons to compile connectivity tables.
 
 The raw data is publicly available: see
 `this <https://github.com/funkelab/synful_fafb>`_ repository by the Funke lab.
-However, to make it easier for researcher to access, Eric Perlman and Davi
-Bock (in collaboration with the Funke lab) have loaded the synapse data into
-a web service that allows on-demand connectivity queries.
+However, to make it easier for researcher to access, Sven Dorkenwald, Forrest
+Collman et al. have loaded the data into their annotation backend.
 
 Bringing it all together
 ------------------------
@@ -93,16 +94,15 @@ In particular, it enables you to:
 
 General layout
 **************
-Currently, ``FAFBseg`` is divided into four main modules:
+Currently, ``FAFBseg`` is divided into three main modules:
 
 - ``fafbseg.flywire``: work with FlyWire segmentation
 - ``fafbseg.google``: work with Google segmentation of FAFB14
 - ``fafbseg.move``: import/export/move data around
-- ``fafbseg.xform``: transform data between FAFB14 and FlyWire
 
 You will find that certain functions have a version for Google and for FlyWire.
 For example, :func:`fafbseg.flywire.locs_to_segments` and
 :func:`fafbseg.google.locs_to_segments` let you map locations to segmentation
 IDs for the respective data set.
 
-Check out the tutorials
+Check out the tutorials for details!
