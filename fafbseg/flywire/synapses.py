@@ -111,7 +111,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                                    weighted=weighted, id_col='pre')
 
 
-def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
+def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
                    transmitters=False, neuropils=False, live_query=True,
                    batch_size=100, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
@@ -138,7 +138,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0, clean=True,
                     If True and ``x`` is Neuron/List, the synapses will be added
                     as ``.connectors`` table. For TreeNeurons (skeletons), the
                     synapses will be mapped to the closest node.
-    min_score :     int
+    min_score :     int, optional
                     Minimum "cleft score". The default of 30 is what Buhmann et al.
                     used in the paper.
     clean :         bool
