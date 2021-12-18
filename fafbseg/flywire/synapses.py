@@ -259,6 +259,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     # Drop ID column
     # syn.drop('id', axis=1, inplace=True)
 
+    if isinstance(x, navis.core.BaseNeuron):
+        x = navis.NeuronList([x])
+
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
             presyn = postsyn = pd.DataFrame([])
