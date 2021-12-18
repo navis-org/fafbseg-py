@@ -216,12 +216,15 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
 
     if navis.utils.is_iterable(root_id):
         nl = []
-        for id in navis.config.tqdm(root_id, desc='Skeletonizing',
+        for id in navis.config.tqdm(root_id, desc='L2 skeletons',
                                     disable=not progress, leave=False):
             n = l2_skeleton(id, refine=refine, drop_missing=drop_missing,
                             progress=progress, dataset=dataset, **kwargs)
             nl.append(n)
         return navis.NeuronList(nl)
+
+    # Turn into integer
+    root_id = int(root_id)
 
     # Get the cloudvolume
     vol = parse_volume(dataset)
