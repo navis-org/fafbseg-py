@@ -342,14 +342,16 @@ def upload_annotations(table_name: str,
     return resp
 
 
-def get_somas(root_ids=None, materialization='live', split_positions=False, dataset='production'):
+def get_somas(x=None, materialization='live', split_positions=False, dataset='production'):
     """Fetch nuclei segmentation for given neuron(s).
 
     Parameters
     ----------
-    root_ids :          int | list of ints, optional
-                        FlyWire root ID(s) for which to fetch soma infos. Use
-                        ``None`` to fetch complete list of annotated nuclei.
+    x :                 int | list of ints | NeuronList, optional
+                        FlyWire root ID(s) or neurons for which to fetch soma
+                        infos. Use ``None`` to fetch complete list of annotated
+                        nuclei. If neurons, will set their soma and soma radius
+                        if one is found.
     materialization :   "live" | "latest" | int | bool
                         Which materialization version to fetch. You can also
                         provide an ID (int) for a specific materialization
@@ -376,9 +378,15 @@ def get_somas(root_ids=None, materialization='live', split_positions=False, data
     1  7415013     t  83038760463398837  720575940632921242  53.711176  [722912, 244032, 65200]   2640.0
 
     """
+    if isinstance(x, navis.BaseNeuron):
+        x = navis.NeuronList(x)
+
     filter_in_dict = None
-    if not isinstance(root_ids, type(None)):
-        root_ids = navis.utils.make_iterable(root_ids)
+    if not isinstance(x, type(None)):
+        if isinstance(x, navis.NeuronList):
+            root_ids = x.id.astype(int)
+        else:
+            root_ids = navis.utils.make_iterable(x).astype(int)
         filter_in_dict = {'pt_root_id': root_ids}
 
     nuc = get_annotations('nuclei_v1',
@@ -402,4 +410,26 @@ def get_somas(root_ids=None, materialization='live', split_positions=False, data
             nuc.drop(start_cols + end_cols, inplace=True, axis=1)
         nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2
 
-    return nuc
+        # If NeuronList, set their somas
+        if isinstance(x, navis.NeuronList):
+            soma_pos = nuc.set_index('pt_root_id').pt_position.to_dict()
+            soma_rad = nuc.set_index('pt_root_id').rad_est.to_dict()
+            for n in x:
+                # Skip if no soma found
+                if int(n.id) not in soma_pos:
+                    continue
+
+                if isinstance(n, navis.TreeNeuron):
+                    n.soma = n.snap(soma_pos[int(n.id)])[0]
+                    n.nodes.loc[n.nodes.node_id == n.soma, 'radius'] = soma_rad[int(n.id)]
+                    n._clear_temp_attr()  # not sure why but this is necessary for some reason
+                    n.reroot(n.soma, inplace=True)
+                elif isinstance(n, navis.MeshNeuron):
+                    n.soma_pos = soma_pos[int(n.id)]
+    else:
+        # Make sure the column exist even in an empty table
+        nuc['rad_est'] = []
+
+    # Sorting by radius makes sure that the small false-positives end up at the
+    # bottom of the list
+    return nuc.sort_values('rad_est', ascending=False)
