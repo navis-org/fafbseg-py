@@ -63,16 +63,10 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> # Fetch leaderboard
-    >>> edits = flywire.fetch_edit_history(720575940621039145)
-    >>> # Group by user
-    >>> edits.groupby('user_name').size()
-    user_name
-    Claire McKellar    47
-    Jay Gager           4
-    Sandeep Kumar       1
-    Sarah Morejohn      6
-    dtype: int64
+    >>> # Fetch leaderboard with edits per day
+    >>> hist = flywire.fetch_leaderboard(by_day=True)
+    >>> # Plot user actions over time
+    >>> hist.T.plot()
 
     """
     assert isinstance(days, (int, np.int))
