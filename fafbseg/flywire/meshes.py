@@ -21,6 +21,7 @@ import trimesh as tm
 
 from cloudvolume.mesh import Mesh
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .l2 import l2_graph, chunks_to_nm
 from .synapses import fetch_synapses
@@ -29,7 +30,8 @@ from .utils import parse_volume
 __all__ = ['get_mesh_neuron']
 
 
-def get_mesh_neuron(id, with_synapses=False, progress=True, dataset='production'):
+def get_mesh_neuron(id, with_synapses=False, threads=None,
+                    progress=True, dataset='production'):
     """Fetch flywire neuron as navis.MeshNeuron.
 
     Parameters
@@ -41,6 +43,8 @@ def get_mesh_neuron(id, with_synapses=False, progress=True, dataset='production'
                         synapse predicted by Buhmann et al. (2020).
                         A "synapse score" (confidence) threshold of 30 is
                         applied.
+    threads :           bool | int, optional
+                        Whether to use threads to fetch meshes in parallel.
     dataset :           str | CloudVolume
                         Against which flywire dataset to query::
                           - "production" (currently fly_v31)
@@ -60,14 +64,33 @@ def get_mesh_neuron(id, with_synapses=False, progress=True, dataset='production'
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(id):
+        id = np.asarray(id).astype(int)
         if 0 in id:
             raise ValueError('Root ID 0 among the queried IDs')
-        return navis.NeuronList([get_mesh_neuron(n, dataset=dataset,
-                                                 with_synapses=with_synapses)
-                                 for n in navis.config.tqdm(id,
-                                                            desc='Fetching',
-                                                            disable=not progress,
-                                                            leave=False)])
+
+        if not threads or threads == 1:
+            return navis.NeuronList([get_mesh_neuron(n, dataset=dataset,
+                                                     with_synapses=with_synapses)
+                                     for n in navis.config.tqdm(id,
+                                                                desc='Fetching',
+                                                                disable=not progress,
+                                                                leave=False)])
+        else:
+            if not isinstance(threads, int):
+                raise TypeError(f'`threads` must be int or `None`, got "{type(threads)}".')
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = {executor.submit(get_mesh_neuron, n,
+                                           dataset=dataset,
+                                           with_synapses=with_synapses): n for n in id}
+
+                results = []
+                for f in navis.config.tqdm(as_completed(futures),
+                                           total=len(futures),
+                                           desc='Fetching',
+                                           disable=not progress,
+                                           leave=False):
+                    results.append(f.result())
+            return navis.NeuronList(results)
 
     # Make sure the ID is integer
     id = int(id)
