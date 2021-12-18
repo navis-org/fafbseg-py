@@ -27,7 +27,7 @@ from concurrent import futures
 from diskcache import Cache
 from requests_futures.sessions import FuturesSession
 from scipy import ndimage
-from tqdm.auto import trange
+from tqdm.auto import trange, tqdm
 
 from .. import spine
 from .. import xform
@@ -322,23 +322,28 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
 
-    for i in trange(0, len(x), int(batch_size),
-                    desc='Fetching roots',
-                    disable=not progress or len(x) < batch_size):
-        # This batch
-        batch = x[i:i+batch_size]
+    with tqdm(desc='Fetching roots',
+              leave=False,
+              total=len(x),
+              disable=not progress or len(x) < batch_size) as pbar:
 
-        # get_roots() doesn't like to be asked for zeros - causes server error
-        not_zero = batch != 0
-        try:
-            roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
-                                                            timestamp=timestamp)
-        except BaseException:
-            if not retry:
-                raise
-            time.sleep(1)
-            roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
-                                                            timestamp=timestamp)
+        for i in range(0, len(x), int(batch_size)):
+            # This batch
+            batch = x[i:i+batch_size]
+
+            # get_roots() doesn't like to be asked for zeros - causes server error
+            not_zero = batch != 0
+            try:
+                roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                                timestamp=timestamp)
+            except BaseException:
+                if not retry:
+                    raise
+                time.sleep(1)
+                roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                                timestamp=timestamp)
+
+            pbar.update(len(batch))
 
     return roots
 
