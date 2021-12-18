@@ -685,12 +685,12 @@ def update_ids(id,
     Parameters
     ----------
     id :            int | list-like
-                    Single ID or list of flywire (root) IDs.
+                    Single ID or list of FlyWire (root) IDs.
     sample :        int | float
                     Number (>= 1) or fraction (< 1) of super voxels to sample
                     to guess the most recent version.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query:
+                    Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
                       - "sandbox" (i.e. fly_v26)
     progress :      bool
@@ -737,6 +737,12 @@ def update_ids(id,
                                                                         total=len(id),
                                                                         disable=not progress or len(id) == 1)]
         return pd.concat(res, axis=0, sort=False, ignore_index=True)
+
+    try:
+        id = int(id)
+    except ValueError:
+        raise ValueError(f'{id} does not look like a valid root ID.')
+
 
     # Check if outdated
     if isinstance(is_latest, type(None)):
