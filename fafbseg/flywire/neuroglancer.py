@@ -163,7 +163,11 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     # See if we need to assign colors
     if not isinstance(seg_colors, type(None)):
-        if not isinstance(seg_colors, dict):
+        if isinstance(seg_colors, str):
+            seg_colors = {s: seg_colors for s in all_segs}
+        elif isinstance(seg_colors, tuple) and len(seg_colors) == 3:
+            seg_colors = {s: seg_colors for s in all_segs}
+        elif not isinstance(seg_colors, dict):
             if not navis.utils.is_iterable(seg_colors):
                 raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
             if len(seg_colors) != len(all_segs):
