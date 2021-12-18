@@ -376,21 +376,20 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
             pbar.update(len(chunk))
 
     # L2 chunks without info will show as empty dictionaries
-    # Let's drop them to make our life easier
-    l2_info_ids = [k for k, v in l2_info.items() if v]
+    # Let's drop them to make our life easier (speeds up indexing too)
+    l2_info = {k: v for k, v in l2_info.items() if v}
 
     # Generate dotprops
     dps = []
     for root, ids in navis.config.tqdm(zip(root_ids, l2_ids),
                                        desc='Creating dotprops',
                                        total=len(root_ids),
-                                       disable=not progress or len(root_ids) == 1,
+                                       disable=not progress or len(root_ids) <= 1,
                                        leave=False):
-        # Find out for which IDs we have info
-        ids = ids[np.isin(ids, l2_info_ids)]
-
         # Get xyz points and the first component of the PCA as vector
-        this_info = [l2_info[i] for i in ids]
+        # Note that first subsetting IDs to what's actually available in
+        # `l2_info` is actually slower than doing it like this
+        this_info = [l2_info[i] for i in ids if i in l2_info]
         pts = np.vstack([i['rep_coord_nm'] for i in this_info])
         vec = np.vstack([i['pca'][0] for i in this_info])
 
