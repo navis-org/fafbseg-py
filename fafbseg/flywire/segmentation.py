@@ -399,7 +399,7 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
                                       coordinates=coordinates, mip=-1)
 
 
-def neuron_to_segments(x, dataset='production', coordinates='voxel'):
+def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'):
     """Get root IDs overlapping with a given neuron.
 
     Parameters
@@ -407,6 +407,9 @@ def neuron_to_segments(x, dataset='production', coordinates='voxel'):
     x :                 Neuron/List
                         Neurons for which to return root IDs. Neurons must be
                         in flywire (FAFB14.1) space.
+    short :             bool
+                        If True will only return the top hit for each neuron
+                        (including a confidence score).
     dataset :           str | CloudVolume
                         Against which flywire dataset to query::
                             - "production" (current production dataset, fly_v31)
@@ -426,6 +429,13 @@ def neuron_to_segments(x, dataset='production', coordinates='voxel'):
                             root_id
                             10336680915   5     0
                             10336682132   0     1
+
+    summary :           pandas.DataFrame
+                        If ``short=True``: DataFrame of top hits only::
+
+                            id            match   confidence
+                            12345   103366809155     0.87665
+                            412314  103366821325     0.65233
 
     """
     if isinstance(x, navis.TreeNeuron):
@@ -452,7 +462,23 @@ def neuron_to_segments(x, dataset='production', coordinates='voxel'):
     # and values are the overlap counts
     matrix = seg_counts.pivot(index='root_id', columns='id', values='counts')
 
-    return matrix
+    if not short:
+        return matrix
+
+    # Extract top IDs and scores
+    top_id = matrix.index[np.argmax(matrix.fillna(0).values, axis=0)]
+
+    # Confidence is the difference between top and 2nd score
+    top_score = matrix.max(axis=0).values
+    sec_score = np.sort(matrix.fillna(0).values, axis=0)[-2, :]
+    conf = (top_score - sec_score) / matrix.sum(axis=0).values
+
+    summary = pd.DataFrame([])
+    summary['id'] = matrix.columns
+    summary['match'] = top_id
+    summary['confidence'] = conf
+
+    return summary
 
 
 def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
