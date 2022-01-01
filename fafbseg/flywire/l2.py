@@ -185,7 +185,7 @@ def l2_graph(root_ids, progress=True, dataset='production'):
     return G
 
 
-def l2_skeleton(root_id, refine=True, drop_missing=True,
+def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                 progress=True, dataset='production', **kwargs):
     """Generate skeleton from L2 graph.
 
@@ -201,7 +201,14 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
                         Only relevant if ``refine=True``: if True, will drop
                         nodes that don't have a corresponding chunk mesh. These
                         are typically chunks that are either very small or very
-                        new.
+                        new. Note that this might result in empty neurons.
+    omit_failures :     bool, optional
+                        Determine behaviour when skeleton generation fails
+                        (e.g. if the neuron has only a single chunk):
+                         - ``None`` (default) will raise an exception
+                         - ``True`` will skip the offending neuron (might result
+                           in an empty ``NeuronList``)
+                         - ``False`` will return an empty ``TreeNeuron``
     progress :          bool
                         Whether to show a progress bar.
     **kwargs
@@ -210,8 +217,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
 
     Returns
     -------
-    skeleton :          navis.TreeNeuron
-                        The extracted skeleton.
+    skeleton(s) :       navis.TreeNeuron | navis.NeuronList
+                        The extracted L2 skeleton.
 
     Examples
     --------
@@ -219,6 +226,9 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
     >>> n = flywire.l2_skeleton(720575940614131061)
 
     """
+    if omit_failures not in (None, True, False):
+        raise ValueError('`omit_failures` must be either None, True or False. '
+                         f'Got "{omit_failures}".')
     # TODO:
     # - drop duplicate nodes in unrefined skeleton
     # - use L2 graph to find soma: highest degree is typically the soma
@@ -241,9 +251,25 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
-    # Load the L2 graph for given root ID
-    # This is a (N,2) array of edges
-    l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_id))
+    # Load the L2 graph for given root ID (this is a (N, 2) array of edges)
+    get_l2_edges = retry(client.chunkedgraph.level2_chunk_graph)
+    l2_eg = get_l2_edges(root_id)
+
+    # If no edges, we can't create a skeleton
+    if not len(l2_eg):
+        msg = (f'Unable to create L2 skeleton: root ID {root_id} '
+               'consists of only a single L2 chunk.')
+        if omit_failures == None:
+            raise ValueError(msg)
+
+        navis.config.logger.warning(msg)
+
+        if omit_failures:
+            # If omission simply return an empty NeuronList
+            return navis.NeuronList([])
+            # If no omission, return empty TreeNeuron
+        else:
+            return navis.TreeNeuron(None, id=root_id, units='1 nm', **kwargs)
 
     # Drop duplicate edges
     l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
@@ -288,15 +314,29 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
 
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
-        swc.loc[has_new, 'x'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][0])
-        swc.loc[has_new, 'y'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][1])
-        swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
+
+        if new_co:
+            swc.loc[has_new, 'x'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][0])
+            swc.loc[has_new, 'y'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][1])
+            swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
 
         # Turn into a proper neuron
         tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
 
         # Drop nodes that are still at their unrefined chunk position
         if drop_missing:
+            if any(~has_new):
+                msg = (f'Unable to refine: no L2 info for root ID {root_id} '
+                       'available. Set `drop_missing=False` to use unrefined '
+                       'positions.')
+                if omit_failures == None:
+                    raise ValueError(msg)
+                elif omit_failures:
+                    return navis.NeuronList([])
+                    # If no omission, return empty TreeNeuron
+                else:
+                    return navis.TreeNeuron(None, id=root_id, units='1 nm', **kwargs)
+
             tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
     else:
         tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
@@ -304,9 +344,11 @@ def l2_skeleton(root_id, refine=True, drop_missing=True,
     return tn
 
 
-def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
-                dataset='production', **kwargs):
+def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
+                max_threads=10, dataset='production', **kwargs):
     """Generate dotprops from L2 chunks.
+
+    L2 chunks not present in the L2 cache are silently ignored.
 
     Parameters
     ----------
@@ -319,6 +361,13 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
                         finer terminal neurites which typically break into more,
                         smaller chunks and are hence overrepresented. A good
                         value appears to be around 1_000_000.
+    omit_failures :     bool, optional
+                        Determine behaviour when dotprops generation fails
+                        (e.g. if the neuron has only a single chunk):
+                         - ``None`` (default) will raise an exception
+                         - ``True`` will skip the offending neuron (might result
+                           in an empty ``NeuronList``)
+                         - ``False`` will return an empty ``Dotprops``
     progress :          bool
                         Whether to show a progress bar.
     max_threads :       int
@@ -339,6 +388,10 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
     >>> n = flywire.l2_dotprops(720575940614131061)
 
     """
+    if omit_failures not in (None, True, False):
+        raise ValueError('`omit_failures` must be either None, True or False. '
+                         f'Got "{omit_failures}".')
+
     if not navis.utils.is_iterable(root_ids):
         root_ids = [root_ids]
 
@@ -398,6 +451,19 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
         # Note that first subsetting IDs to what's actually available in
         # `l2_info` is actually slower than doing it like this
         this_info = [l2_info[i] for i in ids if i in l2_info]
+
+        if not len(this_info):
+            msg = ('Unable to create L2 dotprops: none of the L2 chunks for '
+                   f'root ID {root} are present in the L2 cache.')
+            if omit_failures == None:
+                raise ValueError(msg)
+
+            if not omit_failures:
+                # If no omission, add empty Dotprops
+                dps.append(navis.Dotprops(None, k=None, id=root,
+                                          units='1 nm', **kwargs))
+            continue
+
         pts = np.vstack([i['rep_coord_nm'] for i in this_info])
         vec = np.vstack([i['pca'][0] for i in this_info])
 
