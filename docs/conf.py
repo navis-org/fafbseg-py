@@ -19,7 +19,6 @@
 
 import os
 import numpydoc
-import sphinx_bootstrap_theme
 import re
 
 import sys
@@ -253,8 +252,6 @@ todo_include_todos = False
 #
 html_theme = 'furo'
 
-# Add any paths that contain custom themes here, relative to this directory.
-html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
 
 # The name for this set of Sphinx documents.
 # "<project> v<release> documentation" by default.
