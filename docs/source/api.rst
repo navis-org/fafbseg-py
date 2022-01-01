@@ -10,37 +10,59 @@ FAFBseg is divided into separate modules to split functions by data source/type:
   - ``fafbseg.xform`` for transforming spatial data between FAFB14 and FlyWire's FAFB14.1
   - ``fafbseg.move`` for moving/merging data between data sets
 
-See below for a by-module breakdown:
+See below for a by-module breakdown.
 
-FlyWire segmentation
---------------------
+FlyWire
+-------
+
+Interact with the segmentation:
 
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.flywire.locs_to_segments
     fafbseg.flywire.neuron_to_segments
     fafbseg.flywire.encode_url
     fafbseg.flywire.decode_url
-    fafbseg.flywire.fetch_edit_history
-    fafbseg.flywire.fetch_leaderboard
-    fafbseg.flywire.l2_info
-    fafbseg.flywire.l2_graph
-    fafbseg.flywire.l2_dotprops
-    fafbseg.flywire.l2_skeleton
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.supervoxels_to_roots
     fafbseg.flywire.skid_to_id
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
+
+Fetch neurons:
+
+.. autosummary::
+    :toctree: generated/
+
     fafbseg.flywire.get_mesh_neuron
     fafbseg.flywire.get_somas
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
     fafbseg.flywire.merge_flywire_neuron
 
+L2 data:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.l2_info
+    fafbseg.flywire.l2_graph
+    fafbseg.flywire.l2_dotprops
+    fafbseg.flywire.l2_skeleton
+
+Misc:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.fetch_edit_history
+    fafbseg.flywire.fetch_leaderboard
+
 For interaction with the annotation/materialization engine:
 
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.flywire.get_materialization_versions
     fafbseg.flywire.create_annotation_table
@@ -53,6 +75,7 @@ For interaction with the annotation/materialization engine:
 Google segmentation
 -------------------
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.google.locs_to_segments
     fafbseg.google.segments_to_neuron
@@ -65,9 +88,10 @@ Google segmentation
     fafbseg.google.autoreview_edges
     fafbseg.google.test_edges
 
-Buhmann synapse predictions
----------------------------
+Connectivity
+------------
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.google.synapses.fetch_connectivity
     fafbseg.flywire.synapses.fetch_adjacency
@@ -78,7 +102,12 @@ Buhmann synapse predictions
 
 Spatial transformation
 ----------------------
+Note that typically you will want to use e.g.
+``navis.xform_brain(data, source='FAFB14', target='FLYWIRE')`` but you can
+also use these low-level functions:
+
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.xform.flywire_to_fafb14
     fafbseg.xform.fafb14_to_flywire
@@ -86,5 +115,6 @@ Spatial transformation
 Merging/combining data
 ----------------------
 .. autosummary::
+    :toctree: generated/
 
     fafbseg.move.merge_into_catmaid

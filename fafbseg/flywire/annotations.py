@@ -365,7 +365,7 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
     DataFrame
                         Pandas DataFrame with nucleu (see Examples). Root IDs
                         without a nucleus will be missing. The `rad_est` is
-                        the estimated radius based on the wides point of the
+                        the estimated radius based on the widest point of the
                         nucleus. Take it with a grain of salt!
 
     Examples

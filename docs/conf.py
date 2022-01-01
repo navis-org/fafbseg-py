@@ -252,7 +252,6 @@ todo_include_todos = False
 #
 html_theme = 'furo'
 
-
 # The name for this set of Sphinx documents.
 # "<project> v<release> documentation" by default.
 #
