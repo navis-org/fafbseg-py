@@ -1,12 +1,6 @@
 FAFBseg tools
 =============
 
-.. raw:: html
-
-   <div class="container-fluid">
-      <div class="row">
-         <div class="col-lg-6">
-
 FAFBseg is a set of Python tools to work with various kinds of segmentation
 data in the FAFB dataset:
 
@@ -20,7 +14,6 @@ So if you happen to bump into them, buy them a beer or a whiskey.
 Check out the :ref:`introduction<introduction>` for a brief overview of FAFB
 data and the :ref:`tutorials<tutorials>` for code examples.
 
-
 .. important::
 
  If you are coming from :code:`fafbseg` prior to version ``1.0.0``: We have
@@ -28,15 +21,8 @@ data and the :ref:`tutorials<tutorials>` for code examples.
  segmentation data. Function names and their locations have changed!
  See the :doc:`API<api>` for an overview.
 
-.. raw:: html
-
-         </div>
-         <div class="col-lg-6">
-            <div class="panel panel-default">
-               <div class="panel-heading">
-                  <h3 class="panel-title">Features</h3>
-               </div>
-               <div class="panel-body">
+Features
+--------
 
 * map locations to Google segmentation / FlyWire root IDs
 * transform neurons between FAFB and FlyWire space
@@ -45,10 +31,11 @@ data and the :ref:`tutorials<tutorials>` for code examples.
 * generate connectivity tables using the Buhmann *et al.* synapse predictions
 * parse and generate FlyWire URLs
 
-.. raw:: html
 
-               </div>
-            </div>
-         </div>
-      </div>
-   </div>
+.. toctree::
+   :hidden:
+
+   source/intro
+   source/install
+   source/gallery
+   source/api

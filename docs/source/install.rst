@@ -1,7 +1,7 @@
 .. _installing:
 
-Installing fafbseg
-==================
+Installation
+============
 To install the latest stable version of :code:`fafbseg-py` with :code:`pip`.
 
 .. code-block:: bat
@@ -15,7 +15,7 @@ For the development version from Github:
    pip3 install git+git://github.com/navis-org/fafbseg-py.git
 
 
-Now have a look at the :doc:`examples<../examples/index>` or the :doc:`API<../api>`
+Now have a look at the :ref:`examples<tutorials>` or the :ref:`API<api>`
 to get started.
 
 .. warning::

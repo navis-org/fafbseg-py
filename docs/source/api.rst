@@ -7,15 +7,15 @@ FAFBseg is divided into separate modules to split functions by data source/type:
 
   - ``fafbseg.flywire`` for FlyWire-related functions
   - ``fafbseg.google`` for Google segmentation-related functions
-  - ``fafbseg.xform`` for transforming spatial data between FAFB14 and flywire's FAFB14.1
+  - ``fafbseg.xform`` for transforming spatial data between FAFB14 and FlyWire's FAFB14.1
   - ``fafbseg.move`` for moving/merging data between data sets
 
 See below for a by-module breakdown:
 
 FlyWire segmentation
 --------------------
+
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.flywire.locs_to_segments
     fafbseg.flywire.neuron_to_segments
@@ -41,7 +41,6 @@ FlyWire segmentation
 For interaction with the annotation/materialization engine:
 
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.flywire.get_materialization_versions
     fafbseg.flywire.create_annotation_table
@@ -54,7 +53,6 @@ For interaction with the annotation/materialization engine:
 Google segmentation
 -------------------
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.google.locs_to_segments
     fafbseg.google.segments_to_neuron
@@ -70,7 +68,6 @@ Google segmentation
 Buhmann synapse predictions
 ---------------------------
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.google.synapses.fetch_connectivity
     fafbseg.flywire.synapses.fetch_adjacency
@@ -82,7 +79,6 @@ Buhmann synapse predictions
 Spatial transformation
 ----------------------
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.xform.flywire_to_fafb14
     fafbseg.xform.fafb14_to_flywire
@@ -90,6 +86,5 @@ Spatial transformation
 Merging/combining data
 ----------------------
 .. autosummary::
-    :toctree: generated/
 
     fafbseg.move.merge_into_catmaid
