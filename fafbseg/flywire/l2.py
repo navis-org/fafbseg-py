@@ -315,7 +315,9 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
 
-        if new_co:
+        # Only apply if we actually have new coordinates - otherwise there
+        # the datatype is changed to object for some reason...
+        if any(has_new):
             swc.loc[has_new, 'x'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][0])
             swc.loc[has_new, 'y'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][1])
             swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
@@ -363,7 +365,7 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
                         value appears to be around 1_000_000.
     omit_failures :     bool, optional
                         Determine behaviour when dotprops generation fails
-                        (e.g. if the neuron has only a single chunk):
+                        (i.e. if the neuron has no L2 info):
                          - ``None`` (default) will raise an exception
                          - ``True`` will skip the offending neuron (might result
                            in an empty ``NeuronList``)
