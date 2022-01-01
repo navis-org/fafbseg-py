@@ -272,7 +272,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                                                                   'pre_y': 'y',
                                                                   'pre_z': 'z',
                                                                   'post': 'partner_id'},
-                                                                  axis=1)
+                                                                 axis=1)
                 presyn['type'] = 'pre'
             if post:
                 postsyn = syn.loc[syn.post == int(n.id),
@@ -281,7 +281,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                                                                   'post_y': 'y',
                                                                   'post_z': 'z',
                                                                   'pre': 'partner_id'},
-                                                                  axis=1)
+                                                                 axis=1)
                 postsyn['type'] = 'post'
 
             connectors = pd.concat((presyn, postsyn), axis=0, ignore_index=True)
@@ -304,7 +304,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
 
 def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
-                    batch_size=100, dataset='production', progress=True):
+                    neuropils=None, batch_size=100, dataset='production',
+                    progress=True):
     """Fetch adjacency matrix.
 
     Parameters
@@ -324,6 +325,9 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     min_score :     int
                     Minimum "cleft score". The default of 30 is what Buhmann et al.
                     used in the paper.
+    neuropils :     str | list of str, optional
+                    Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
+                    ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables.
@@ -385,6 +389,15 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
+    # Subset to the desired neuropils
+    if not isinstance(neuropils, type(None)):
+        neuropils = navis.utils.make_iterable(neuropils)
+
+        if len(neuropils):
+            syn['neuropil'] = get_synapse_areas(syn['id'].values)
+            syn['neuropil'] = syn.neuropil.astype('category')
+            syn = syn[syn.neuropil.isin(neuropils)].copy()
+
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
                axis=1, inplace=True)
@@ -409,7 +422,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
 def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        upstream=True, downstream=True, transmitters=False,
-                       batch_size=100, live_query=True,
+                       neuropils=None, batch_size=100, live_query=True,
                        dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
@@ -446,6 +459,9 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     of salt - in particular for weak connections!
                     To get the "full" predictions see
                     :func:`fafbseg.flywire.predict_transmitter`.
+    neuropils :     str | list of str, optional
+                    Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
+                    ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables.
@@ -510,6 +526,15 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
 
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
+
+    # Subset to the desired neuropils
+    if not isinstance(neuropils, type(None)):
+        neuropils = navis.utils.make_iterable(neuropils)
+
+        if len(neuropils):
+            syn['neuropil'] = get_synapse_areas(syn['id'].values)
+            syn['neuropil'] = syn.neuropil.astype('category')
+            syn = syn[syn.neuropil.isin(neuropils)].copy()
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
