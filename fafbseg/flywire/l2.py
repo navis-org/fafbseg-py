@@ -84,7 +84,8 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
-    l2_ids = client.chunkedgraph.get_leaves(root_ids, stop_layer=2)
+    get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
+    l2_ids = get_l2_ids(root_ids)
 
     attributes = ['area_nm2', 'size_nm3', 'max_dt_nm', 'rep_coord_nm']
     info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=attributes)
@@ -167,11 +168,19 @@ def l2_graph(root_ids, progress=True, dataset='production'):
     # This is a (N,2) array of edges
     l2_eg = np.array(client.chunkedgraph.level2_chunk_graph(root_ids))
 
-    # Drop duplicate edges
-    l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
-
+    # Generate graph
     G = nx.Graph()
-    G.add_edges_from(l2_eg)
+
+    if not len(l2_eg):
+        # If no edges, this neuron consists of a single chunk
+        # Get the single chunk's ID
+        chunks = client.chunkedgraph.get_leaves(root_ids, stop_layer=2)
+        G.add_nodes_from(chunks)
+    else:
+        # Drop duplicate edges
+        l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
+
+        G.add_edges_from(l2_eg)
 
     return G
 
@@ -309,7 +318,7 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
                         will be ignored. This is useful to de-emphasise the
                         finer terminal neurites which typically break into more,
                         smaller chunks and are hence overrepresented. A good
-                        value appears to be around 1,000,000.
+                        value appears to be around 1_000_000.
     progress :          bool
                         Whether to show a progress bar.
     max_threads :       int
@@ -342,18 +351,17 @@ def l2_dotprops(root_ids, min_size=None, progress=True, max_threads=10,
     client = get_cave_client(dataset)
 
     # Load the L2 IDs
-    # Note that we are using the L2 graph endpoint as I have not yet found a
-    # faster way to query the IDs.
     with ThreadPoolExecutor(max_workers=max_threads) as pool:
-        futures = pool.map(retry(client.chunkedgraph.level2_chunk_graph), root_ids)
-        l2_eg = [f for f in navis.config.tqdm(futures,
-                                              desc='Fetching L2 IDs',
-                                              total=len(root_ids),
-                                              disable=not progress or len(root_ids) == 1,
-                                              leave=False)]
+        get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
+        futures = pool.map(get_l2_ids, root_ids)
+        l2_ids = [f for f in navis.config.tqdm(futures,
+                                               desc='Fetching L2 IDs',
+                                               total=len(root_ids),
+                                               disable=not progress or len(root_ids) == 1,
+                                               leave=False)]
 
-    # Unique L2 IDs per root ID
-    l2_ids = [np.unique(g).astype(str) for g in l2_eg]
+    # Turn IDs into strings
+    l2_ids = [i.astype(str) for i in l2_ids]
 
     # Flatten into a list of all L2 IDs
     l2_ids_all = np.unique([i for l in l2_ids for i in l])
