@@ -327,7 +327,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
 
         # Drop nodes that are still at their unrefined chunk position
         if drop_missing:
-            if any(~has_new):
+            if not any(~has_new):
                 msg = (f'Unable to refine: no L2 info for root ID {root_id} '
                        'available. Set `drop_missing=False` to use unrefined '
                        'positions.')
