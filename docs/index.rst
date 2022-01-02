@@ -14,13 +14,6 @@ So if you happen to bump into them, buy them a drink ;)
 Check out the :ref:`introduction<introduction>` for a brief overview of FAFB
 data and the :ref:`tutorials<tutorials>` for code examples.
 
-.. important::
-
- If you are coming from :code:`fafbseg` prior to version ``1.0.0``: We have
- made major changes to better organize the diverse landscape of FAFB
- segmentation data. Function names and their locations have changed!
- See the :doc:`API<api>` for an overview.
-
 Features
 --------
 
@@ -30,6 +23,13 @@ Features
 * load FlyWire neurons and skeletonize them
 * generate connectivity tables using the Buhmann *et al.* synapse predictions
 * parse and generate FlyWire URLs
+
+.. important::
+
+ If you are coming from :code:`fafbseg` prior to version ``1.0.0``: We have
+ made major changes to better organize the diverse landscape of FAFB
+ segmentation data. Function names and their locations have changed!
+ See the :doc:`API<api>` for an overview.
 
 
 .. toctree::
