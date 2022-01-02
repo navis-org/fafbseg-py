@@ -58,6 +58,8 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
                             all L2 chunks
                           - `bounds_nm` is a very rough bounding box based on the
                             representative coordinates of the L2 chunks
+                          - `chunks_missing` is the number of L2 chunks not
+                            present in the L2 cache
 
     Examples
     --------
@@ -156,7 +158,8 @@ def l2_graph(root_ids, progress=True, dataset='production'):
     if navis.utils.is_iterable(root_ids):
         graphs = []
         for id in navis.config.tqdm(root_ids, desc='Fetching',
-                                    disable=not progress, leave=False):
+                                    disable=not progress or len(root_ids) == 1,
+                                    leave=False):
             n = l2_graph(id, dataset=dataset)
             graphs.append(n)
         return graphs
@@ -196,12 +199,14 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                         skeletonize.
     refine :            bool
                         If True, will refine skeleton nodes by moving them in
-                        the center of their corresponding chunk meshes.
+                        the center of their corresponding chunk meshes. This
+                        uses the L2 cache (see :func:`fafbseg.flywire.l2_info`).
     drop_missing :      bool
-                        Only relevant if ``refine=True``: if True, will drop
-                        nodes that don't have a corresponding chunk mesh. These
-                        are typically chunks that are either very small or very
-                        new. Note that this might result in empty neurons.
+                        Only relevant if ``refine=True``: If True, will drop
+                        chunks that don't exist in the L2 cache. These are
+                        typically chunks that are either very small or new.
+                        If False, chunks missing from L2 cache will be kept but
+                        with their unrefined, approximate position.
     omit_failures :     bool, optional
                         Determine behaviour when skeleton generation fails
                         (e.g. if the neuron has only a single chunk):
@@ -219,6 +224,14 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
     -------
     skeleton(s) :       navis.TreeNeuron | navis.NeuronList
                         The extracted L2 skeleton.
+
+    See Also
+    --------
+    :func:`fafbseg.flywire.l2_dotprops`
+                        Create dotprops instead of skeletons (faster and
+                        possibly more accurate).
+    :func:`fafbseg.flywire.skeletonize_neuron`
+                        Skeletonize the full resolution mesh.
 
     Examples
     --------
@@ -383,6 +396,14 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
     -------
     dps :               navis.NeuronList
                         List of Dotprops.
+
+    See Also
+    --------
+    :func:`fafbseg.flywire.l2_skeleton`
+                        Create skeletons instead of dotprops using the L2
+                        edges to infer connectivity.
+    :func:`fafbseg.flywire.skeletonize_neuron`
+                        Skeletonize the full resolution mesh.
 
     Examples
     --------
