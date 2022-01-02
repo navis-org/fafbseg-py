@@ -39,13 +39,13 @@ def synapse_counts(x, batch_size=10, dataset='production'):
     Parameters
     ----------
     x :             int | list of int | Neuron/List
-                    Either a flywire segment ID (i.e. root ID), a list thereof or
+                    Either a FlyWire segment ID (i.e. root ID), a list thereof or
                     a Neuron/List. For neurons, the ``.id`` is assumed to be the
                     root ID. If you have a neuron (in FlyWire space) but don't
                     know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
                     first.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
 
@@ -71,7 +71,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
     Parameters
     ----------
     x :             int | list of int | Neuron/List
-                    Either a flywire segment ID (i.e. root ID), a list thereof or
+                    Either a FlyWire segment ID (i.e. root ID), a list thereof or
                     a Neuron/List. For neurons, the ``.id`` is assumed to be the
                     root ID. If you have a neuron (in FlyWire space) but don't
                     know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
@@ -87,7 +87,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                     materialized table. The latter is useful if you are working
                     with IDs that you got from another annotation table.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
 
@@ -155,7 +155,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     materialized table. The latter is useful if you are working
                     with IDs that you got from another annotation table.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
 
@@ -317,7 +317,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                     don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
                     first.
     targets :       int | list of int | Neuron/List, optional
-                    Either flywire segment ID (i.e. root ID), a list thereof
+                    Either FlyWire segment ID (i.e. root ID), a list thereof
                     or a Neuron/List. For neurons, the ``.id`` is assumed to be
                     the root ID. If you have a neuron (in FlyWire space) but
                     don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
@@ -336,7 +336,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                     materialized table. The latter is useful if you are working
                     with IDs that you got from another annotation table.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
 
@@ -429,11 +429,10 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     Parameters
     ----------
     x :             int | list of int | Neuron/List
-                    Either a flywire segment ID (i.e. root ID), a list thereof
-                    or a Neuron/List. For neurons, the ``.id`` is assumed to be
-                    the root ID. If you have a neuron (in FlyWire space) but
-                    don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
-                    first.
+                    Either a FlyWire root ID, a list thereof or a Neuron/List.
+                    For neurons, the ``.id`` is assumed to be the root ID. If
+                    you have a neuron (in FlyWire space) but don't know its ID,
+                    use :func:`fafbseg.flywire.neuron_to_segments` first.
     clean :         bool
                     If True, we will perform some clean up of the connectivity
                     compared with the raw synapse information. Currently, we::
@@ -470,7 +469,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     materialized table. The latter is useful if you are working
                     with IDs that you got from another annotation table.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
 

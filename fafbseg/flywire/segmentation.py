@@ -122,7 +122,7 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
     x :             int | list of int
                     Segmentation (root) ID(s).
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     progress :      bool
@@ -202,7 +202,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
                     Whether to use disk cache to avoid repeated queries for the
                     same root. Cache is stored in `~/.fafbseg/`.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     progress :      bool
@@ -400,12 +400,12 @@ def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'
     ----------
     x :                 Neuron/List
                         Neurons for which to return root IDs. Neurons must be
-                        in flywire (FAFB14.1) space.
+                        in FlyWire (FAFB14.1) space.
     short :             bool
                         If True will only return the top hit for each neuron
                         (including a confidence score).
     dataset :           str | CloudVolume
-                        Against which flywire dataset to query::
+                        Against which FlyWire dataset to query::
                             - "production" (current production dataset, fly_v31)
                             - "sandbox" (i.e. fly_v26)
 
@@ -477,7 +477,7 @@ def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'
 
 def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
                      coordinates='voxel'):
-    """Retrieve flywire segment IDs (root IDs) at given location(s).
+    """Retrieve FlyWire segment IDs (root IDs) at given location(s).
 
     Parameters
     ----------
@@ -493,7 +493,7 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
                     If timestamp is given, will ignore `use_cache`.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
                     Only relevant if ``root_ids=True``.
@@ -527,7 +527,7 @@ def skid_to_id(x,
                sample=None,
                dataset='production',
                progress=True, **kwargs):
-    """Find the flywire ID(s) corresponding to given CATMAID skeleton ID(s).
+    """Find the FlyWire root ID(s) corresponding to given CATMAID skeleton ID(s).
 
     This function works by:
         1. Fetch supervoxels for all nodes in the CATMAID skeletons
@@ -542,10 +542,10 @@ def skid_to_id(x,
                     directly to ``pymaid.get_neuron``.
     sample :        int | float, optional
                     Number (>= 1) or fraction (< 1) of super nodes to sample
-                    to find flywire IDs. If ``None`` (default), will use all
+                    to find FlyWire IDs. If ``None`` (default), will use all
                     nodes.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     progress :      bool
@@ -554,7 +554,7 @@ def skid_to_id(x,
     Returns
     -------
     pandas.DataFrame
-                    Mapping of flywire IDs to skeleton IDs with confidence::
+                    Mapping of FlyWire root IDs to skeleton IDs with confidence::
 
                       skeleton_id   flywire_id   confidence
                     0
@@ -620,9 +620,9 @@ def is_latest_root(id, dataset='production', **kwargs):
     Parameters
     ----------
     id :            int | list-like
-                    Single ID or list of flywire (root) IDs.
+                    Single ID or list of FlyWire (root) IDs.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query:
+                    Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
                       - "sandbox" (i.e. fly_v26)
 
@@ -674,7 +674,7 @@ def update_ids(id,
     """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
-        1. Check if ID is outdated (see fafbseg.flywire.is_latest_root)
+        1. Check if ID is outdated (see :func:`fafbseg.flywire.is_latest_root`)
         2. See if we can map outdated IDs to a single up-to-date root (works
            if neuron has only seen merges)
         3. For uncertain IDs, fetch all supervoxels
@@ -816,7 +816,7 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
                     If False (default), we will not snap locations that map to
                     segment ID 0 (i.e. no segmentation).
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     search_radius : int
@@ -953,7 +953,7 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
                     If True, will return root IDs. If False, will return
                     supervoxel IDs.
     dataset :       str | CloudVolume
-                    Against which flywire dataset to query::
+                    Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
     coordinates :   "voxel" | "nm"

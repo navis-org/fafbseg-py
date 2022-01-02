@@ -61,7 +61,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          smart and there is always a small chance that we
                          remove stuff that should not have been removed. Also
                          only works if the neuron has it's nucleus annotated
-                         (see `flywire.get_somas`).
+                         (see :func:`fafbseg.flywire.get_somas`).
     assert_id_match :    bool
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into

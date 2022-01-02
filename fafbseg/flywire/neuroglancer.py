@@ -66,7 +66,7 @@ session = None
 def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                seg_colors=None, invis_segs=None, dataset='production', scene=None,
                open_browser=False, to_clipboard=False, short=True):
-    """Encode data as flywire neuroglancer scene.
+    """Encode data as FlyWire neuroglancer scene.
 
     Parameters
     ----------
@@ -232,7 +232,7 @@ def add_skeleton_layer(x, scene):
     x :             navis.TreeNeuron | pymaid.CatmaidNeuron | int
                     Neuron to generate a URL for. Integers are interpreted as
                     CATMAID skeleton IDs. CatmaidNeurons will automatically be
-                    transformed to flywire coordinates. Neurons are expected to
+                    transformed to FlyWire coordinates. Neurons are expected to
                     be in nanometers and will be converted to voxels.
     scene :         dict
                     Scene to add annotation layer to.
@@ -438,11 +438,11 @@ def shorten_url(scene, refresh_session=False):
 
 
 def generate_open_ends_url(x):
-    """Generate a flywire URL with potential open ends for given neuron.
+    """Generate a FlyWire URL with potential open ends for given neuron.
 
     Parameters
     ----------
-    x :     flywire ID | navis.TreeNeuron | mesh
+    x :     root ID | navis.TreeNeuron | mesh
             ID of neuron to generate open ends for.
 
     """
