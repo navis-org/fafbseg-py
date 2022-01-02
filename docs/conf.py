@@ -170,7 +170,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'fafbseg-py'
+project = 'fafbseg'
 copyright = '2019, Philipp Schlegel'
 author = 'Philipp Schlegel'
 
