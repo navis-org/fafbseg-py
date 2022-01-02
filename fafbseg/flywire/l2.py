@@ -251,6 +251,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
         for id in navis.config.tqdm(root_id, desc='L2 skeletons',
                                     disable=not progress, leave=False):
             n = l2_skeleton(id, refine=refine, drop_missing=drop_missing,
+                            omit_failures=omit_failures,
                             progress=progress, dataset=dataset, **kwargs)
             nl.append(n)
         return navis.NeuronList(nl)
