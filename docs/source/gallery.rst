@@ -16,7 +16,6 @@ FlyWire
    tutorials/neuroglancer
    tutorials/flywire_neurons
    tutorials/flywire_segments
-   tutorials/flywire_connectivity
    tutorials/merge_flywire_neuron
 
 Google (FAFB14)
@@ -45,7 +44,7 @@ Connectivity
 .. toctree::
   :maxdepth: 1
 
-  tutorials/connectivity
+  tutorials/flywire_connectivity
 
 Transformations
 ---------------

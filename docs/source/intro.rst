@@ -5,9 +5,9 @@ Overview
 
 What is FAFB?
 -------------
-The FAFB dataset is an SSTEM image data set of an entire female flybrain
+The FAFB dataset is an SSTEM image data set of an entire female fly brain
 imaged by Zhihao Zheng and Davi Bock
-(`Zheng et al., 2018 <https://www.sciencedirect.com/science/article/pii/S0092867418307876>`_).
+(see `Zheng et al., 2018 <https://www.sciencedirect.com/science/article/pii/S0092867418307876>`_).
 The raw image data can be downloaded from https://temca2data.org/.
 
 A consortium of labs has been *manually* reconstructing neurons and their connectivity
