@@ -58,7 +58,7 @@ def synapse_counts(x, batch_size=10, dataset='production'):
 
 
 def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
-                        dataset='production'):
+                        dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
     Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
@@ -90,6 +90,10 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
+    **kwargs
+                    Keyword arguments are passed through to
+                    :func:`fafbseg.flywire.fetch_synapses`.
+
 
     Returns
     -------
@@ -104,16 +108,17 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
     """
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
-                         transmitters=True, live_query=live_query)
+                         transmitters=True, live_query=live_query,
+                         dataset=dataset, **kwargs)
 
-    # Get the predictions
+    # Process the predictions
     return collapse_nt_predictions(syn, single_pred=single_pred,
                                    weighted=weighted, id_col='pre')
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
                    transmitters=False, neuropils=False, live_query=True,
-                   batch_size=100, dataset='production', progress=True):
+                   batch_size=30, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
     Parameters
@@ -149,7 +154,9 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
-                    lead to truncated tables.
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
     live_query :    bool
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
@@ -304,7 +311,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
 
 def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
-                    neuropils=None, batch_size=100, dataset='production',
+                    neuropils=None, batch_size=30, dataset='production',
                     progress=True):
     """Fetch adjacency matrix.
 
@@ -330,7 +337,9 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
-                    lead to truncated tables.
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
     live_query :    bool
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
@@ -422,7 +431,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
 def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        upstream=True, downstream=True, transmitters=False,
-                       neuropils=None, batch_size=100, live_query=True,
+                       neuropils=None, batch_size=30, live_query=True,
                        dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
@@ -463,7 +472,9 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
-                    lead to truncated tables.
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
     live_query :    bool
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
