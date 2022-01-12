@@ -17,6 +17,7 @@ import functools
 import json
 import navis
 import os
+import pytz
 import time
 import requests
 
@@ -25,6 +26,7 @@ from pathlib import Path
 from importlib import reload
 
 import cloudvolume as cv
+import datetime as dt
 import numpy as np
 
 from .. import utils
@@ -77,16 +79,23 @@ def get_synapse_areas(ind):
     return np.array([vol_names[i] for i in area_ids[ind]])
 
 
-def get_cave_client(dataset='production', token=None, force_new=False):
+def get_cave_client(dataset='production', token=None, check_stale=True,
+                    force_new=False):
     """Get CAVE client.
 
     Parameters
     ----------
-    dataset :   str
-                Data set to create client for.
-    token :     str, optional
-                Your chunked graph secret (i.e. "CAVE secret"). If not provided
-                will try reading via cloud-volume.
+    dataset :       str
+                    Data set to create client for.
+    token :         str, optional
+                    Your chunked graph secret (i.e. "CAVE secret"). If not
+                    provided will try reading via cloud-volume.
+    check_stale :   bool
+                    Check if any existing client has gone stale. Currently, we
+                    only check if the cached materialization meta data needs
+                    refreshing.
+    force_new :     bool
+                    If True, we force a re-initialization.
 
     Returns
     -------
@@ -97,6 +106,18 @@ def get_cave_client(dataset='production', token=None, force_new=False):
         token = get_chunkedgraph_secret()
 
     datastack = CAVE_DATASETS.get(dataset, dataset)
+
+    if datastack in cave_clients and not force_new and check_stale:
+        # Get the existing client
+        client = cave_clients[datastack]
+        # Get the (likely cached) materialization meta data
+        mds = client.materialize.get_versions_metadata()
+        # Check if any of the versions are expired
+        now = pytz.UTC.localize(dt.datetime.utcnow())
+        for v in mds:
+            if v['expires_on'] <= now:
+                force_new = True
+                break
 
     if datastack not in cave_clients or force_new:
         cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
