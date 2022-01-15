@@ -30,10 +30,11 @@ from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
 
 __all__ = ['fetch_synapses', 'fetch_connectivity', 'predict_transmitter',
-           'fetch_adjacency']
+           'fetch_adjacency', 'synapse_counts']
 
 
-def synapse_counts(x, batch_size=10, dataset='production'):
+def synapse_counts(x, by_neuropil=False, min_score=30, live_query=True,
+                   batch_size=10, dataset='production', **kwargs):
     """Fetch synapse counts for given root IDs.
 
     Parameters
@@ -44,17 +45,78 @@ def synapse_counts(x, batch_size=10, dataset='production'):
                     root ID. If you have a neuron (in FlyWire space) but don't
                     know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
                     first.
+    by_neuropil :   bool
+                    If True, returned DataFrame will contain a break down by
+                    neuropil.
+    min_score :     int, optional
+                    Minimum "cleft score". The default of 30 is what Buhmann et al.
+                    used in the paper.
+    live_query :    bool
+                    Whether to query against the live data or against the latest
+                    materialized table. The latter is useful if you are working
+                    with IDs that you got from another annotation table.
+    batch_size :    int
+                    Number of IDs to query per batch. Too large batches might
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
+    **kwargs
+                    Keyword arguments are passed through to
+                    :func:`fafbseg.flywire.fetch_synapses`.
 
     Returns
     -------
     pandas.DataFrame
+                    If ``by_neuropil=False`` returns counts indexed by root ID.
+                    If ``by_neuropil=True`` returns counts indexed by root ID
+                    and neuropil.
 
     """
-    pass
+    # Parse root IDs
+    ids = parse_root_ids(x)
+
+    # First get the synapses
+    syn = fetch_synapses(x, pre=True, post=True, attach=False,
+                         min_score=min_score,
+                         transmitters=True, live_query=live_query,
+                         neuropils=by_neuropil,
+                         dataset=dataset, **kwargs)
+
+    pre = syn[syn.pre.isin(x)]
+    post = syn[syn.post.isin(x)]
+
+    if not by_neuropil:
+        counts = pd.DataFrame()
+        counts['id'] = ids
+        counts['pre'] = pre.value_counts('pre').reindex(ids).fillna(0).values
+        counts['post'] = post.value_counts('post').reindex(ids).fillna(0).values
+        counts.set_index('id', inplace=True)
+    else:
+        pre_grp = pre.groupby(['pre', 'neuropil']).size()
+        pre_grp = pre_grp[pre_grp > 0]
+        pre_grp.index.set_names(['id', 'neuropil'], inplace=True)
+
+        post_grp = post.groupby(['post', 'neuropil']).size()
+        post_grp = post_grp[post_grp > 0]
+        post_grp.index.set_names(['id', 'neuropil'], inplace=True)
+
+        neuropils = np.unique(np.append(pre_grp.index.get_level_values(1),
+                                        post_grp.index.get_level_values(1)))
+
+        index = pd.MultiIndex.from_product([ids, neuropils],
+                                           names=['id', 'neuropil'])
+
+        counts = pd.concat([pre_grp.reindex(index).fillna(0),
+                            post_grp.reindex(index).fillna(0)],
+                           axis=1)
+        counts.columns = ['pre', 'post']
+        counts = counts[counts.max(axis=1) > 0]
+
+    return counts
 
 
 def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
