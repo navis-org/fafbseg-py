@@ -187,9 +187,9 @@ def plot_nt_predictions(pred, bins=20, id_col=None, ax=None, legend=True, **kwar
         return axes
 
     if not navis.utils.is_iterable(bins):
-        bins = np.linspace(0, pred.cleft_scores.max(), bins)
+        bins = np.linspace(0, pred.cleft_score.max(), bins)
 
-    grp = pred.groupby(pd.cut(pred.cleft_scores, bins, right=False))[trans]
+    grp = pred.groupby(pd.cut(pred.cleft_score, bins, right=False))[trans]
     mn = grp.mean()
     sem = grp.sem()
 
