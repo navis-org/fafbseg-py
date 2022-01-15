@@ -504,6 +504,51 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
     return navis.NeuronList(dps)
 
 
+def l2_meshes(x, threads=10, dataset='production', progress=True):
+    """Fetch L2 meshes for a given neuron.
+
+    Parameters
+    ----------
+    x :         int | str
+                Root ID.
+    threads :   int
+    progress :  bool
+
+    Returns
+    -------
+    navis.NeuronList
+
+    """
+    try:
+        x = int(x)
+    except:
+        raise ValueError(f'Unable to convert root ID {x} to integer')
+
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
+
+    # Get the cloudvolume
+    vol = parse_volume(dataset)
+
+    # Load the L2 IDs
+    l2_ids = client.chunkedgraph.get_leaves(x, stop_layer=2)
+
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        futures = [pool.submit(vol.mesh.get, i,
+                               allow_missing=True,
+                               deduplicate_chunk_boundaries=False) for i in l2_ids]
+
+        res = [f.result() for f in navis.config.tqdm(futures,
+                                                     disable=not progress,
+                                                     leave=False,
+                                                     desc='Loading meshes')]
+
+    # Unpack results
+    meshes = {k: v for d in res for k, v in d.items()}
+
+    return navis.NeuronList([navis.MeshNeuron(v, id=k) for k, v in meshes.items()])
+
+
 def get_L2_centroids(l2_ids, vol, threads=10, progress=True):
     """Fetch L2 meshes and compute centroid."""
     with ThreadPoolExecutor(max_workers=threads) as pool:
