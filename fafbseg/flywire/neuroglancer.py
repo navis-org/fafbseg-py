@@ -177,7 +177,8 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
             seg_colors = dict(zip(all_segs, seg_colors))
 
         # Turn colors into hex
-        seg_colors = {s: mcl.to_hex(c) for s, c in seg_colors.items()}
+        # Also make sure keys are int (not np.int64)
+        seg_colors = {int(s): mcl.to_hex(c) for s, c in seg_colors.items()}
 
         # Assign colors
         scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
