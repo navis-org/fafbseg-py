@@ -120,7 +120,7 @@ def synapse_counts(x, by_neuropil=False, min_score=30, live_query=True,
 
 
 def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
-                        dataset='production', **kwargs):
+                        neuropils=None, batch_size=10, dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
     Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
@@ -148,6 +148,15 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
                     with IDs that you got from another annotation table.
+    neuropils :     str | list of str, optional
+                    Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
+                    ``['AL_R', 'AL_L']``) to filter predictions to these ROIs.
+                    Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
+    batch_size :    int
+                    Number of IDs to query per batch. Too large batches might
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -171,7 +180,22 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
                          transmitters=True, live_query=live_query,
+                         neuropils=neuropils is not None,
+                         batch_size=batch_size,
                          dataset=dataset, **kwargs)
+
+    if not isinstance(neuropils, type(None)):
+        neuropils = navis.utils.make_iterable(neuropils)
+        filter_in = [n for n in neuropils if not n.startswith('~')]
+        filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+
+        if filter_in:
+            syn = syn[syn.neuropil.isin(filter_in)]
+        if filter_out:
+            syn = syn[~syn.neuropil.isin(filter_out)]
+
+        # Avoid setting-on-copy warning
+        syn = syn.copy()
 
     # Process the predictions
     return collapse_nt_predictions(syn, single_pred=single_pred,
@@ -213,7 +237,6 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     compared with the raw synapse information. Currently, we::
                         - drop autapses
                         - drop synapses from/to background (id 0)
-
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -397,6 +420,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
+                    Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -460,14 +484,26 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
+    # Depending on how queries were batched, we need to drop duplicate synapses
+    syn.drop_duplicates('id', inplace=True)
+
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
         neuropils = navis.utils.make_iterable(neuropils)
 
         if len(neuropils):
+            filter_in = [n for n in neuropils if not n.startswith('~')]
+            filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+
             syn['neuropil'] = get_synapse_areas(syn['id'].values)
             syn['neuropil'] = syn.neuropil.astype('category')
-            syn = syn[syn.neuropil.isin(neuropils)].copy()
+
+            if filter_in:
+                syn = syn[syn.neuropil.isin(filter_in)]
+            if filter_out:
+                syn = syn[~syn.neuropil.isin(filter_out)]
+
+            syn = syn.copy()
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
@@ -532,6 +568,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
+                    Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -604,9 +641,18 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         neuropils = navis.utils.make_iterable(neuropils)
 
         if len(neuropils):
+            filter_in = [n for n in neuropils if not n.startswith('~')]
+            filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+
             syn['neuropil'] = get_synapse_areas(syn['id'].values)
             syn['neuropil'] = syn.neuropil.astype('category')
-            syn = syn[syn.neuropil.isin(neuropils)].copy()
+
+            if filter_in:
+                syn = syn[syn.neuropil.isin(filter_in)]
+            if filter_out:
+                syn = syn[~syn.neuropil.isin(filter_out)]
+
+            syn = syn.copy()
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
