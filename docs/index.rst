@@ -24,12 +24,14 @@ Features
 * generate connectivity tables using the Buhmann *et al.* synapse predictions
 * parse and generate FlyWire URLs
 
-.. important::
+`fafbseg` is based on `navis <http://navis.readthedocs.io>`_ and produces
+objects (skeletons, meshes, etc.) that can be directly plugged into `navis`'
+functions. This in turn enables you among other things to:
 
- If you are coming from :code:`fafbseg` prior to version ``1.0.0``: We have
- made major changes to better organize the diverse landscape of FAFB
- segmentation data. Function names and their locations have changed!
- See the :doc:`API<api>` for an overview.
+* run morphological clustering/matching using NBLAST
+* plot neurons in 2D and 3D
+* import neurons into Blender 3D e.g. for making high quality renderings
+* export to various file formats
 
 
 .. toctree::
