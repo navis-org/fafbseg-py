@@ -8,7 +8,6 @@ navis>=0.6.1
 numpy
 pandas>=1.1.0
 pyarrow>=3.0.0
-PyMCubes
 pyperclip
 python-catmaid>=2.0.2
 requests
