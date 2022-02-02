@@ -12,7 +12,7 @@ For the development version from Github:
 
 .. code-block:: bat
 
-   pip3 install git+git://github.com/navis-org/fafbseg-py.git
+   pip3 install git+https://github.com/navis-org/fafbseg-py.git
 
 
 Now have a look at the :ref:`examples<tutorials>` or the :ref:`API<api>`
