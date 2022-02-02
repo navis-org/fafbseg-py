@@ -32,7 +32,7 @@ __all__ = ['get_mesh_neuron']
 
 def get_mesh_neuron(id, with_synapses=False, threads=None,
                     progress=True, dataset='production'):
-    """Fetch flywire neuron as navis.MeshNeuron.
+    """Fetch FlyWire neuron as navis.MeshNeuron.
 
     Parameters
     ----------
@@ -46,7 +46,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
     threads :           bool | int, optional
                         Whether to use threads to fetch meshes in parallel.
     dataset :           str | CloudVolume
-                        Against which flywire dataset to query::
+                        Against which FlyWire dataset to query::
                           - "production" (currently fly_v31)
                           - "sandbox" (currently fly_v26)
 

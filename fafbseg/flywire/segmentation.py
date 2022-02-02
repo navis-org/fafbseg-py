@@ -39,7 +39,8 @@ from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
            'roots_to_supervoxels', 'supervoxels_to_roots',
-           'neuron_to_segments', 'is_latest_root']
+           'neuron_to_segments', 'is_latest_root', 'is_valid_root',
+           'is_valid_supervoxel']
 
 
 def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
@@ -1009,3 +1010,63 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
             cutout[cutout == k] = v
 
     return cutout[:, :, :, 0], np.asarray(vol.scale['resolution']), offset_nm
+
+
+def is_valid_root(x, dataset='production'):
+    """Check if ID is (potentially) valid root ID.
+
+    Parameters
+    ----------
+    x :     int | str | iterable
+            ID(s) to check.
+
+    Returns
+    -------
+    bool
+            If ``x`` is a single ID.
+    array
+            If ``x`` is iterable.
+
+    """
+    vol = parse_volume(dataset)
+
+    if navis.utils.is_iterable(x):
+        return np.array([is_valid_root(r, dataset=vol) for r in x])
+
+    if isinstance(x, navis.BaseNeuron):
+        x = x.id
+
+    try:
+        return vol.get_chunk_layer(x) == 10
+    except:
+        return False
+
+
+def is_valid_supervoxel(x, dataset='production'):
+    """Check if ID is (potentially) valid supervoxel ID.
+
+    Parameters
+    ----------
+    x :     int | str | iterable
+            ID(s) to check.
+
+    Returns
+    -------
+    bool
+            If ``x`` is a single ID.
+    array
+            If ``x`` is iterable.
+
+    """
+    vol = parse_volume(dataset)
+
+    if navis.utils.is_iterable(x):
+        return np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
+
+    if isinstance(x, navis.BaseNeuron):
+        x = x.id
+
+    try:
+        return vol.get_chunk_layer(x) == 1
+    except:
+        return False
