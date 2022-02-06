@@ -249,7 +249,7 @@ def flywire_to_fafb14(x, coordinates=None, mip=2, inplace=False, on_fail='warn')
     return xf
 
 
-def _flycon(x, dataset, base_url='https://spine.janelia.org/app/transform-service',
+def _flycon(x, dataset, base_url='https://services.itanna.io/app/transform-service',
             coordinates='nm', mip=2, inplace=False, on_fail='warn'):
     """DEPCREATED! Transform neurons/coordinates between flywire and FAFB V14.
 

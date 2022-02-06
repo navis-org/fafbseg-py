@@ -65,8 +65,8 @@ class OnDemandDict(dict):
         self.fetched = True
 
 
-TRANSFORM_SERVICE_URL = 'https://spine.janelia.org/app/transform-service'
-SYNAPSE_SERVICE_URL = 'https://spine.janelia.org/app/synapse-service'
+TRANSFORM_SERVICE_URL = 'https://services.itanna.io/app/transform-service'
+SYNAPSE_SERVICE_URL = 'https://services.itanna.io/app/synapse-service'
 
 TRANSFORM_SERVICE_INFO = OnDemandDict(f'{TRANSFORM_SERVICE_URL}/info')
 SYNAPSE_SERVICE_INFO = OnDemandDict(f'{SYNAPSE_SERVICE_URL}/info')
@@ -201,11 +201,11 @@ class FlyCacheService(SpineService):
 
 
 class SynapseService(SpineService):
-    """Interface with synapse service on `spine.janelia.org`.
+    """Interface with synapse service on `services.itanna.io`.
 
     Kindly hosted by Eric Perlman and Davi Bock! Check out the online docs for
     available API endpoints:
-    https://spine.janelia.org/app/synapse-service/docs
+    https://services.itanna.io/app/synapse-service/docs
 
     Parameters
     ----------
@@ -215,7 +215,7 @@ class SynapseService(SpineService):
     """
 
     def __init__(self,
-                 base_url='https://spine.janelia.org/app/synapse-service'):
+                 base_url='https://services.itanna.io/app/synapse-service'):
         """Init class."""
         self.base_url = base_url
         self.session = requests.Session()
@@ -351,11 +351,11 @@ class SynapseService(SpineService):
 
 
 class TransformService(SpineService):
-    """Interface with transform service on `spine.janelia.org`.
+    """Interface with transform service on `services.itanna.io`.
 
     Kindly hosted by Eric Perlman and Davi Bock! Check out the online docs for
     available API endpoints:
-    https://spine.janelia.org/app/transform-service/docs
+    https://services.itanna.io/app/transform-service/docs
 
     Parameters
     ----------
@@ -378,7 +378,7 @@ class TransformService(SpineService):
               }
 
     def __init__(self,
-                 base_url='https://spine.janelia.org/app/transform-service'):
+                 base_url='https://services.itanna.io/app/transform-service'):
         """Init class."""
         self.base_url = base_url
         self.session = requests.Session()
@@ -616,7 +616,7 @@ def query_spine_transform(x, dataset, query, coordinates='nm', mip=2,
     DEPCREATED! Use `spine.transform` or `spine.synapses` instead.
 
     Kindly hosted by Eric Perlman and Davi Bock! Check out
-    https://spine.janelia.org/app/transform-service/docs for available
+    https://services.itanna.io/app/transform-service/docs for available
     API endpoints.
 
     Parameters
