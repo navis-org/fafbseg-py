@@ -13,6 +13,6 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-"""Module containing interface with data services on spine.janelia.org"""
+"""Module containing interface with data services on services.itanna.io"""
 
 from .base import transform, synapses, flycache 

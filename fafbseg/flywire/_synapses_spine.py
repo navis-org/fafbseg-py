@@ -56,7 +56,7 @@ def synapse_counts(x, batch_size=10, dataset='production'):
 def predict_transmitter(x, single_pred=False, dataset='production'):
     """Fetch neurotransmitter predictions for neurons.
 
-    Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
+    Based on Eckstein et al. (2020). Uses a service on services.itanna.io hosted
     by Eric Perlman and Davi Bock. The per-synapse predictions are collapsed
     into per-neuron prediction by calculating the average confidence for
     each neurotransmitter across all synapses weighted by the "cleft score".
@@ -102,7 +102,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
                    dataset='production', transmitters=False, progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
-    Uses a service on spine.janelia.org hosted by Eric Perlman and Davi Bock.
+    Uses a service on services.itanna.io hosted by Eric Perlman and Davi Bock.
 
     Parameters
     ----------
@@ -328,7 +328,7 @@ def fetch_connectivity(x, clean=True, style='catmaid', min_score=30,
                        drop_autapses=True, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
-    Uses a service on spine.janelia.org hosted by Eric Perlman and Davi Bock.
+    Uses a service on services.itanna.io hosted by Eric Perlman and Davi Bock.
 
     Parameters
     ----------

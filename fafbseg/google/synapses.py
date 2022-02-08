@@ -28,7 +28,7 @@ __all__ = ['fetch_synapses', 'fetch_connectivity']
 def fetch_synapses(x, attach=True, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
-    Uses a service on spine.janelia.org hosted by Eric Perlman and Davi Bock.
+    Uses a service on services.itanna.io hosted by Eric Perlman and Davi Bock.
 
     Parameters
     ----------
@@ -54,7 +54,7 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
                        min_score=30, progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
-    Uses a service on spine.janelia.org hosted by Eric Perlman and Davi Bock.
+    Uses a service on services.itanna.io hosted by Eric Perlman and Davi Bock.
 
     Parameters
     ----------

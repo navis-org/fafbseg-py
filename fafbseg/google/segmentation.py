@@ -34,7 +34,7 @@ def locs_to_segments(locs, mip=0, dataset='fafb-ffn1-20200412',
                      coordinates='voxel'):
     """Retrieve Google segmentation IDs at given location(s).
 
-    Uses a service on hosted spine.janelia.org by Eric Perlman and Davi Bock.
+    Uses a service on hosted services.itanna.io by Eric Perlman and Davi Bock.
 
     Parameters
     ----------

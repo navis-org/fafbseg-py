@@ -123,7 +123,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                         neuropils=None, batch_size=10, dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
-    Based on Eckstein et al. (2020). Uses a service on spine.janelia.org hosted
+    Based on Eckstein et al. (2020). Uses a service on services.itanna.io hosted
     by Eric Perlman and Davi Bock. The per-synapse predictions are collapsed
     into per-neuron prediction by calculating the average confidence for
     each neurotransmitter across all synapses weighted by the "cleft score".

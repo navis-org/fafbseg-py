@@ -52,7 +52,7 @@ the corresponding credentials:
 
 .. code-block:: python
 
-  auto = pymaid.CatmaidInstance('https://spine.janelia.org/catmaid/fafb-v14-seg-li-200412.0',
+  auto = pymaid.CatmaidInstance('https://spine.itanna.io/catmaid/fafb-v14-seg-li-200412.0',
                                 api_token='API_TOKEN',
                                 http_user='HTTP_USER',
                                 http_password='HTTP_PW',
