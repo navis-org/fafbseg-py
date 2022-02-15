@@ -306,7 +306,12 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
 
     """
     # Make sure we are working with an array of integers
-    x = navis.utils.make_iterable(x).astype(np.int64, copy=False)
+    x = navis.utils.make_iterable(x)
+
+    # Check if IDs are valid (zeros are fine because we filter for them later on)
+    is_valid_supervoxel(x[(x != 0) & (x != '0')], raise_exc=True)
+
+    x = x.astype(np.int64, copy=False)
 
     # Parse the volume
     vol = parse_volume(dataset)
@@ -650,6 +655,9 @@ def is_latest_root(id, dataset='production', **kwargs):
 
     # The server doesn't like being asked for zeros
     not_zero = id != '0'
+
+    # Check if all other IDs are valid
+    is_valid_root(id[not_zero], raise_exc=True)
 
     is_latest = np.ones(len(id)).astype(bool)
 
@@ -1012,13 +1020,16 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
     return cutout[:, :, :, 0], np.asarray(vol.scale['resolution']), offset_nm
 
 
-def is_valid_root(x, dataset='production'):
+def is_valid_root(x, raise_exc=False, dataset='production'):
     """Check if ID is (potentially) valid root ID.
 
     Parameters
     ----------
-    x :     int | str | iterable
-            ID(s) to check.
+    x :             int | str | iterable
+                    ID(s) to check.
+    raise_exc :     bool
+                    If True and any IDs are invalid will raise an error.
+                    Mostly for internal use.
 
     Returns
     -------
@@ -1031,24 +1042,33 @@ def is_valid_root(x, dataset='production'):
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(x):
-        return np.array([is_valid_root(r, dataset=vol) for r in x])
-
-    if isinstance(x, navis.BaseNeuron):
-        x = x.id
+        is_valid =  np.array([is_valid_root(r, dataset=vol) for r in x])
+        if raise_exc and not all(is_valid):
+            invalid = set(np.asarray(x)[~is_valid].tolist())
+            raise ValueError(f'Invalid root IDs found: {invalid}')
+        return is_valid
 
     try:
-        return vol.get_chunk_layer(x) == 10
+        is_valid = vol.get_chunk_layer(x) == 10
     except:
-        return False
+        is_valid = False
+
+    if raise_exc and not is_valid:
+        raise ValueError(f'{x} is not a valid root ID')
+
+    return is_valid
 
 
-def is_valid_supervoxel(x, dataset='production'):
+def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
     """Check if ID is (potentially) valid supervoxel ID.
 
     Parameters
     ----------
-    x :     int | str | iterable
-            ID(s) to check.
+    x :             int | str | iterable
+                    ID(s) to check.
+    raise_exc :     bool
+                    If True and any IDs are invalid will raise an error.
+                    Mostly for internal use.
 
     Returns
     -------
@@ -1061,12 +1081,18 @@ def is_valid_supervoxel(x, dataset='production'):
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(x):
-        return np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
-
-    if isinstance(x, navis.BaseNeuron):
-        x = x.id
+        is_valid =  np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
+        if raise_exc and not all(is_valid):
+            invalid = set(np.asarray(x)[~is_valid].tolist())
+            raise ValueError(f'Invalid supervoxel IDs found: {invalid}')
+        return is_valid
 
     try:
-        return vol.get_chunk_layer(x) == 1
+        is_valid = vol.get_chunk_layer(x) == 1
     except:
-        return False
+        is_valid = False
+
+    if raise_exc and not is_valid:
+        raise ValueError(f'{x} is not a valid supervoxel ID')
+
+    return is_valid
