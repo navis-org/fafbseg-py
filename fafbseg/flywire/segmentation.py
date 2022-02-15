@@ -678,26 +678,33 @@ def is_latest_root(id, dataset='production', **kwargs):
 
 def update_ids(id,
                sample=0.1,
+               supervoxels=None,
                dataset='production',
                progress=True, **kwargs):
     """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
         1. Check if ID is outdated (see :func:`fafbseg.flywire.is_latest_root`)
-        2. See if we can map outdated IDs to a single up-to-date root (works
-           if neuron has only seen merges)
-        3. For uncertain IDs, fetch all supervoxels
-        3. Picking a random sample (see ``sample`` parameter) of supervoxels
-        4. Fetching the most recent root IDs for the sample supervoxels
-        5. Returning the root ID that was hit the most
+        2. If supervoxel provided, use it to update ID. Else try 3.
+        3. See if we can map outdated IDs to a single up-to-date root (works
+           if neuron has only seen merges). Else try 4.
+        4. For uncertain IDs, fetch all supervoxels and pick a random sample
+           (see ``sample`` parameter). Fetching the most recent root IDs for
+           the sample of supervoxels and return the root ID that was hit the
+           most often.
 
     Parameters
     ----------
-    id :            int | list-like
-                    Single ID or list of FlyWire (root) IDs.
+    id :            int | list-like | DataFrame
+                    Single ID or list of FlyWire (root) IDs. If DataFrame must
+                    contain either a `root_id` or `root` column and optionally
+                    a `supervoxel_id` or `supervoxel` column.
     sample :        int | float
                     Number (>= 1) or fraction (< 1) of super voxels to sample
                     to guess the most recent version.
+    supervoxels :   int | list-like, optional
+                    If provided will use these supervoxels to update ``id``
+                    instead of sampling across all supervoxels.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
@@ -734,24 +741,65 @@ def update_ids(id,
 
     vol = parse_volume(dataset, **kwargs)
 
+    if isinstance(id, pd.DataFrame):
+        if isinstance(supervoxels, type(None)):
+            if 'supervoxel_id' in id.columns:
+                supervoxels = id['supervoxel_id'].values
+            elif 'supervoxel' in id.columns:
+                supervoxels = id['supervoxel'].values
+
+        if 'root_id' in id.columns:
+            id = id['root_id'].values
+        elif 'root' in id.columns:
+            id = id['root'].values
+        else:
+            raise ValueError('DataFrame must contain either `root_id` or '
+                             '`root` column.')
+
     if isinstance(id, (list, set, np.ndarray)):
         # Run is_latest once for all roots
         is_latest = is_latest_root(id, dataset=dataset)
-        res = [update_ids(x,
-                          dataset=dataset,
-                          is_latest=il,
-                          sample=sample) for x, il in navis.config.tqdm(zip(id, is_latest),
-                                                                        desc='Updating',
-                                                                        leave=False,
-                                                                        total=len(id),
-                                                                        disable=not progress or len(id) == 1)]
-        return pd.concat(res, axis=0, sort=False, ignore_index=True)
+        if isinstance(supervoxels, type(None)):
+            res = [update_ids(x,
+                              dataset=dataset,
+                              is_latest=il,
+                              supervoxels=None,
+                              sample=sample) for x, il, in navis.config.tqdm(zip(id, is_latest),
+                                                                               desc='Updating',
+                                                                               leave=False,
+                                                                               total=len(id),
+                                                                               disable=not progress or len(id) == 1)]
+            res = pd.concat(res, axis=0, sort=False, ignore_index=True)
+        else:
+            if (not isinstance(supervoxels, (list, set, np.ndarray))
+                or len(supervoxels) != len(id)):
+                raise ValueError(f'Number of supervoxels ({len(supervoxels)}) does '
+                                 f'not match number of root IDs ({len(id)})')
+            elif any(pd.isnull(supervoxels)):
+                raise ValueError('`supervoxels` must not contain `None`')
+            elif any(pd.isnull(id)):
+                raise ValueError('`id` must not contain `None`')
+
+            id = np.array(id).astype(int)
+
+            res = pd.DataFrame()
+            res['old_id'] = id
+            res['new_id'] = id
+            res.loc[~is_latest, 'new_id'] = supervoxels_to_roots(supervoxels[~is_latest],
+                                                                 dataset=dataset)
+            res['conf'] = 1
+            res['changed'] = res['new_id'] != res['old_id']
+        return res
 
     try:
         id = int(id)
     except ValueError:
-        raise ValueError(f'{id} does not look like a valid root ID.')
+        raise ValueError(f'"{id} does not look like a valid root ID.')
 
+    if id == 0 or pd.isnull(id):
+        navis.config.logger.warning(f'Unable to update ID "{id}" - returning '
+                                    'unchanged.')
+        return id
 
     # Check if outdated
     if isinstance(is_latest, type(None)):
@@ -764,10 +812,21 @@ def update_ids(id,
         if len(pot_roots) == 1:
             new_id = pot_roots[0]
             conf = 1
+        elif supervoxels:
+            try:
+                supervoxels = int(supervoxels)
+            except ValueError:
+                raise ValueError(f'"{supervoxels} does not look like a valid '
+                                 'supervoxel ID.')
+            new_id = client.chunkedgraph.get_root_id(supervoxels_to_roots)
+            conf = 1
         else:
             # Get supervoxel ids - we need to use mip=0 because otherwise small
             # neurons might not have any (visible) supervoxels
             svoxels = roots_to_supervoxels(id, progress=False)[int(id)]
+
+            # Note: instead of supervoxels we could also use higher level IDs
+            # (stop layer 3 or 4) which might be much faster
 
             # Shuffle voxels
             np.random.shuffle(svoxels)
