@@ -74,7 +74,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
         root_ids = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
-            func = retry(partial(l2_info, dataset=dataset))
+            func = partial(l2_info, dataset=dataset)
             futures = pool.map(func, root_ids)
             info = [f for f in navis.config.tqdm(futures,
                                                  desc='Fetching L2 info',
@@ -90,7 +90,8 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
     l2_ids = get_l2_ids(root_ids)
 
     attributes = ['area_nm2', 'size_nm3', 'max_dt_nm', 'rep_coord_nm']
-    info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=attributes)
+    get_l2data = retry(client.l2cache.get_l2data)
+    info = get_l2data(l2_ids.tolist(), attributes=attributes)
     n_miss = len([v for v in info.values() if not v])
 
     row = [root_ids, len(l2_ids), n_miss]
@@ -99,7 +100,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
 
     # Collect L2 attributes
     for at in attributes:
-        if at in ('rep_coord_nm'):
+        if at in ('rep_coord_nm', ):
             continue
 
         summed = sum([v.get(at, 0) for v in info.values()])
@@ -322,7 +323,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
 
     if refine:
         # Get the L2 representative coordinates
-        l2_info = client.l2cache.get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm'])
+        get_l2data = retry(client.l2cache.get_l2data)
+        l2_info = get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm'])
         # Missing L2 chunks will be {'id': {}}
         new_co = {l2dict[int(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
 
@@ -454,10 +456,10 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
                            disable=not progress,
                            total=len(l2_ids_all),
                            leave=False) as pbar:
-        func = retry(client.l2cache.get_l2data)
+        get_l2data = retry(client.l2cache.get_l2data)
         for chunk_ix in np.arange(0, len(l2_ids_all), chunk_size):
             chunk = l2_ids_all[chunk_ix: chunk_ix + chunk_size]
-            l2_info.update(func(chunk.tolist(), attributes=attributes))
+            l2_info.update(get_l2data(chunk.tolist(), attributes=attributes))
             pbar.update(len(chunk))
 
     # L2 chunks without info will show as empty dictionaries
