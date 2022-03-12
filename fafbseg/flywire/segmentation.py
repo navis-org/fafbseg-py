@@ -326,7 +326,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     return svoxels
 
 
-def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
+def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
                          retry=True, progress=True, dataset='production'):
     """Get root(s) for given supervoxel(s).
 
@@ -341,6 +341,8 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
     batch_size :    int
                     Max number of supervoxel IDs per query. Reduce batch size if
                     you experience time outs.
+    stop_layer :    int
+                    Set e.g. to ``2`` to get L2 IDs instead of root IDs.
     retry :         bool
                     Whether to retry if a batched query fails.
     dataset :       str | CloudVolume
@@ -391,12 +393,14 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000,
             not_zero = batch != 0
             try:
                 roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                                stop_layer=stop_layer,
                                                                 timestamp=timestamp)
             except BaseException:
                 if not retry:
                     raise
                 time.sleep(1)
                 roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
+                                                                stop_layer=stop_layer,
                                                                 timestamp=timestamp)
 
             pbar.update(len(batch))
