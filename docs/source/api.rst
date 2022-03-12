@@ -29,6 +29,7 @@ Interact with the segmentation:
     fafbseg.flywire.skid_to_id
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
+    fafbseg.flywire.get_voxels
 
 Fetch neurons:
 

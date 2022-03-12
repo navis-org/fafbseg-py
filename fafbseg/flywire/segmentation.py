@@ -33,14 +33,70 @@ from .. import spine
 from .. import xform
 
 from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
-                    retry, get_cave_client)
+                    retry, get_cave_client, parse_bounds)
 
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
            'roots_to_supervoxels', 'supervoxels_to_roots',
            'neuron_to_segments', 'is_latest_root', 'is_valid_root',
-           'is_valid_supervoxel']
+           'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph']
+
+
+def get_lineage_graph(x, size=False, user=False, progress=True, dataset='production'):
+    """Get lineage graph for given neuron.
+
+    This piggy-backs on the CAVEclient but importantly we remap users and
+    operation IDs such that each node's labels refer to the operation that
+    created them.
+
+    Parameters
+    ----------
+    x :         int
+                A single root ID.
+    size :      bool
+                If True, will add `size` and `survivals` node attributes. The
+                former indicates the number of supervoxels, the latter how many
+                of these supervoxels made it into `x`.
+    user :      bool
+                If True, will add user `user` node attribute.
+
+    Returns
+    -------
+    networkx.DiGraph
+
+    """
+    client = get_cave_client(dataset=dataset)
+    G = client.chunkedgraph.get_lineage_graph(x, as_nx_graph=True)
+
+    # Remap operation ID
+    op_remapped = {}
+    for n in G:
+        pred = list(G.predecessors(n))
+        if pred:
+            op_remapped[n] = G.nodes[pred[0]]['operation_id']
+
+    # Remove existing operation IDs
+    for n in G.nodes:
+        G.nodes[n].pop('operation_id', None)
+    # Apply new IDs
+    nx.set_node_attributes(G, op_remapped, name='operation_id')
+
+    if user:
+        op_ids = nx.get_node_attributes(G, "operation_id")
+        details = client.chunkedgraph.get_operation_details(list(op_ids.values()))
+        users = {n: details[str(o)]['user'] for n, o in op_ids.items()}
+        nx.set_node_attributes(G, users, name='user')
+
+    if size:
+        sv = roots_to_supervoxels(list(G.nodes), dataset=dataset, progress=progress)
+        sizes = {n: len(sv[n]) for n in G.nodes}
+        nx.set_node_attributes(G, sizes, name='size')
+
+        survivors = {n: int(np.isin(sv[n], sv[x]).sum()) for n in G.nodes}
+        nx.set_node_attributes(G, survivors, name='survivors')
+
+    return G
 
 
 def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
@@ -1155,3 +1211,180 @@ def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
         raise ValueError(f'{x} is not a valid supervoxel ID')
 
     return is_valid
+
+
+def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
+               use_mirror=True, dataset='production'):
+    """Fetch voxels making a up given root ID.
+
+    Parameters
+    ----------
+    x :             int
+                    A single root ID.
+    mip :           int
+                    Scale at which to fetch voxels. Mip 0, for example, is
+                    16 x 16 x 40nm.
+    sv_map :        bool
+                    If True, additionally return a map with the L2 ID for each
+                    voxel.
+    bounds :        (3, 2) or (2, 3) array, optional
+                    Bounding box to return voxels in. Expected to be in 4, 4, 40
+                    voxel space.
+    thin :          bool
+                    If True, will remove voxels at the interface of adjacent
+                    supervoxels that are not supposed to be connected according
+                    to the L2 graph. This is rather expensive but can help in
+                    situations where a neuron self-touches.
+    use_mirror :    bool
+                    If True (default), will use an mirror of the base
+                    segmentation for supervoxel look-up. Possibly slightly
+                    slower than the production data set but doesn't incur
+                    egress charges for Princeton.
+    progress :      bool
+                    Whether to show a progress bar or not.
+
+    Returns
+    -------
+    voxels :        (N, 3) np.ndarray
+                    In voxel space according to `mip`.
+    sv_map :        (N, ) np.ndarray
+                    Supervoxel ID for each voxel. Only if `sv_map=True`.
+
+    """
+    # IDEA:
+    # 1. Find surface voxels for each L2 chunk
+    # 2. Get L2 graph and determine which L2 chunks are supposed to be connected
+    # 3. Remove surface voxel between adjacent but not connected L2 chunks
+
+    from .l2 import chunks_to_nm
+
+    # This is a mirror for base segmentation
+    vol = parse_volume(dataset)
+    client = get_cave_client()
+
+    if use_mirror:
+        sv_vol = cv.CloudVolume('precomputed://https://seungdata.princeton.edu/'
+                                'sseung-archive/fafbv14-ws/'
+                                'ws_190410_FAFB_v02_ws_size_threshold_200',
+                                 use_https=True, progress=False, fill_missing=True)
+    else:
+        sv_vol = vol
+
+    is_valid_root(x, raise_exc=True)
+
+    # Get L2 chunks making up this neuron
+    l2_ids = client.chunkedgraph.get_leaves(x, stop_layer=2)
+
+    # Get supervoxels for this neuron
+    sv = roots_to_supervoxels(x, dataset=dataset)[x]
+
+    # Turn l2_ids into chunk indices
+    l2_ix = [np.array(vol.mesh.meta.meta.decode_chunk_position(l)) for l in l2_ids]
+    l2_ix = np.unique(l2_ix, axis=0)
+
+    # Convert to nm
+    l2_nm = np.asarray(chunks_to_nm(l2_ix, vol=vol))
+
+    # Convert to voxel space
+    l2_vxl = l2_nm // vol.meta.scales[mip]["resolution"]
+
+    # Apply bounds
+    bounds = parse_bounds(bounds)
+    if not isinstance(bounds, type(None)):
+        base_to_mip = np.array(vol.meta.scales[mip]["resolution"]) / [4, 4, 40]
+        bounds = bounds // base_to_mip.reshape(-1, 1)
+        l2_vxl = l2_vxl[np.all(l2_vxl >= bounds[:, 0], axis=1)]
+        l2_vxl = l2_vxl[np.all(l2_vxl <= bounds[:, 1], axis=1)]
+
+    voxels = []
+    svids = []
+    ch_size = np.array(vol.mesh.meta.meta.graph_chunk_size)
+    ch_size = ch_size // (vol.mip_resolution(mip) / vol.mip_resolution(0))
+    old_mip = sv_vol.mip
+    try:
+        sv_vol.mip = mip
+        for ch in tqdm(l2_vxl,
+                       disable=not progress,
+                       leave=False,
+                       desc='Loading'):
+            ct = sv_vol[ch[0]:ch[0] + ch_size[0],
+                        ch[1]:ch[1] + ch_size[1],
+                        ch[2]:ch[2] + ch_size[2]][:, :, :, 0]
+            is_root = np.isin(ct, sv)
+            this_vxl = np.dstack(np.where(is_root))[0]
+            this_vxl = this_vxl + ch
+            voxels.append(this_vxl)
+
+            if sv_map or thin:
+                svids.append(ct[is_root])
+    except BaseException:
+        raise
+    finally:
+        sv_vol.mip = old_mip
+
+    # uint 16 should be sufficient because even at mip 0 the volume has
+    # shape (54100, 28160, 7046) -> doesn't exceed 65_535
+    voxels = np.vstack(voxels).astype('uint16')
+    if len(svids):
+        svids = np.concatenate(svids)
+
+    if thin:
+        from .l2 import l2_graph
+
+        try:
+            from pykdtree.kdtree import KDTree
+        except ImportError:
+            from scipy.spatial import cKDTree as KDTree
+
+        # Get the l2 ID for each supervoxel
+        l2_ids = vol.get_roots(svids, stop_layer=2)
+        l2_dict = dict(zip(svids, l2_ids))
+
+        # Get the l2 graph
+        G = l2_graph(x)
+
+        # Create KD tree for all voxels
+        tree = KDTree(voxels)
+
+        # Create a mask for invalidated voxels
+        invalid = np.zeros(len(voxels), dtype=bool)
+
+        # Now go over each supervoxel
+        for sv in tqdm(np.unique(svids),
+                       disable= not progress,
+                       desc='Thinning',
+                       leave=False):
+            # Get the voxels for this supervoxel
+            is_this_sv = svids == sv
+
+            # If supervoxel has no voxels just continue
+            if not np.any(is_this_sv):
+                continue
+
+            # Get all supervoxels that could be connected to this supervoxel
+            is_this_l2 = l2_ids == l2_dict[sv]
+            is_connected_l2 = np.isin(l2_ids, list(G.neighbors(l2_dict[sv])))
+
+            # The mask needs to exclude anything that:
+            # Isn't this supervoxel OR is supposed to be connected OR
+            # has already been invalidated in a prior run
+            mask = is_this_l2 | is_connected_l2 | invalid
+
+            # Find "other" voxels that touch voxels for this supervoxel
+            dist, ix = tree.query(voxels[is_this_sv],
+                                  mask=mask,
+                                  distance_upper_bound=1.75)
+            is_touching = dist < np.inf
+
+            if not np.any(is_touching):
+                continue
+
+            invalid[np.where(is_this_sv)[0][is_touching]] = True
+
+        voxels = voxels[~invalid]
+        svids = svids[~invalid]
+
+    if not sv_map:
+        return voxels
+    else:
+        return voxels, svids

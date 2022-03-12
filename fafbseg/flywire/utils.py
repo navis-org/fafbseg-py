@@ -297,4 +297,30 @@ def retry(func, retries=5, cooldown=2):
                 raise
             time.sleep(cooldown * i)
     return wrapper
-    return wrapper
+
+
+def parse_bounds(x):
+    """Parse bounds.
+
+    Parameters
+    ----------
+    x :     (3, 2) array | (2, 3) array | None
+
+    Returns
+    -------
+    bounds :    (3, 2) np.array
+
+    """
+    if isinstance(x, type(None)):
+        return x
+
+    x = np.asarray(x)
+
+    if not x.ndim == 2 or x.shape not in [(3, 2), (2, 3)]:
+        raise ValueError('Must provide bounding box as (3, 2) or (2, 3) array, '
+                         f'got {x.shape}')
+
+    if x.shape == (2, 3):
+        x = x.T
+
+    return np.vstack((x.min(axis=1), x.max(axis=1))).T
