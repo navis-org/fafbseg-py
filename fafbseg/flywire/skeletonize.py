@@ -345,7 +345,7 @@ def divide_local_neighbourhood(mesh, radius):
 
 
 def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
-    """Skeletonization on parallel cores [WIP].
+    """Skeletonization on parallel cores.
 
     Parameters
     ----------
@@ -355,13 +355,19 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
                 Number of cores to use. Don't go too crazy on this as the
                 downloading of meshes becomes a bottle neck if you try to do
                 too many at the same time. Keep your internet speed in
-                mind.
+                mind. For reference: with 100Mbps internet, I can comfortably
+                run on 8 cores with some room to spare.
     **kwargs
                 Keyword arguments are passed on to `skeletonize_neuron`.
 
     Returns
     -------
     navis.NeuronList
+
+    See Also
+    --------
+    :func:`fafbseg.flywire.skeletonize_neuron`
+                The function called for individual neurons.
 
     """
     if n_cores < 2 or n_cores > os.cpu_count():
