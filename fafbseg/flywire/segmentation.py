@@ -456,7 +456,7 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
             locs = locs.astype(np.float64)
 
     return spine.transform.get_segids(locs, segmentation='flywire_190410',
-                                      coordinates=coordinates, mip=-1)
+                                      coordinates=coordinates, mip=mip)
 
 
 def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'):
