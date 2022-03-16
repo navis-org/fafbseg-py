@@ -17,19 +17,101 @@
 framework and the materialization engine."""
 
 import navis
+import requests
 
 import datetime as dt
 import numpy as np
 import pandas as pd
 
 from .utils import get_cave_client, retry
-from .segmentation import locs_to_segments
+from .segmentation import locs_to_segments, supervoxels_to_roots, is_latest_root
 
 
 __all__ = ['get_somas', 'get_materialization_versions',
            'create_annotation_table', 'get_annotation_tables',
            'get_annotation_table_info', 'get_annotations',
-           'delete_annotations', 'upload_annotations']
+           'delete_annotations', 'upload_annotations',
+           'is_proofread']
+
+
+PR_TABLE = None
+PR_META = None
+
+
+def is_proofread(x, cache=True):
+    """Test if neuron has been set to `proofread`.
+
+    Under the hood, this uses a cached version of the proofreading table which
+    is updated everytime this function gets called. 
+
+    Parameters
+    ----------
+    x  :            int | list of int
+                    Root IDs to check.
+    cache :         bool
+                    Use and update a locally cached version of the proofreading
+                    table. Setting this to ``False`` will force fetching the
+                    full table which is considerably slower.
+
+    Returns
+    -------
+    proofread :     np.ndarray
+                    Boolean array.
+
+    """
+    global PR_TABLE, PR_META
+
+    if not isinstance(x, (np.ndarray, set, list, pd.Series)):
+        x = [x]
+
+    # Force into array and convert to integer
+    x = np.asarray(x).astype(int)
+
+    # Check if any of the roots are outdated -> can't check those
+    il = is_latest_root(x)
+    if any(~il):
+        raise ValueError(f' Root ID(s) outdated: {x[~il]}')
+
+    # Get available materialization versions
+    client = get_cave_client('production')
+    mat_versions = client.materialize.get_versions()
+
+    # Check if the cached version is outdated
+    if cache and PR_META:
+        if max(mat_versions) > PR_META['mat_version']:
+            PR_TABLE = None
+            PR_META = None
+
+    # If nothing cached catch the table from scratch
+    if isinstance(PR_TABLE, type(None)) or not cache:
+        # This ought to automatically use the most recent materialization version
+        PR_META = dict(timestamp=dt.datetime.utcnow(),
+                       mat_version=max(mat_versions))
+        PR_TABLE = client.materialize.live_query(table='proofreading_status_public_v1',
+                                                 timestamp=PR_META['timestamp'])
+        # Only keep relevant rows and columns
+        PR_TABLE = PR_TABLE.loc[PR_TABLE.valid == 't', ['pt_supervoxel_id', 'pt_root_id']]
+    else:
+        # Update root IDs
+        now = dt.datetime.utcnow()
+        # get_delta_roots currently acts up if there are no new roots
+        # (i.e. if this gets called in quick succession)
+        try:
+            old_roots, _ = client.chunkedgraph.get_delta_roots(PR_META['timestamp'], now)
+        except requests.exceptions.HTTPError as e:
+            if "need at least one array" in str(e):
+                old_roots = []
+            else:
+                raise
+        except BaseException:
+            raise
+
+        to_update = PR_TABLE.pt_root_id.isin(old_roots)
+        if any(to_update):
+            PR_TABLE.loc[to_update, 'pt_root_id'] = supervoxels_to_roots(PR_TABLE.loc[to_update, 'pt_supervoxel_id'].values)
+        PR_META['timestamp'] = now
+
+    return np.isin(x, PR_TABLE.pt_root_id.values)
 
 
 def get_materialization_versions(dataset='production'):
@@ -167,9 +249,9 @@ def get_annotation_table_info(table_name: str,
 
 def get_annotations(table_name: str,
                     materialization='live',
-                    split_positions=False,
+                    split_positions: bool = False,
                     drop_invalid: bool = True,
-                    dataset='production',
+                    dataset: str = 'production',
                     **filters):
     """Get annotations from given table.
 
