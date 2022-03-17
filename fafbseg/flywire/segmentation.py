@@ -45,7 +45,7 @@ __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph']
 
 
-def get_lineage_graph(x, size=False, user=False, progress=True, dataset='production'):
+def get_lineage_graph(x, size=False, user=False, synapses=False, progress=True, dataset='production'):
     """Get lineage graph for given neuron.
 
     This piggy-backs on the CAVEclient but importantly we remap users and
@@ -60,6 +60,12 @@ def get_lineage_graph(x, size=False, user=False, progress=True, dataset='product
                 If True, will add `size` and `survivals` node attributes. The
                 former indicates the number of supervoxels, the latter how many
                 of these supervoxels made it into `x`.
+    synapses :  bool
+                If True, will add `pre|post|synapses` node attributes which
+                indicate how many of the synapses in `x` came from this fragment.
+                Note that this doesn't tell you e.g. how many false-positive
+                synapses were removed via a split. This works only if the root
+                ID is up-to-date.
     user :      bool
                 If True, will add user `user` node attribute.
 
@@ -68,6 +74,8 @@ def get_lineage_graph(x, size=False, user=False, progress=True, dataset='product
     networkx.DiGraph
 
     """
+    x = int(x)
+
     client = get_cave_client(dataset=dataset)
     G = client.chunkedgraph.get_lineage_graph(x, as_nx_graph=True)
 
@@ -97,6 +105,33 @@ def get_lineage_graph(x, size=False, user=False, progress=True, dataset='product
 
         survivors = {n: int(np.isin(sv[n], sv[x]).sum()) for n in G.nodes}
         nx.set_node_attributes(G, survivors, name='survivors')
+    else:
+        sv = None
+
+    if synapses:
+        pre = client.materialize.live_query(
+                        table=client.materialize.synapse_table,
+                        filter_equal_dict=dict(pre_pt_root_id=x),
+                        timestamp=dt.datetime.now(),
+                        select_columns=['pre_pt_supervoxel_id',
+                                        'post_pt_supervoxel_id']
+                                        )
+        post = client.materialize.live_query(
+                        table=client.materialize.synapse_table,
+                        filter_equal_dict=dict(post_pt_root_id=x),
+                        timestamp=dt.datetime.now(),
+                        select_columns=['pre_pt_supervoxel_id',
+                                        'post_pt_supervoxel_id']
+                                        )
+        if isinstance(sv, type(None)):
+            sv = roots_to_supervoxels(list(G.nodes), dataset=dataset, progress=progress)
+
+        n_pre = {n: int(pre.pre_pt_supervoxel_id.isin(sv[n]).sum()) for n in G.nodes}
+        n_post = {n: int(post.post_pt_supervoxel_id.isin(sv[n]).sum()) for n in G.nodes}
+        n_syn = {n: n_pre[n] + n_post[n] for n in G.nodes}
+        nx.set_node_attributes(G, n_pre, name='presynapses')
+        nx.set_node_attributes(G, n_post, name='postsynapses')
+        nx.set_node_attributes(G, n_post, name='synapses')
 
     return G
 
