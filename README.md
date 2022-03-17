@@ -15,5 +15,5 @@ pip3 install fafbseg
 
 Install from Github
 ```bash
-pip3 install git+git://github.com/flyconnectome/fafbseg-py.git
+pip3 install git+https://github.com/flyconnectome/fafbseg-py.git
 ```
