@@ -128,7 +128,10 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
                                         on_fail='raise', coordinates='nm', inplace=False)
 
     # Heal neuron
-    n_fafb = navis.heal_fragmented_neuron(n_fafb)
+    try:
+        n_fafb = navis.heal_skeleton(n_fafb)
+    except AttributeError:
+        n_fafb = navis.heal_fragmented_neuron(n_fafb)
 
     # Merge neuron
     return merge_into_catmaid(n_fafb, target_instance=target_instance, tag=tag,
