@@ -28,6 +28,7 @@ import pandas as pd
 from urllib.parse import urlparse, parse_qs, quote
 
 from . import utils
+from ..utils import make_iterable
 
 __all__ = ['decode_url', 'encode_url']
 
@@ -143,7 +144,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
     # If provided, add segments
     if not isinstance(segments, type(None)):
         # Force to list and make strings
-        segments = navis.utils.make_iterable(segments, force_type=str).tolist()
+        segments = make_iterable(segments, force_type=str).tolist()
 
         # Add to, not replace already selected segments
         present = scene['layers'][seg_layer_ix].get('segments', [])
@@ -151,7 +152,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     if not isinstance(invis_segs, type(None)):
         # Force to list and make strings
-        invis_segs = navis.utils.make_iterable(invis_segs, force_type=str).tolist()
+        invis_segs = make_iterable(invis_segs, force_type=str).tolist()
 
         # Add to, not replace already selected segments
         present = scene['layers'][seg_layer_ix].get('hiddenSegments', [])

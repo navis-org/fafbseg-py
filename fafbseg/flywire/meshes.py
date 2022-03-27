@@ -64,7 +64,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(id):
-        id = np.asarray(id).astype(int)
+        id = np.asarray(id).astype(np.int64)
         if 0 in id:
             raise ValueError('Root ID 0 among the queried IDs')
 

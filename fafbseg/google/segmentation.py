@@ -156,7 +156,7 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
 
     assert isinstance(seg_ids, (list, np.ndarray, set, tuple, pd.Index, int, str))
 
-    seg_ids = navis.utils.make_iterable(seg_ids)
+    seg_ids = utils.make_iterable(seg_ids)
 
     # Prepare map seg ID -> skeleton ID
     seg2skid = {int(i): None for i in seg_ids}

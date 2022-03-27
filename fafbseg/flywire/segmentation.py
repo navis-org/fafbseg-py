@@ -34,6 +34,7 @@ from tqdm.auto import trange, tqdm
 from .. import spine
 from .. import xform
 
+from ..utils import make_iterable
 from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
                     retry, get_cave_client, parse_bounds)
 
@@ -317,7 +318,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
 
     """
     # Make sure we are working with an array of integers
-    x = navis.utils.make_iterable(x).astype(int, copy=False)
+    x = make_iterable(x, force_type=np.int64)
 
     if len(x) <= 1:
         progress = False
@@ -401,12 +402,10 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
 
     """
     # Make sure we are working with an array of integers
-    x = navis.utils.make_iterable(x)
+    x = make_iterable(x, force_type=np.int64)
 
     # Check if IDs are valid (zeros are fine because we filter for them later on)
     is_valid_supervoxel(x[(x != 0) & (x != '0')], raise_exc=True)
-
-    x = x.astype(np.int64, copy=False)
 
     # Parse the volume
     vol = parse_volume(dataset)
@@ -748,7 +747,7 @@ def is_latest_root(id, dataset='production', **kwargs):
     """
     dataset = FLYWIRE_DATASETS.get(dataset, dataset)
 
-    id = navis.utils.make_iterable(id).astype(str)
+    id = make_iterable(id, force_type=str)
 
     # The server doesn't like being asked for zeros
     not_zero = id != '0'
@@ -877,7 +876,7 @@ def update_ids(id,
             elif any(pd.isnull(id)):
                 raise ValueError('`id` must not contain `None`')
 
-            id = np.array(id).astype(int)
+            id = np.array(id).astype(np.int64)
 
             res = pd.DataFrame()
             res['old_id'] = id

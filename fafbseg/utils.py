@@ -15,9 +15,13 @@
 """Collection of utility functions."""
 
 import requests
+import six
+
+import numpy as np
 
 from functools import wraps
 from urllib.parse import urlparse, urlencode
+from collections.abc import Iterable
 
 use_pbars = True
 
@@ -90,3 +94,28 @@ def make_url(*args, **GET):
     if GET:
         url += '?{}'.format(urlencode(GET))
     return url
+
+
+def make_iterable(x, force_type = None) -> np.ndarray:
+    """Force input into a numpy array.
+
+    For dicts, keys will be turned into array.
+
+    Examples
+    --------
+    >>> from navis.utils import make_iterable
+    >>> make_iterable(1)
+    array([1])
+    >>> make_iterable([1])
+    array([1])
+    >>> make_iterable({'a': 1})
+    array(['a'], dtype='<U1')
+
+    """
+    if not isinstance(x, Iterable) or isinstance(x, six.string_types):
+        x = [x]
+
+    if isinstance(x, (dict, set)):
+        x = list(x)
+
+    return np.asarray(x, dtype=force_type)

@@ -380,7 +380,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
                              f'`skeletonize_neuron`: {k}')
 
     # Make sure IDs are all integers
-    ids = np.asarray(ids).astype(int)
+    ids = np.asarray(ids).astype(np.int64)
 
     # Prepare the calls and parameters
     kwargs['progress'] = False

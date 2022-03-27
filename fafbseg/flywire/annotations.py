@@ -23,6 +23,7 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
+from ..utils import make_iterable
 from .utils import get_cave_client, retry
 from .segmentation import locs_to_segments, supervoxels_to_roots, is_latest_root
 
@@ -42,7 +43,7 @@ def is_proofread(x, cache=True):
     """Test if neuron has been set to `proofread`.
 
     Under the hood, this uses a cached version of the proofreading table which
-    is updated everytime this function gets called. 
+    is updated everytime this function gets called.
 
     Parameters
     ----------
@@ -65,7 +66,7 @@ def is_proofread(x, cache=True):
         x = [x]
 
     # Force into array and convert to integer
-    x = np.asarray(x).astype(int)
+    x = np.asarray(x).astype(np.int64)
 
     # Check if any of the roots are outdated -> can't check those
     il = is_latest_root(x)
@@ -466,9 +467,9 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
     filter_in_dict = None
     if not isinstance(x, type(None)):
         if isinstance(x, navis.NeuronList):
-            root_ids = x.id.astype(int)
+            root_ids = x.id.astype(np.int64)
         else:
-            root_ids = navis.utils.make_iterable(x).astype(int)
+            root_ids = make_iterable(x, force_type=np.int64)
         filter_in_dict = {'pt_root_id': root_ids}
 
     nuc = get_annotations('nuclei_v1',

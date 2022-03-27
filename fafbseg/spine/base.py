@@ -26,6 +26,8 @@ import trimesh as tm
 from abc import ABC
 from io import StringIO, BytesIO
 
+from ..utils import make_iterable
+
 use_pbars = True
 
 
@@ -151,7 +153,7 @@ class FlyCacheService(SpineService):
         url = self.makeurl('mesh/l2_centroid/flywire_fafb_production/')
 
         # Make sure we have an array of integers
-        ids = navis.utils.make_iterable(ids).astype(int)
+        ids = make_iterable(ids, force_type=np.int64)
 
         with navis.config.tqdm(total=len(ids), desc='Fetching centroids',
                                leave=False, disable=not progress) as pbar:
@@ -458,7 +460,7 @@ class TransformService(SpineService):
 
             # Convert to voxels
             vxl_size = self.info[dataset]['voxel_size']
-            vxl = np.round(vxl / vxl_size).astype(int)
+            vxl = np.round(vxl / vxl_size).astype(np.int64)
 
         return vxl
 
@@ -703,7 +705,7 @@ def query_spine_transform(x, dataset, query, coordinates='nm', mip=2,
     # Note that we are rounding here to get to voxels.
     # This will have the most impact on the Z section.
     if coordinates not in ['vxl', 'voxel', 'voxels']:
-        x = np.round(x / [4, 4, 40]).astype(int)
+        x = np.round(x / [4, 4, 40]).astype(np.int64)
 
     # Generate URL
     url = f'{TRANSFORM_SERVICE_URL}/{query}/dataset/{dataset}/s/{mip}/values_binary/format/array_float_Nx3'

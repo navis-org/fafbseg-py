@@ -20,7 +20,7 @@ import numpy as np
 from .segmentation import neuron_to_segments
 
 from ..synapses.utils import catmaid_table
-from .. import spine
+from .. import spine, utils
 
 __all__ = ['fetch_synapses', 'fetch_connectivity']
 
@@ -102,7 +102,7 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
     elif isinstance(x, (int, np.int)):
         ids = {x: x}
     else:
-        ids = {n: n for n in navis.utils.make_iterable(x)}
+        ids = {n: n for n in utils.make_iterable(x)}
 
     # Query the synapses
     syn = spine.synapses.get_connectivity(list(ids.keys()),

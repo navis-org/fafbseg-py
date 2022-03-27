@@ -215,11 +215,11 @@ def parse_root_ids(x):
     elif isinstance(x, (int, np.int)):
         ids = [x]
     else:
-        ids = navis.utils.make_iterable(x)
+        ids = utils.make_iterable(x, dtype=np.int64)
 
     # Make sure we are working with proper numerical IDs
     try:
-        return np.asarray(ids).astype(int)
+        return np.asarray(ids, dtype=np.int64)
     except ValueError:
         raise ValueError(f'Unable to convert given root IDs to integer: {ids}')
     except BaseException:

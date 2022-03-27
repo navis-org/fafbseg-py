@@ -26,6 +26,7 @@ from tqdm.auto import trange
 from .segmentation import is_latest_root
 from .utils import parse_root_ids, get_cave_client, retry, get_synapse_areas
 
+from ..utils import make_iterable
 from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
 
@@ -185,7 +186,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                          dataset=dataset, **kwargs)
 
     if not isinstance(neuropils, type(None)):
-        neuropils = navis.utils.make_iterable(neuropils)
+        neuropils = make_iterable(neuropils)
         filter_in = [n for n in neuropils if not n.startswith('~')]
         filter_out = [n[1:] for n in neuropils if n.startswith('~')]
 
@@ -489,7 +490,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
-        neuropils = navis.utils.make_iterable(neuropils)
+        neuropils = make_iterable(neuropils)
 
         if len(neuropils):
             filter_in = [n for n in neuropils if not n.startswith('~')]
@@ -638,7 +639,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
-        neuropils = navis.utils.make_iterable(neuropils)
+        neuropils = make_iterable(neuropils)
 
         if len(neuropils):
             filter_in = [n for n in neuropils if not n.startswith('~')]
