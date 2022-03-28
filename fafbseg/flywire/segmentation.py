@@ -46,7 +46,9 @@ __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph']
 
 
-def get_lineage_graph(x, size=False, user=False, synapses=False, progress=True, dataset='production'):
+def get_lineage_graph(x, size=False, user=False, synapses=False,
+                      proofreading_status=False, progress=True,
+                      dataset='production'):
     """Get lineage graph for given neuron.
 
     This piggy-backs on the CAVEclient but importantly we remap users and
@@ -69,6 +71,9 @@ def get_lineage_graph(x, size=False, user=False, synapses=False, progress=True, 
                 ID is up-to-date.
     user :      bool
                 If True, will add user `user` node attribute.
+    proofreading_status : bool
+                If True, will add a `proofread_by` node attribute indicating if
+                a user has set a given root ID to proofread.
 
     Returns
     -------
@@ -133,6 +138,15 @@ def get_lineage_graph(x, size=False, user=False, synapses=False, progress=True, 
         nx.set_node_attributes(G, n_pre, name='presynapses')
         nx.set_node_attributes(G, n_post, name='postsynapses')
         nx.set_node_attributes(G, n_post, name='synapses')
+
+    if proofreading_status:
+        from .annotations import get_annotations
+        nodes = np.array(list(G.nodes)).astype(np.int64)
+        pr = get_annotations('proofreading_status_public_v1',
+                             filter_in_dict=dict(valid_id=nodes))
+        if len(pr):
+            user = pr.groupby('valid_id').user_id.apply(list).to_dict()
+            nx.set_node_attributes(G, {n: user[n] for n in pr.valid_id}, name='proofread_by')
 
     return G
 
