@@ -360,7 +360,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     # We need to convert keys to integer array because otherwise there is a
     # mismatch in types (int vs np.int?) which causes all root IDs to be in miss
     # -> I think that's because of the way disk cache works
-    miss = x[~np.isin(x, np.array(list(svoxels.keys())).astype(int))]
+    miss = x[~np.isin(x, np.array(list(svoxels.keys()), dtype=np.int64))]
     get_leaves = retry(vol.get_leaves)
     svoxels.update({i: get_leaves(i,
                                   bbox=vol.meta.bounds(0),
