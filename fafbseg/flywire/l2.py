@@ -366,7 +366,8 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
                 max_threads=10, dataset='production', **kwargs):
     """Generate dotprops from L2 chunks.
 
-    L2 chunks not present in the L2 cache are silently ignored.
+    L2 chunks not present in the L2 cache or without a `pca` attribute
+    (happens for very small chunks) are silently ignored.
 
     Parameters
     ----------
@@ -464,7 +465,8 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
 
     # L2 chunks without info will show as empty dictionaries
     # Let's drop them to make our life easier (speeds up indexing too)
-    l2_info = {k: v for k, v in l2_info.items() if v}
+    # Note that small L2 chunks won't have a `pca`
+    l2_info = {k: v for k, v in l2_info.items() if 'pca' in v}
 
     # Generate dotprops
     dps = []
