@@ -20,6 +20,7 @@ import os
 import pytz
 import time
 import requests
+import warnings
 
 from caveclient import CAVEclient
 from pathlib import Path
@@ -276,6 +277,9 @@ def parse_volume(vol, **kwargs):
 def retry(func, retries=5, cooldown=2):
     """Retry function on HTTPError.
 
+    This also suppresses UserWarnings (because we typically use this for stuff
+    like the l2 Cache).
+
     Parameters
     ----------
     cooldown :  int | float
@@ -288,14 +292,16 @@ def retry(func, retries=5, cooldown=2):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         for i in range(1, retries + 1):
-            try:
-                return func(*args, **kwargs)
-            except requests.HTTPError:
-                if i >= retries:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    return func(*args, **kwargs)
+                except requests.HTTPError:
+                    if i >= retries:
+                        raise
+                except BaseException:
                     raise
-            except BaseException:
-                raise
-            time.sleep(cooldown * i)
+                time.sleep(cooldown * i)
     return wrapper
 
 
