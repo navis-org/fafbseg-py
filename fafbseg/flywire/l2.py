@@ -362,8 +362,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
     return tn
 
 
-def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
-                max_threads=10, dataset='production', **kwargs):
+def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
+                progress=True, max_threads=10, dataset='production', **kwargs):
     """Generate dotprops from L2 chunks.
 
     L2 chunks not present in the L2 cache or without a `pca` attribute
@@ -380,6 +380,10 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
                         finer terminal neurites which typically break into more,
                         smaller chunks and are hence overrepresented. A good
                         value appears to be around 1_000_000.
+    sample :            float [0 > 1], optional
+                        If float, will create Dotprops based on a fractional
+                        sample of the L2 chunks. The sampling is random but
+                        deterministic.
     omit_failures :     bool, optional
                         Determine behaviour when dotprops generation fails
                         (i.e. if the neuron has no L2 info):
@@ -442,6 +446,17 @@ def l2_dotprops(root_ids, min_size=None, omit_failures=None, progress=True,
 
     # Turn IDs into strings
     l2_ids = [i.astype(str) for i in l2_ids]
+
+    if sample:
+        if sample <= 0 or sample >= 1:
+            raise ValueError(f'`sample` must be between 0 and 1, got {sample}')
+
+        for i in range(len(l2_ids)):
+            # Make the sampling deterministic
+            np.random.seed(1985)
+            l2_ids[i] = np.random.choice(l2_ids[i],
+                                         size=max(1, int(len(l2_ids[i]) * sample)),
+                                         replace=False)
 
     # Flatten into a list of all L2 IDs
     l2_ids_all = np.unique([i for l in l2_ids for i in l])
