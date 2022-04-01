@@ -329,9 +329,10 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
     if refine:
         # Get the L2 representative coordinates
         get_l2data = retry(client.l2cache.get_l2data)
-        l2_info = get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm'])
+        l2_info = get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm', 'max_dt_nm'])
         # Missing L2 chunks will be {'id': {}}
         new_co = {l2dict[int(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
+        new_r = {l2dict[int(k)]: v.get('max_dt_nm', 0) for k, v in l2_info.items() if v}
 
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
@@ -342,6 +343,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
             swc.loc[has_new, 'x'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][0])
             swc.loc[has_new, 'y'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][1])
             swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
+
+        swc['radius'] = swc.node_id.map(new_r)
 
         # Turn into a proper neuron
         tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
