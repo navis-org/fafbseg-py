@@ -96,7 +96,7 @@ def make_url(*args, **GET):
     return url
 
 
-def make_iterable(x, force_type = None) -> np.ndarray:
+def make_iterable(x, force_type=None) -> np.ndarray:
     """Force input into a numpy array.
 
     For dicts, keys will be turned into array.
