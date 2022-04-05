@@ -124,8 +124,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
                         neuropils=None, batch_size=10, dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
-    Based on Eckstein et al. (2020). Uses a service on services.itanna.io hosted
-    by Eric Perlman and Davi Bock. The per-synapse predictions are collapsed
+    Based on Eckstein et al. (2020). The per-synapse predictions are collapsed
     into per-neuron prediction by calculating the average confidence for
     each neurotransmitter across all synapses weighted by the "cleft score".
     Bottom line: higher confidence synapses have more weight than low confidence
@@ -358,23 +357,26 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
             presyn = postsyn = pd.DataFrame([])
+            add_cols = ['neuropil'] if neuropils else []
             if pre:
-                presyn = syn.loc[syn.pre == int(n.id),
-                                 ['pre_x', 'pre_y', 'pre_z',
-                                  'cleft_score', 'post']].rename({'pre_x': 'x',
-                                                                  'pre_y': 'y',
-                                                                  'pre_z': 'z',
-                                                                  'post': 'partner_id'},
-                                                                 axis=1)
+                cols = ['pre_x', 'pre_y', 'pre_z',
+                        'cleft_score', 'post'] + add_cols
+                presyn = syn.loc[syn.pre == int(n.id), cols
+                                 ].rename({'pre_x': 'x',
+                                           'pre_y': 'y',
+                                           'pre_z': 'z',
+                                           'post': 'partner_id'},
+                                          axis=1)
                 presyn['type'] = 'pre'
             if post:
-                postsyn = syn.loc[syn.post == int(n.id),
-                                  ['post_x', 'post_y', 'post_z',
-                                   'cleft_score', 'pre']].rename({'post_x': 'x',
-                                                                  'post_y': 'y',
-                                                                  'post_z': 'z',
-                                                                  'pre': 'partner_id'},
-                                                                 axis=1)
+                cols = ['post_x', 'post_y', 'post_z',
+                        'cleft_score', 'pre'] + add_cols
+                postsyn = syn.loc[syn.post == int(n.id), cols
+                                  ].rename({'post_x': 'x',
+                                            'post_y': 'y',
+                                            'post_z': 'z',
+                                            'pre': 'partner_id'},
+                                           axis=1)
                 postsyn['type'] = 'post'
 
             connectors = pd.concat((presyn, postsyn), axis=0, ignore_index=True)
