@@ -25,16 +25,19 @@ import warnings
 from caveclient import CAVEclient
 from pathlib import Path
 from importlib import reload
+from zipfile import ZipFile
+from io import BytesIO
 
 import cloudvolume as cv
 import datetime as dt
+import trimesh as tm
 import numpy as np
 
 from .. import utils
 
 
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
-           'get_cave_client']
+           'get_cave_client', 'get_neuropil_volumes']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26'}
@@ -51,6 +54,38 @@ fp = Path(__file__).parent
 data_path = fp.parent / 'data'
 area_ids = None
 vol_names = None
+
+
+def get_neuropil_volumes(neuropils):
+    """Load FlyWire neuropil volumes.
+
+    These meshes were originally created by for the JFRC2 brain template
+    (for citation and details see 10.5281/zenodo.10567). Here, we transformed
+    them to FlyWire (FAFB14.1) space.
+
+    Parameters
+    ----------
+    neuropils :     str | list thereof
+                    Neuropil name(s) - e.g. 'LH_R' or ['LH_R', 'LH_L'].
+
+    Returns
+    -------
+    meshes :        single navis.Volume or list thereof
+
+    """
+    if navis.utils.is_iterable(neuropils):
+        return [get_neuropil_volumes(n) for n in neuropils]
+
+    with ZipFile(data_path / 'JFRC2NP.surf.fw.zip', 'r') as zip:
+        try:
+            f = zip.read(f'{neuropils}.stl')
+        except KeyError:
+            raise ValueError(f'No mesh for neuropil "{neuropils}"')
+
+        f = zip.read(f'{neuropils}.stl')
+        m = tm.load_mesh(BytesIO(f), file_type='stl')
+
+    return navis.Volume(m, name=neuropils)
 
 
 def get_synapse_areas(ind):
