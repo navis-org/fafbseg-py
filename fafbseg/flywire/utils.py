@@ -216,7 +216,7 @@ def parse_root_ids(x):
     elif isinstance(x, (int, np.int)):
         ids = [x]
     else:
-        ids = utils.make_iterable(x, force_dtype=np.int64)
+        ids = utils.make_iterable(x, force_type=np.int64)
 
     # Make sure we are working with proper numerical IDs
     try:
