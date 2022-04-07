@@ -50,7 +50,17 @@ MINIMAL_SCENE = {'layers': [{'source': 'precomputed://gs://microns-seunglab/dros
                                             'pathObject': {'annotationPath': {'annotations': [], 'tags': []},
                                                            'hasPath': False}
                                             },
-                             'name': 'Production-segmentation_with_graph'}],
+                             'name': 'Production-segmentation_with_graph'},
+                              {"source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
+                               "type": "segmentation",
+                               "objectAlpha": 0.2,
+                               "segmentColors": { "1": "#808080"},
+                               "segments": ["1"],
+                                "skeletonRendering": {"mode2d": "lines_and_points",
+                                                      "mode3d": "lines"},
+                               "name": "brain_mesh_v141.surf",
+                               "visible": False
+                                }],
                  'navigation': {'pose': {'position': {'voxelSize': [4, 4, 40],
                                                       'voxelCoordinates': [118073, 57192, 4070]}},  # default
                                 'zoomFactor': 2.8},  # Zoom in 2d
