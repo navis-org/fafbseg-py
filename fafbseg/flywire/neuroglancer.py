@@ -75,7 +75,8 @@ session = None
 
 
 def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
-               seg_colors=None, invis_segs=None, dataset='production', scene=None,
+               seg_colors=None, seg_groups=None, invis_segs=None,
+               dataset='production', scene=None,
                open_browser=False, to_clipboard=False, short=True):
     """Encode data as FlyWire neuroglancer scene.
 
@@ -91,8 +92,12 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     (X, Y, Z) voxel coordinates to center on.
     skeletons :     navis.TreeNeuron | navis.CatmaidNeuron | NeuronList
                     Skeleton(s) to add as annotation layer(s).
-    seg_colors :    list | dict, optional
-                    List or dictionary mapping colors to ``segments``.
+    seg_colors :    str | tuple | list | dict, optional
+                    Single color (name or RGB tuple), or list or dictionary
+                    mapping colors to ``segments``.
+    seg_groups :    list | dict, optional
+                    List or dictionary mapping segments to groups. Each group
+                    will get its own annotation layer.
     invis_segs :    int | list, optional
                     Selected but invisible segments.
     dataset :       'production' | 'sandbox'
@@ -159,6 +164,36 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         # Add to, not replace already selected segments
         present = scene['layers'][seg_layer_ix].get('segments', [])
         scene['layers'][seg_layer_ix]['segments'] = present + segments
+
+    if not isinstance(seg_groups, type(None)):
+        if not isinstance(seg_groups, dict):
+            if not navis.utils.is_iterable(seg_groups):
+                raise TypeError(f'`seg_groups` must be dict or iterable, got "{type(seg_groups)}"')
+            if len(seg_groups) != len(all_segs):
+                raise ValueError(f'Got {len(seg_groups)} groups for {len(all_segs)} segments.')
+
+            # Turn into dictionary
+            seg_groups = dict(zip(all_segs, seg_groups))
+
+        # Check if dict is {id: group} or {group: [id1, id2, id3]}
+        is_list = [isinstance(v, (list, tuple, set, np.ndarray)) for v in seg_groups.values()]
+        if not any(is_list):
+            groups = {}
+            for s, g in seg_groups.items():
+                if not isinstance(g, str):
+                    raise TypeError(f'Expected seg groups to be strings, got {type(g)}')
+                groups[g] = groups.get(g, []) + [s]
+        elif all(is_list):
+            groups = seg_groups
+        else:
+            raise ValueError('`seg_groups` appears to be a mix of {id: group} '
+                             'and {group: [id1, id2, id3]}.')
+
+        for g in groups:
+            scene['layers'].append(copy.deepcopy(scene['layers'][seg_layer_ix]))
+            scene['layers'][-1]['name'] = str(g)
+            scene['layers'][-1]['segments'] = [str(s) for s in groups[g]]
+            scene['layers'][-1]['visible'] = False
 
     if not isinstance(invis_segs, type(None)):
         # Force to list and make strings
