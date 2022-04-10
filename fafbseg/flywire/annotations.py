@@ -23,8 +23,10 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
+from requests_futures.sessions import FuturesSession
+
 from ..utils import make_iterable
-from .utils import get_cave_client, retry
+from .utils import get_cave_client, retry, get_chunkedgraph_secret
 from .segmentation import locs_to_segments, supervoxels_to_roots, is_latest_root
 
 
@@ -71,7 +73,8 @@ def is_proofread(x, cache=True):
     # Check if any of the roots are outdated -> can't check those
     il = is_latest_root(x)
     if any(~il):
-        raise ValueError(f' Root ID(s) outdated: {x[~il]}')
+        print("At least some root ID(s) outdated and will therefore show up as "
+              f"not proofread: {x[~il]}")
 
     # Get available materialization versions
     client = get_cave_client('production')
@@ -516,3 +519,207 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
     # Sorting by radius makes sure that the small false-positives end up at the
     # bottom of the list
     return nuc.sort_values('rad_est', ascending=False)
+
+
+def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
+    """Submit a identification for given cells.
+
+    Use this bulk submission of cell identification with great care!
+
+    Parameters
+    ----------
+    x :             pandas.DataFrame
+                    Must have the following columns:
+                      - `valid_id` contains the current root ID
+                      - `x`, `y`, `z` contain coordinates mapping to that root
+                        (must be in voxel space)
+                      - `tags` must be a comma-separated string of tags
+                      - `user_id` (optional) if you want to submit for someone
+                        else
+    max_threads :   int
+                    Number of parallel submissions.
+    progress :      bool
+                    If True, show progress bar.
+
+    Returns
+    -------
+    response :      pandas.DataFrame
+                    A copy of ``x`` with a `success` and an `error` column.
+
+    """
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError(f'Expected DataFrame, got {type(x)}')
+
+    REQ_COLS = ('valid_id', 'x' , 'y' , 'z', 'tags')
+    for c in REQ_COLS:
+        if c not in x:
+            raise ValueError(f'Missing required column: {c}')
+
+    if validate:
+        roots = locs_to_segments(x[['x', 'y', 'z']].values)
+
+        is_zero = roots == 0
+        if any(is_zero):
+            raise ValueError(f'{is_zero.sum()} xyz coordinates map to root ID 0')
+
+        mm = roots != x.valid_id.astype(int)
+        if any(mm):
+            raise ValueError(f'{mm.sum()} xyz coordinates do not map to the '
+                             'provided `valid_id`')
+
+    session = requests.Session()
+    future_session = FuturesSession(session=session, max_workers=max_threads)
+
+    token = get_chunkedgraph_secret()
+    session.headers['Authorization'] = f"Bearer {token}"
+
+    futures = {}
+    url = f'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
+    for i, row in x.iterrows():
+        post = dict(valid_id=str(row.valid_id),
+                    location=f'{row.x}, {row.y}, {row.z}',
+                    tag=row.tag,
+                    action='single',
+                    user_id=row.get('user_id', ''))
+
+        f = future_session.post(url, data=post)
+        futures[f] = post
+
+    # Get the responses
+    resp = [f.result() for f in navis.config.tqdm(futures,
+                                                  desc='Submitting',
+                                                  disable=not progress or len(futures) == 1,
+                                                  leave=False)]
+
+    success = []
+    errors = []
+    for r, f in zip(resp, futures):
+        try:
+            r.raise_for_status()
+        except BaseException as e:
+            sucess.append(False)
+            errors.append(str(e))
+            continue
+
+        if not 'Success' in r.text:
+            success.append(False)
+            errors.append(r.text)
+            continue
+
+        success.append(True)
+        errors.append(None)
+
+    x = x.copy()
+    x['success'] = success
+    x['errors'] = errors
+
+    if not all(x.success):
+        navis.config.logger.error(f'Encountered {(~x.success).sum()} errors '
+                                  'while marking cells as proofread. Please '
+                                  'see the `errors` columns in the returned '
+                                  'dataframe for details.')
+    else:
+        navis.config.logger.info('SUCCESS!')
+
+    return x
+
+
+def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
+    """Submit proofread status for given cell.
+
+    Use this bulk submission of proofreading status with great care!
+
+    Parameters
+    ----------
+    x :             pandas.DataFrame
+                    Must have the following columns:
+                      - `valid_id` contains the current root ID
+                      - `x`, `y`, `z` contain coordinates mapping to that root
+                        (must be in voxel space)
+                      - `user_id` (optional) if you want to submit for someone
+                        else
+    max_threads :   int
+                    Number of parallel submissions.
+    progress :      bool
+                    If True, show progress bar.
+
+    Returns
+    -------
+    response :      pandas.DataFrame
+                    A copy of ``x`` with a `success` and an `error` column.
+
+    """
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError(f'Expected DataFrame, got {type(x)}')
+
+    REQ_COLS = ('valid_id', 'x' , 'y' , 'z')
+    for c in REQ_COLS:
+        if c not in x:
+            raise ValueError(f'Missing required column: {c}')
+
+    if validate:
+        roots = locs_to_segments(x[['x', 'y', 'z']].values)
+
+        is_zero = roots == 0
+        if any(is_zero):
+            raise ValueError(f'{is_zero.sum()} xyz coordinates map to root ID 0')
+
+        mm = roots != x.valid_id.astype(int)
+        if any(mm):
+            raise ValueError(f'{mm.sum()} xyz coordinates do not map to the '
+                             'provided `valid_id`')
+
+    session = requests.Session()
+    future_session = FuturesSession(session=session, max_workers=max_threads)
+
+    token = get_chunkedgraph_secret()
+    session.headers['Authorization'] = f"Bearer {token}"
+
+    futures = {}
+    url = f'https://prod.flywire-daf.com/neurons/api/v1/mark_completion'
+    for i, row in x.iterrows():
+        post = dict(valid_id=str(row.valid_id),
+                    location=f'{row.x}, {row.y}, {row.z}',
+                    action='single',
+                    user_id=row.get('user_id', ''))
+
+        f = future_session.post(url, data=post)
+        futures[f] = post
+
+    # Get the responses
+    resp = [f.result() for f in navis.config.tqdm(futures,
+                                                  desc='Submitting',
+                                                  disable=not progress or len(futures) == 1,
+                                                  leave=False)]
+
+    success = []
+    errors = []
+    for r, f in zip(resp, futures):
+        try:
+            r.raise_for_status()
+        except BaseException as e:
+            sucess.append(False)
+            errors.append(str(e))
+            continue
+
+        if not 'Success' in r.text:
+            success.append(False)
+            errors.append(r.text)
+            continue
+
+        success.append(True)
+        errors.append(None)
+
+    x = x.copy()
+    x['success'] = success
+    x['errors'] = errors
+
+    if not all(x.success):
+        navis.config.logger.error(f'Encountered {(~x.success).sum()} errors '
+                                  'while submitting cell identifications. Please '
+                                  'see the `errors` columns in the returned '
+                                  'dataframe for details.')
+    else:
+        navis.config.logger.info('SUCCESS!')
+
+    return x
