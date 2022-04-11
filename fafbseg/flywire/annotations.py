@@ -576,11 +576,12 @@ def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
     futures = {}
     url = f'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
     for i, row in x.iterrows():
-        post = dict(valid_id=str(row.valid_id),
-                    location=f'{row.x}, {row.y}, {row.z}',
-                    tag=row.tag,
-                    action='single',
-                    user_id=row.get('user_id', ''))
+        for tag in row.tag.split(','):
+            post = dict(valid_id=str(row.valid_id),
+                        location=f'{row.x}, {row.y}, {row.z}',
+                        tag=tag,
+                        action='single',
+                        user_id=row.get('user_id', ''))
 
         f = future_session.post(url, data=post)
         futures[f] = post
