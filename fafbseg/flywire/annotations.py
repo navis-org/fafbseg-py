@@ -521,7 +521,7 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
     return nuc.sort_values('rad_est', ascending=False)
 
 
-def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
+def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4, progress=True):
     """Submit a identification for given cells.
 
     Use this bulk submission of cell identification with great care!
@@ -531,11 +531,15 @@ def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
     x :             pandas.DataFrame
                     Must have the following columns:
                       - `valid_id` contains the current root ID
-                      - `x`, `y`, `z` contain coordinates mapping to that root
+                      - `x`, `y`, `z` (or alternatively `pos_x`, `pos_y`,
+                        `pos_z`) contain coordinates mapping to that root
                         (must be in voxel space)
                       - `tags` must be a comma-separated string of tags
                       - `user_id` (optional) if you want to submit for someone
                         else
+    split_tags :    bool
+                    If True, will split the comma-separated tags into
+                    individual tags.
     max_threads :   int
                     Number of parallel submissions.
     progress :      bool
@@ -550,10 +554,24 @@ def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
     if not isinstance(x, pd.DataFrame):
         raise TypeError(f'Expected DataFrame, got {type(x)}')
 
-    REQ_COLS = ('valid_id', 'x' , 'y' , 'z', 'tags')
+    REQ_COLS = ('valid_id',
+                ('x', 'pos_x'),
+                ('y', 'pos_y'),
+                ('z', 'pos_z'),
+                'tags')
     for c in REQ_COLS:
-        if c not in x:
-            raise ValueError(f'Missing required column: {c}')
+        if isinstance(c, tuple):
+            # Check that at least one option exits
+            if not any(np.isin(c, x.columns)):
+                raise ValueError(f'`x` must contain one of these column: {c}')
+            # Rename so we always find the first possible option
+            if c[0] not in x.columns:
+                for v in c[1:]:
+                    if v in x.columns:
+                        x = x.rename({v: c[0]}, axis=1)
+        else:
+            if c not in x:
+                raise ValueError(f'Missing required column: {c}')
 
     if validate:
         roots = locs_to_segments(x[['x', 'y', 'z']].values)
@@ -576,15 +594,20 @@ def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
     futures = {}
     url = f'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
     for i, row in x.iterrows():
-        for tag in row.tag.split(','):
+        if split_tags:
+            tags = row.tag.split(',')
+        else:
+            tags = [row.tag]
+
+        for tag in tags:
             post = dict(valid_id=str(row.valid_id),
                         location=f'{row.x}, {row.y}, {row.z}',
                         tag=tag,
                         action='single',
                         user_id=row.get('user_id', ''))
 
-        f = future_session.post(url, data=post)
-        futures[f] = post
+            f = future_session.post(url, data=post)
+            futures[f] = (i, post)
 
     # Get the responses
     resp = [f.result() for f in navis.config.tqdm(futures,
@@ -592,23 +615,24 @@ def submit_cell_identification(x, validate=True, max_threads=4, progress=True):
                                                   disable=not progress or len(futures) == 1,
                                                   leave=False)]
 
-    success = []
-    errors = []
+    success = [True] * len(x)
+    errors = [[]] * len(x)
     for r, f in zip(resp, futures):
+        row_ix = futures[f][0]
+        post = futures[f][1]
         try:
             r.raise_for_status()
         except BaseException as e:
-            sucess.append(False)
-            errors.append(str(e))
+            success[row_ix] = False
+            errors[row_ix].append(str(e))
             continue
 
         if not 'Success' in r.text:
-            success.append(False)
-            errors.append(r.text)
+            success[row_ix] = False
+            errors[row_ix].append(r.text)
             continue
 
-        success.append(True)
-        errors.append(None)
+        errors[row_ix].append(None)
 
     x = x.copy()
     x['success'] = success
