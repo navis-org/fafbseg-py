@@ -344,6 +344,9 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     # Make sure we are working with an array of integers
     x = make_iterable(x, force_type=np.int64)
 
+    # Make sure we're not getting bogged down with duplicates
+    x = np.unique(x)
+
     if len(x) <= 1:
         progress = False
 
@@ -351,7 +354,7 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     vol = parse_volume(dataset)
 
     svoxels = {}
-    # See what ewe can get from cache
+    # See what we can get from cache
     if use_cache:
         # Cache for root -> supervoxels
         # Grows to max 1Gb by default and persists across sessions
@@ -372,12 +375,16 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     # -> I think that's because of the way disk cache works
     miss = x[~np.isin(x, np.array(list(svoxels.keys()), dtype=np.int64))]
     get_leaves = retry(vol.get_leaves)
-    svoxels.update({i: get_leaves(i,
-                                  bbox=vol.meta.bounds(0),
-                                  mip=0) for i in navis.config.tqdm(miss,
-                                                                    desc='Querying',
-                                                                    disable=not progress,
-                                                                    leave=False)})
+    with navis.config.tqdm(desc='Querying',
+                           total=len(x),
+                           disable=not progress,
+                           leave=False) as pbar:
+        # Update for those for which we had cached data
+        pbar.update(len(svoxels))
+
+        for i in miss:
+            svoxels[i] = get_leaves(i, bbox=vol.meta.bounds(0), mip=0)
+            pbar.update()
 
     # Update cache
     if use_cache:
