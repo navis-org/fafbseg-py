@@ -226,6 +226,9 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
 def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
     """Fetch edit history for given neuron(s).
 
+    Note that neurons that haven't seen any edits will simply not show up in
+    returned table.
+
     Parameters
     ----------
     x :             int | list of int
@@ -282,6 +285,13 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
 
     df = []
     for r, i in zip(resp, x):
+        # Code 500 means server error
+        if r.status_code == 500:
+            # If server responds a time-out, it means that the root ID has not
+            # seen any edits from base segmentation.
+            if 'Read timed out' in r.json().get('message', ''):
+                continue
+
         r.raise_for_status()
         this_df = pd.DataFrame(r.json())
         this_df['segment'] = i
