@@ -26,7 +26,7 @@ setup(
     url='https://fafbseg-py.readthedocs.io',
     project_urls={
      "Documentation": "https://fafbseg-py.readthedocs.io",
-     "Source": "https://github.com/flyconnectome/fafbseg-py",
+     "Source": "https://github.com/navis-org/fafbseg-py",
      "Changelog": "https://github.com/navis-org/fafbseg-py/releases",
     },
     author='Philipp Schlegel',
