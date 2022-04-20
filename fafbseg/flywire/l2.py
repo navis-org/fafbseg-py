@@ -246,16 +246,20 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
     if omit_failures not in (None, True, False):
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
-    # TODO:
-    # - drop duplicate nodes in unrefined skeleton
-    # - use L2 graph to find soma: highest degree is typically the soma
 
     if navis.utils.is_iterable(root_id):
-        with ThreadPoolExecutor(max_workers=max_threads) as pool:
-            get_l2_skels = partial(l2_skeleton, refine=refine, drop_missing=drop_missing,
-                                   omit_failures=omit_failures, dataset=dataset, **kwargs)
-            futures = pool.map(get_l2_skels, root_id)
-            nl = [f for f in navis.config.tqdm(futures,
+        get_l2_skels = partial(l2_skeleton, refine=refine, drop_missing=drop_missing,
+                               omit_failures=omit_failures, dataset=dataset, **kwargs)
+        if (max_threads > 1) and (len(root_id) > 1):
+            with ThreadPoolExecutor(max_workers=max_threads) as pool:
+                futures = pool.map(get_l2_skels, root_id)
+                nl = [f for f in navis.config.tqdm(futures,
+                                                   desc='Fetching L2 skeletons',
+                                                   total=len(root_id),
+                                                   disable=not progress or len(root_id) == 1,
+                                                   leave=False)]
+        else:
+            nl = [get_l2_skels(r) for r in navis.config.tqdm(root_id,
                                                desc='Fetching L2 skeletons',
                                                total=len(root_id),
                                                disable=not progress or len(root_id) == 1,
