@@ -85,6 +85,7 @@ def synapse_counts(x, by_neuropil=False, min_score=30, live_query=True,
                          min_score=min_score,
                          transmitters=True, live_query=live_query,
                          neuropils=by_neuropil,
+                         batch_size=batch_size,
                          dataset=dataset, **kwargs)
 
     pre = syn[syn.pre.isin(x)]
@@ -304,8 +305,12 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         if pre:
             syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
 
+    # Drop attrs to avoid issues when concatenating
+    for df in syn:
+        df.attrs = {}
+
     # Combine results from batches
-    syn = pd.concat(syn, axis=0, ignore_index=True)
+    syn = pd.concat([s for s in syn if not s.empty], axis=0, ignore_index=True)
 
     # Depending on how queries were batched, we need to drop duplicate synapses
     syn.drop_duplicates('id', inplace=True)
@@ -481,11 +486,25 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
         for k in range(0, len(targets), batch_size):
             target_batch = targets[k:k+batch_size]
 
-            syn.append(func(filter_in_dict=dict(post_pt_root_id=target_batch,
-                                                pre_pt_root_id=source_batch)))
+            this = func(filter_in_dict=dict(post_pt_root_id=target_batch,
+                                            pre_pt_root_id=source_batch))
+
+            # We need to drop the .attrs (which contain meta data from queries)
+            # Otherwise we run into issues when concatenating
+            this.attrs = {}
+
+            if not this.empty:
+                syn.append(this)
 
     # Combine results from batches
-    syn = pd.concat(syn, axis=0, ignore_index=True)
+    if len(syn):
+        syn = pd.concat(syn, axis=0, ignore_index=True)
+    else:
+        adj = pd.DataFrame(np.zeros((len(sources), len(targets))),
+                           index=sources, columns=targets)
+        adj.index.name = 'source'
+        adj.columns.name = 'target'
+        return adj
 
     # Depending on how queries were batched, we need to drop duplicate synapses
     syn.drop_duplicates('id', inplace=True)
@@ -636,8 +655,12 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         if downstream:
             syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
 
+    # Drop attrs to avoid issues when concatenating
+    for df in syn:
+        df.attrs = {}
+
     # Combine results from batches
-    syn = pd.concat(syn, axis=0, ignore_index=True)
+    syn = pd.concat([s for s in syn if not s.empty], axis=0, ignore_index=True)
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
