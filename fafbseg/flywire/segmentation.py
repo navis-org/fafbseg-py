@@ -898,8 +898,8 @@ def update_ids(id,
                                                                                disable=not progress or len(id) == 1)]
             res = pd.concat(res, axis=0, sort=False, ignore_index=True)
         else:
-            if (not isinstance(supervoxels, (list, set, np.ndarray))
-                or len(supervoxels) != len(id)):
+            supervoxels = np.asarray(supervoxels)
+            if len(supervoxels) != len(id):
                 raise ValueError(f'Number of supervoxels ({len(supervoxels)}) does '
                                  f'not match number of root IDs ({len(id)})')
             elif any(pd.isnull(supervoxels)):
@@ -962,7 +962,7 @@ def update_ids(id,
             if sample >= 1:
                 smpl = svoxels[: sample]
             else:
-                smpl = svoxels[: int(len(svoxels) * sample)]
+                smpl = svoxels[: max(int(len(svoxels) * sample), 1)]
 
             # Fetch up-to-date root IDs for the sampled supervoxels
             roots = supervoxels_to_roots(smpl, dataset=vol, progress=False)
