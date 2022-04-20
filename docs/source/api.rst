@@ -61,6 +61,7 @@ Misc:
     fafbseg.flywire.fetch_edit_history
     fafbseg.flywire.fetch_leaderboard
     fafbseg.flywire.get_neuropil_volumes
+    fafbseg.flywire.get_lineage_graph
 
 For interaction with the annotation/materialization engine:
 
