@@ -119,6 +119,12 @@ def get_cave_client(dataset='production', token=None, check_stale=True,
                     force_new=False):
     """Get CAVE client.
 
+    Currently, the CAVE client pulls the available materialization versions
+    ONCE on initialization. This means that if the same client is used for over
+    24h it will be unaware of any new materialization versions which will slow
+    down live queries substantially. We try to detect whether the client may
+    have gone stale but this may not always work perfectly.
+
     Parameters
     ----------
     dataset :       str
@@ -128,8 +134,9 @@ def get_cave_client(dataset='production', token=None, check_stale=True,
                     provided will try reading via cloud-volume.
     check_stale :   bool
                     Check if any existing client has gone stale. Currently, we
-                    only check if the cached materialization meta data needs
-                    refreshing.
+                    check if the cached materialization meta data needs
+                    refreshing and we automatically refresh the client every
+                    hour.
     force_new :     bool
                     If True, we force a re-initialization.
 
@@ -155,8 +162,17 @@ def get_cave_client(dataset='production', token=None, check_stale=True,
                 force_new = True
                 break
 
+        # Over the weekend no new versions are materialized. The last version
+        # from Friday will persist into middle of the next week - i.e. not
+        # expire on Monday. Therefore, on Mondays only, we will also
+        # force an update if the client is older than 30 minutes
+        if now.weekday() in (0, ) and not force_new:
+            if (dt.datetime.now() - client.birth_day) > dt.timedelta(minutes=30):
+                force_new = True
+
     if datastack not in cave_clients or force_new:
         cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
+        cave_clients[datastack].birth_day = dt.datetime.now()
 
     return cave_clients[datastack]
 
