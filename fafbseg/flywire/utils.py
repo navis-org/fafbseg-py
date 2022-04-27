@@ -80,7 +80,16 @@ def get_neuropil_volumes(neuropils):
         try:
             f = zip.read(f'{neuropils}.stl')
         except KeyError:
-            raise ValueError(f'No mesh for neuropil "{neuropils}"')
+            available = []
+            for file in zip.filelist:
+                fname = file.filename.split('/')[-1]
+                if not fname.endswith('.stl') or fname.startswith('.'):
+                    continue
+                available.append(fname.replace('.stl', ''))
+            available = sorted(available)
+
+            raise ValueError(f'No mesh for neuropil "{neuropils}". Available '
+                             f'neuropils: {", ".join(available)}')
 
         f = zip.read(f'{neuropils}.stl')
         m = tm.load_mesh(BytesIO(f), file_type='stl')
