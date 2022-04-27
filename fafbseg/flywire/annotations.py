@@ -18,6 +18,7 @@ framework and the materialization engine."""
 
 import navis
 import requests
+import pytz
 
 import datetime as dt
 import numpy as np
@@ -27,18 +28,21 @@ from requests_futures.sessions import FuturesSession
 
 from ..utils import make_iterable
 from .utils import get_cave_client, retry, get_chunkedgraph_secret
-from .segmentation import locs_to_segments, supervoxels_to_roots, is_latest_root
+from .segmentation import (locs_to_segments, supervoxels_to_roots, is_latest_root,
+                           update_ids)
 
 
 __all__ = ['get_somas', 'get_materialization_versions',
            'create_annotation_table', 'get_annotation_tables',
            'get_annotation_table_info', 'get_annotations',
            'delete_annotations', 'upload_annotations',
-           'is_proofread']
+           'is_proofread', 'find_celltypes']
 
 
 PR_TABLE = None
 PR_META = None
+ANNOTATION_TABLE = "neuron_information_v2"
+_annotation_table = None
 
 
 def is_proofread(x, cache=True):
@@ -521,7 +525,9 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
     return nuc.sort_values('rad_est', ascending=False)
 
 
-def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4, progress=True):
+def submit_cell_identification(x, split_tags=False, validate=True,
+                               skip_existing=False, max_threads=4,
+                               progress=True):
     """Submit a identification for given cells.
 
     Use this bulk submission of cell identification with great care!
@@ -530,16 +536,24 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
     ----------
     x :             pandas.DataFrame
                     Must have the following columns:
-                      - `valid_id` contains the current root ID
-                      - `x`, `y`, `z` (or alternatively `pos_x`, `pos_y`,
-                        `pos_z`) contain coordinates mapping to that root
-                        (must be in voxel space)
-                      - `tags` must be a comma-separated string of tags
+                      - `valid_id` (or `root_id`,  `root` or `id`)
+                        contains the current root ID
+                      - `x`, `y`, `z` (or `pos_x`, `pos_y`, `pos_z`) contain
+                        coordinates mapping to that root (must be in voxel space)
+                      - `tag` (or `tags`) must be a comma-separated string of
+                        tags
                       - `user_id` (optional) if you want to submit for someone
                         else
     split_tags :    bool
                     If True, will split the comma-separated tags into
                     individual tags.
+    validate :      bool
+                    Whether to run some sanity checks on annotations
+                    (recommended)!
+    skip_existing : bool
+                    Skip annotation if it already exist on given neuron. Note
+                    that this is limited by the 24h delay until annotations
+                    materialize.
     max_threads :   int
                     Number of parallel submissions.
     progress :      bool
@@ -547,18 +561,20 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
 
     Returns
     -------
-    response :      pandas.DataFrame
-                    A copy of ``x`` with a `success` and an `error` column.
+    submitted :     pandas.DataFrame
+                    A list of tags the were supposed to be submitted. Includes a
+                    `success` and an `error` column. You can use this to
+                    retry submission in case of errors.
 
     """
     if not isinstance(x, pd.DataFrame):
         raise TypeError(f'Expected DataFrame, got {type(x)}')
 
-    REQ_COLS = ('valid_id',
+    REQ_COLS = (('valid_id', 'root_id', 'root', 'id'),
                 ('x', 'pos_x'),
                 ('y', 'pos_y'),
                 ('z', 'pos_z'),
-                'tags')
+                ('tag', 'tags'))
     for c in REQ_COLS:
         if isinstance(c, tuple):
             # Check that at least one option exits
@@ -580,7 +596,7 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
         if any(is_zero):
             raise ValueError(f'{is_zero.sum()} xyz coordinates map to root ID 0')
 
-        mm = roots != x.valid_id.astype(int)
+        mm = roots != x.valid_id.astype(np.int64)
         if any(mm):
             raise ValueError(f'{mm.sum()} xyz coordinates do not map to the '
                              'provided `valid_id`')
@@ -591,15 +607,28 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
     token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
 
+    if skip_existing:
+        existing = _get_cell_type_table(update_ids=True)
+
     futures = {}
+    skipped = []
     url = f'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
-    for i, row in x.iterrows():
+
+    for i, (_, row) in enumerate(x.iterrows()):
         if split_tags:
             tags = row.tag.split(',')
         else:
             tags = [row.tag]
 
+        if skip_existing:
+            existing_tags = existing.loc[existing.pt_root_id == int(row.valid_id),
+                                         'tag'].unique()
+
         for tag in tags:
+            if skip_existing and tag in existing_tags:
+                skipped.append([(i, tag)])
+                continue
+
             post = dict(valid_id=str(row.valid_id),
                         location=f'{row.x}, {row.y}, {row.z}',
                         tag=tag,
@@ -607,7 +636,10 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
                         user_id=row.get('user_id', ''))
 
             f = future_session.post(url, data=post)
-            futures[f] = (i, post)
+            futures[f] = [i, row.valid_id, row.x, row.y, row.z, tag]
+
+    if len(skipped):
+        navis.config.logger.info(f'Skipped {len(skipped)} existing annotations.')
 
     # Get the responses
     resp = [f.result() for f in navis.config.tqdm(futures,
@@ -615,8 +647,40 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
                                                   disable=not progress or len(futures) == 1,
                                                   leave=False)]
 
+    submitted = []
+    for r, f in zip(resp, futures):
+        submitted.append(futures[f])
+        try:
+            r.raise_for_status()
+        except BaseException as e:
+            submitted[-1] += [False, str(e)]
+            continue
+
+        if not 'Success' in r.text:
+            submitted[-1] += [False, r.text]
+            continue
+
+        submitted[-1] += [True, None]
+
+    submitted = pd.DataFrame(submitted,
+                             columns=['row_ix', 'valid_id', 'x', 'y', 'z', 'tag',
+                                      'success', 'errors'])
+
+    if not all(submitted.success):
+        failed_ix = submitted[~submitted.success].row_ix.unique().astype(str)
+        navis.config.logger.error(f'Encountered {(~x.success).sum()} errors '
+                                  'while marking cells as proofread. Please '
+                                  'see the `errors` columns in the returned '
+                                  'dataframe for details. Affected rows in '
+                                  f'original dataframe: {", ".join(failed_ix)}')
+    else:
+        navis.config.logger.info('SUCCESS!')
+
+    return x
+
+
     success = [True] * len(x)
-    errors = [[]] * len(x)
+    errors = [[] for _ in range(len(x))]  # must use list comp, to make independent lists
     for r, f in zip(resp, futures):
         row_ix = futures[f][0]
         post = futures[f][1]
@@ -634,22 +698,167 @@ def submit_cell_identification(x, split_tags=False, validate=True, max_threads=4
 
         errors[row_ix].append(None)
 
-    x = x.copy()
+    for row_ix, tag in skipped:
+        errors[row_ix].append('skipped')
+
+    x = x[['valid_id', 'x', 'y', 'z', 'tag']].copy()
     x['success'] = success
     x['errors'] = errors
 
     if not all(x.success):
+        failed_ix = np.arange(len(success)).astype(str)[~x.success]
         navis.config.logger.error(f'Encountered {(~x.success).sum()} errors '
                                   'while marking cells as proofread. Please '
                                   'see the `errors` columns in the returned '
-                                  'dataframe for details.')
+                                  'dataframe for details. Affected rows: '
+                                  f'{", ".join(failed_ix)}')
     else:
         navis.config.logger.info('SUCCESS!')
 
     return x
 
 
-def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
+def find_celltypes(x,
+                   user=None,
+                   exact=False,
+                   case=False,
+                   regex=True,
+                   update_roots=True):
+    """Search cell identification annotations for given term/root IDs.
+
+    Parameter
+    ---------
+    x :         str | int | Neuron/List | list of ints
+                Term (str) or root ID(s) to search for.
+    user :      id | list thereof, optional
+                If provided will only return annotations from given user(s).
+                Currently requires user ID.
+    exact :     bool
+                Whether term must be an exact match. For example, if
+                ``exact=False`` (default), 'sensory' will match to e.g.
+                'sensory,olfactory' or 'AN sensory'.
+    case :      bool
+                If True (default = False), search for term will be case
+                sensitive.
+    regex :     bool
+                Whether to interpret term as regex.
+    update_roots : bool
+                Whether to update root IDs for matches.
+
+    Returns
+    -------
+    pandas.DataFrame
+                If `x` is root IDs
+                Pandas DataFrame with annotations matching ``x``. Coordinates
+                are in 4x4x40nm voxel space.
+
+    """
+    # See if ``x`` is a root ID as string
+    if isinstance(x, str):
+        try:
+            x = int(x)
+        except ValueError:
+            pass
+
+    if isinstance(x, int):
+        x = np.array([x])
+    elif isinstance(x, navis.NeuronList):
+        x = x.id
+    elif isinstance(x, navis.BaseNeuron):
+        x = np.array([x])
+
+    # Check if root IDs are outdated
+    if isinstance(x, (tuple, pd.Series, list, set, np.ndarray)):
+        x = np.asarray(x)
+        is_latest = is_latest_root(x)
+        if any(~is_latest):
+            raise ValueError(f'Some root IDs are outdated: {x[~is_latest]}')
+
+    # We only need to update root IDs if we're
+    # looking for annotations for given cells
+    ct = _get_cell_type_table(update_ids=not isinstance(x, str))
+
+    # If requested, restrict to given user
+    if not isinstance(user, type(None)):
+        if isinstance(user, (str, int)):
+            ct = ct[ct.user_id == user]
+        else:
+            ct = ct[ct.user_id.isin(user)]
+
+    # Search for given tag if `x` is string
+    if isinstance(x, str):
+        if not exact:
+            ct = ct[ct.tag.str.contains(x, case=case, regex=regex)]
+        elif not regex:
+            ct = ct[ct.tag == x]
+        else:
+            ct = ct[ct.tag.str.match(x, case=case)]
+
+        # Avoid setting-on-copy warning
+        ct = ct.copy()
+
+        if update_roots and len(ct):
+            new_roots = update_ids(ct.pt_root_id.values,
+                                   supervoxels=ct.pt_supervoxel_id.values)
+            if any(new_roots.changed.values):
+                ct['pt_root_id'] = ct.pt_root_id.map(new_roots.set_index('old_id').new_id.to_dict())
+
+        # Rename columns to make it less clunky to work with
+        ct = ct.rename({'pt_position_x': 'pos_x',
+                        'pt_position_y': 'pos_y',
+                        'pt_position_z': 'pos_z',
+                        'pt_root_id': 'root_id',
+                        'pt_supervoxel_id': 'supervoxel_id'},
+                        axis=1)
+
+        # Convert from nm to voxel space
+        ct[['pos_x', 'pos_y', 'pos_z']] /= [4, 4, 40]
+    else:
+        ct = ct[ct.pt_root_id.isin(x)]
+
+    return ct
+
+
+def _get_cell_type_table(force_new=False, update_ids=False):
+    """Fetch (and cache) annotation table."""
+    global _annotation_table
+
+    client = get_cave_client()
+
+    # Check what the latest materialization version is
+    mds = client.materialize.get_versions_metadata()
+    mds = sorted(mds, key=lambda x: x['time_stamp'])
+    mat_version = mds[-1]['version']
+
+    if not force_new:
+        # Check if table needs to be voided
+        if not isinstance(_annotation_table, type(None)):
+            if _annotation_table.attrs['mat_version'] < mat_version:
+                force_new = True
+
+    if isinstance(_annotation_table, type(None)) or force_new:
+        # If no table, fetch from scratch
+        now = pytz.UTC.localize(dt.datetime.utcnow())
+        _annotation_table = get_annotations(ANNOTATION_TABLE, split_positions=True)
+        _annotation_table.attrs['time_fetched'] = now
+        _annotation_table.attrs['time_updated'] = now
+        _annotation_table.attrs['mat_version'] = mat_version
+
+    if update_ids:
+        now = pytz.UTC.localize(dt.datetime.utcnow())
+        expired, new = client.chunkedgraph.get_delta_roots(
+                         timestamp_past=_annotation_table.attrs['time_updated'],
+                         timestamp_future=now
+                         )
+        needs_update = np.isin(_annotation_table.pt_root_id, expired)
+        _annotation_table.loc[needs_update,
+                              'pt_root_id'] = supervoxels_to_roots(_annotation_table.loc[needs_update, 'pt_supervoxel_id'])
+
+    return _annotation_table
+
+
+def mark_cell_completion(x, validate=True, skip_existing=True,
+                         max_threads=4, progress=True):
     """Submit proofread status for given cell.
 
     Use this bulk submission of proofreading status with great care!
@@ -663,6 +872,12 @@ def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
                         (must be in voxel space)
                       - `user_id` (optional) if you want to submit for someone
                         else
+    validate :      bool
+                    Whether to run some sanity checks on annotations
+                    (recommended)!
+    skip_existing : bool
+                    If True, will skip neurons that have already been marked
+                    proofread.
     max_threads :   int
                     Number of parallel submissions.
     progress :      bool
@@ -677,10 +892,23 @@ def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
     if not isinstance(x, pd.DataFrame):
         raise TypeError(f'Expected DataFrame, got {type(x)}')
 
-    REQ_COLS = ('valid_id', 'x' , 'y' , 'z')
+    REQ_COLS = (('valid_id', 'root_id', 'root', 'id'),
+                ('x', 'pos_x'),
+                ('y', 'pos_y'),
+                ('z', 'pos_z'))
     for c in REQ_COLS:
-        if c not in x:
-            raise ValueError(f'Missing required column: {c}')
+        if isinstance(c, tuple):
+            # Check that at least one option exits
+            if not any(np.isin(c, x.columns)):
+                raise ValueError(f'`x` must contain one of these column: {c}')
+            # Rename so we always find the first possible option
+            if c[0] not in x.columns:
+                for v in c[1:]:
+                    if v in x.columns:
+                        x = x.rename({v: c[0]}, axis=1)
+        else:
+            if c not in x:
+                raise ValueError(f'Missing required column: {c}')
 
     if validate:
         roots = locs_to_segments(x[['x', 'y', 'z']].values)
@@ -689,10 +917,22 @@ def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
         if any(is_zero):
             raise ValueError(f'{is_zero.sum()} xyz coordinates map to root ID 0')
 
-        mm = roots != x.valid_id.astype(int)
+        mm = roots != x.valid_id.astype(np.int64)
         if any(mm):
             raise ValueError(f'{mm.sum()} xyz coordinates do not map to the '
                              'provided `valid_id`')
+
+        u, cnt = np.unique(roots, return_counts=True)
+        if any(cnt > 1):
+            raise ValueError(f'{(cnt > 1).sum()} root IDs are duplicated: '
+                             f'{u[cnt > 1]}')
+
+    if skip_existing:
+        pr = is_proofread(x.valid_id.values)
+        if any(pr):
+            navis.config.logger.info(f'Dropping {pr.sum()} neurons that have '
+                                     'already been proofread')
+            x = x[~pr]
 
     session = requests.Session()
     future_session = FuturesSession(session=session, max_workers=max_threads)
@@ -702,7 +942,7 @@ def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
 
     futures = {}
     url = f'https://prod.flywire-daf.com/neurons/api/v1/mark_completion'
-    for i, row in x.iterrows():
+    for i, (_, row) in enumerate(x.iterrows()):
         post = dict(valid_id=str(row.valid_id),
                     location=f'{row.x}, {row.y}, {row.z}',
                     action='single',
@@ -735,7 +975,7 @@ def mark_cell_completion(x, validate=True, max_threads=4, progress=True):
         success.append(True)
         errors.append(None)
 
-    x = x.copy()
+    x = x[['valid_id', 'x', 'y', 'z']].copy()
     x['success'] = success
     x['errors'] = errors
 
