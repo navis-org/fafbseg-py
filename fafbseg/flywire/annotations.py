@@ -676,46 +676,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     else:
         navis.config.logger.info('SUCCESS!')
 
-    return x
-
-
-    success = [True] * len(x)
-    errors = [[] for _ in range(len(x))]  # must use list comp, to make independent lists
-    for r, f in zip(resp, futures):
-        row_ix = futures[f][0]
-        post = futures[f][1]
-        try:
-            r.raise_for_status()
-        except BaseException as e:
-            success[row_ix] = False
-            errors[row_ix].append(str(e))
-            continue
-
-        if not 'Success' in r.text:
-            success[row_ix] = False
-            errors[row_ix].append(r.text)
-            continue
-
-        errors[row_ix].append(None)
-
-    for row_ix, tag in skipped:
-        errors[row_ix].append('skipped')
-
-    x = x[['valid_id', 'x', 'y', 'z', 'tag']].copy()
-    x['success'] = success
-    x['errors'] = errors
-
-    if not all(x.success):
-        failed_ix = np.arange(len(success)).astype(str)[~x.success]
-        navis.config.logger.error(f'Encountered {(~x.success).sum()} errors '
-                                  'while marking cells as proofread. Please '
-                                  'see the `errors` columns in the returned '
-                                  'dataframe for details. Affected rows: '
-                                  f'{", ".join(failed_ix)}')
-    else:
-        navis.config.logger.info('SUCCESS!')
-
-    return x
+    return submitted
 
 
 def find_celltypes(x,
