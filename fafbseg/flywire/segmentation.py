@@ -791,14 +791,25 @@ def is_latest_root(id, dataset='production', **kwargs):
     session = requests.Session()
     token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
-
     url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
-    post = {'node_ids': id[not_zero].tolist()}
-    r = session.post(url, json=post)
 
-    r.raise_for_status()
+    batch_size = 100_000
+    with navis.config.tqdm(desc='Checking',
+                           total=not_zero.sum(),
+                           disable=not_zero.sum() <= batch_size,
+                           leave=False) as pbar:
+        for i in range(0, not_zero.sum(), batch_size):
+            batch = id[not_zero][i:i+batch_size]
+            post = {'node_ids': batch.tolist()}
 
-    is_latest[not_zero] = np.array(r.json()['is_latest'])
+            # Update progress bar
+            pbar.update(len(batch))
+
+            r = session.post(url, json=post)
+
+            r.raise_for_status()
+
+            is_latest[np.where(not_zero)[0][i:i+batch_size]] = np.array(r.json()['is_latest'])
 
     return is_latest
 
