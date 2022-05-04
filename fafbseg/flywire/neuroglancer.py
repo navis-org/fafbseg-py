@@ -28,6 +28,7 @@ import pandas as pd
 from urllib.parse import urlparse, parse_qs, quote
 
 from . import utils
+from .segmentation import neuron_to_segments
 from ..utils import make_iterable
 
 __all__ = ['decode_url', 'encode_url']
@@ -482,6 +483,65 @@ def shorten_url(scene, refresh_session=False):
     resp.raise_for_status()
 
     return f'{NGL_URL}/?json_url={resp.json()}'
+
+
+def neuron_to_url(x, top_N=1, coordinates='nm'):
+    """Find FlyWire segments overlapping with given neuron(s) and create URLs.
+
+    Parameters
+    ----------
+    x :     NeuronList w/ TreeNeurons
+            Must be in FlyWire (FAFB14.1) nanometer space.
+    top_N : int, float
+            How many overlapping fragments to include in the URL. If >= 1 will
+            treat it as the top N fragments. If < 1 will treat as "all
+            fragments that collectively make up this fraction of the neuron".
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    assert isinstance(x, navis.NeuronList)
+    assert not x.is_degenerated
+    assert isinstance(x[0], navis.TreeNeuron)
+
+    ol = neuron_to_segments(x, coordinates=coordinates)
+
+    data = []
+    for n in x:
+        if n.id not in ol.columns:
+            print(f'No overlapping fragments found for neuron {n.label}. Check '
+                  '`coordinates` parameter?')
+
+        this = ol[n.id].sort_values(ascending=False)
+        pct = this / this.sum()
+
+        if top_N >= 1:
+            to_add = this.index[:top_N]
+        else:
+            to_add = this.index[: np.where(pct.cumsum() > top_N)[0][0] + 1]
+
+        url = encode_url(segments=to_add, skeletons=n)
+
+        row = [n.id, n.name, url]
+
+        if top_N >= 1:
+            for i in to_add:
+                row += [i, pct.loc[i]]
+        else:
+            row.append(len(to_add))
+
+        data.append(row)
+
+    cols = ['id', 'name', 'url']
+    if top_N >= 1:
+        for i in range(top_N):
+            cols += [f'seg_{i + 1}', f'conf_{i + 1}']
+    else:
+        cols.append('n_segs')
+
+    return pd.DataFrame(data, columns=cols)
 
 
 def generate_open_ends_url(x):
