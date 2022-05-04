@@ -119,7 +119,8 @@ def is_proofread(x, cache=True, validate=True):
 
         to_update = PR_TABLE.pt_root_id.isin(old_roots)
         if any(to_update):
-            PR_TABLE.loc[to_update, 'pt_root_id'] = supervoxels_to_roots(PR_TABLE.loc[to_update, 'pt_supervoxel_id'].values)
+            new_roots = supervoxels_to_roots(PR_TABLE.loc[to_update, 'pt_supervoxel_id'].values)
+            PR_TABLE.loc[to_update, 'pt_root_id'] = new_roots
         PR_META['timestamp'] = now
 
     return np.isin(x, PR_TABLE.pt_root_id.values)
@@ -897,6 +898,10 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
             navis.config.logger.info(f'Dropping {pr.sum()} neurons that have '
                                      'already been proofread')
             x = x[~pr]
+        if x.empty:
+            navis.config.logger.info(f'Looks like all neurons have already '
+                                     'been set to proofread')
+            return pd.DataFrame(columns=['valid_id', 'x', 'y', 'z', 'success', 'errors'])
 
     session = requests.Session()
     future_session = FuturesSession(session=session, max_workers=max_threads)
