@@ -45,7 +45,7 @@ ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_table = None
 
 
-def is_proofread(x, cache=True):
+def is_proofread(x, cache=True, validate=True):
     """Test if neuron has been set to `proofread`.
 
     Under the hood, this uses a cached version of the proofreading table which
@@ -55,6 +55,8 @@ def is_proofread(x, cache=True):
     ----------
     x  :            int | list of int
                     Root IDs to check.
+    validate :      bool
+                    Whether to validate IDs.
     cache :         bool
                     Use and update a locally cached version of the proofreading
                     table. Setting this to ``False`` will force fetching the
@@ -75,10 +77,11 @@ def is_proofread(x, cache=True):
     x = np.asarray(x).astype(np.int64)
 
     # Check if any of the roots are outdated -> can't check those
-    il = is_latest_root(x)
-    if any(~il):
-        print("At least some root ID(s) outdated and will therefore show up as "
-              f"not proofread: {x[~il]}")
+    if validate:
+        il = is_latest_root(x)
+        if any(~il):
+            print("At least some root ID(s) outdated and will therefore show up as "
+                  f"not proofread: {x[~il]}")
 
     # Get available materialization versions
     client = get_cave_client('production')
