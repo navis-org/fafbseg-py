@@ -70,7 +70,7 @@ For interaction with the annotation/materialization engine:
 
     fafbseg.flywire.get_materialization_versions
     fafbseg.flywire.create_annotation_table
-    fafbseg.flywire.get_annotation_tables
+    fafbseg.flywire.list_annotation_tables
     fafbseg.flywire.get_annotation_table_info
     fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations

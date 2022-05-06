@@ -19,6 +19,7 @@ framework and the materialization engine."""
 import navis
 import requests
 import pytz
+import warnings
 
 import datetime as dt
 import numpy as np
@@ -36,7 +37,7 @@ __all__ = ['get_somas', 'get_materialization_versions',
            'create_annotation_table', 'get_annotation_tables',
            'get_annotation_table_info', 'get_annotations',
            'delete_annotations', 'upload_annotations',
-           'is_proofread', 'find_celltypes']
+           'is_proofread', 'find_celltypes', 'list_annotation_tables']
 
 
 PR_TABLE = None
@@ -222,7 +223,7 @@ def create_annotation_table(name: str,
         return resp
 
 
-def get_annotation_tables(dataset='production'):
+def list_annotation_tables(dataset='production'):
     """Fetch available annotation tables."""
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
@@ -237,6 +238,18 @@ def get_annotation_tables(dataset='production'):
     df['materialized'] = df.index.isin(ma)
 
     return df
+
+
+def get_annotation_tables(dataset='production'):
+    """Fetch available annotation tables."""
+    warnings.warn(
+            "`get_annotation_tables` is deprecated and will be removed in a "
+            "future version of fafbseg, please use `list_annotation_tables`"
+            "instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+    return list_annotation_tables(dataset=dataset)
 
 
 def get_annotation_table_info(table_name: str,
