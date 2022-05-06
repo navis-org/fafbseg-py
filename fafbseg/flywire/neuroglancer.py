@@ -485,17 +485,20 @@ def shorten_url(scene, refresh_session=False):
     return f'{NGL_URL}/?json_url={resp.json()}'
 
 
-def neuron_to_url(x, top_N=1, coordinates='nm'):
+def neurons_to_url(x, top_N=1, downsample=False, coordinates='nm'):
     """Find FlyWire segments overlapping with given neuron(s) and create URLs.
 
     Parameters
     ----------
-    x :     NeuronList w/ TreeNeurons
-            Must be in FlyWire (FAFB14.1) nanometer space.
-    top_N : int, float
-            How many overlapping fragments to include in the URL. If >= 1 will
-            treat it as the top N fragments. If < 1 will treat as "all
-            fragments that collectively make up this fraction of the neuron".
+    x :             NeuronList w/ TreeNeurons
+                    Must be in FlyWire (FAFB14.1) nanometer space.
+    top_N :         int, float
+                    How many overlapping fragments to include in the URL. If >= 1
+                    will treat it as the top N fragments. If < 1 will treat as "all
+                    fragments that collectively make up this fraction of the neuron".
+    downsample :    int, optional
+                    Factor by which to downsample the skeleton before adding to
+                    FlyWire scene.
 
     Returns
     -------
@@ -509,7 +512,7 @@ def neuron_to_url(x, top_N=1, coordinates='nm'):
     ol = neuron_to_segments(x, coordinates=coordinates)
 
     data = []
-    for n in x:
+    for n in navis.config.tqdm(x, desc='Creating URLs'):
         if n.id not in ol.columns:
             print(f'No overlapping fragments found for neuron {n.label}. Check '
                   '`coordinates` parameter?')
@@ -521,6 +524,9 @@ def neuron_to_url(x, top_N=1, coordinates='nm'):
             to_add = this.index[:top_N]
         else:
             to_add = this.index[: np.where(pct.cumsum() > top_N)[0][0] + 1]
+
+        if downsample:
+            n = navis.downsample_neuron(n, downsample)
 
         url = encode_url(segments=to_add, skeletons=n)
 
