@@ -815,7 +815,7 @@ def is_latest_root(id, dataset='production', **kwargs):
 
 
 def update_ids(id,
-               sample=0.1,
+               stop_layer=2,
                supervoxels=None,
                dataset='production',
                progress=True, **kwargs):
@@ -826,10 +826,9 @@ def update_ids(id,
         2. If supervoxel provided, use it to update ID. Else try 3.
         3. See if we can map outdated IDs to a single up-to-date root (works
            if neuron has only seen merges). Else try 4.
-        4. For uncertain IDs, fetch all supervoxels and pick a random sample
-           (see ``sample`` parameter). Fetching the most recent root IDs for
-           the sample of supervoxels and return the root ID that was hit the
-           most often.
+        4. For uncertain IDs, fetch L2 IDs for the old root ID and the new
+           candidates. Pick the candidate containing most of the original L2
+           IDs.
 
     Parameters
     ----------
@@ -837,12 +836,14 @@ def update_ids(id,
                     Single ID or list of FlyWire (root) IDs. If DataFrame must
                     contain either a `root_id` or `root` column and optionally
                     a `supervoxel_id` or `supervoxel` column.
-    sample :        int | float
-                    Number (>= 1) or fraction (< 1) of super voxels to sample
-                    to guess the most recent version.
+    stop_layer :    int
+                    In case of root IDs that have been split, we need to
+                    determine the most likely successor. By default we do that
+                    using L2 IDs but you can speed this up by increasing the
+                    stop layer.
     supervoxels :   int | list-like, optional
                     If provided will use these supervoxels to update ``id``
-                    instead of sampling across all supervoxels.
+                    instead of sampling using the L2 IDs.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
@@ -872,7 +873,7 @@ def update_ids(id,
     0  720575940621039145  720575940621039145           1    False
 
     """
-    assert sample > 0, '`sample` must be > 0'
+    assert stop_layer > 0, '`stop_layer` must be > 0'
 
     # See if we already check if this was the latest root
     is_latest = kwargs.pop('is_latest', None)
@@ -902,7 +903,7 @@ def update_ids(id,
                               dataset=dataset,
                               is_latest=il,
                               supervoxels=None,
-                              sample=sample) for x, il, in navis.config.tqdm(zip(id, is_latest),
+                              stop_layer=stop_layer) for x, il, in navis.config.tqdm(zip(id, is_latest),
                                                                                desc='Updating',
                                                                                leave=False,
                                                                                total=len(id),
@@ -959,41 +960,24 @@ def update_ids(id,
             new_id = client.chunkedgraph.get_root_id(supervoxels_to_roots)
             conf = 1
         else:
-            # Get supervoxel ids - we need to use mip=0 because otherwise small
-            # neurons might not have any (visible) supervoxels
-            svoxels = roots_to_supervoxels(id, progress=False)[int(id)]
+            # Get L2 ids
+            # Note: we could also use higher level IDs
+            # (stop layer 3 or 4) which would be even fasters
+            l2_ids_orig = client.chunkedgraph.get_leaves(id, stop_layer=stop_layer)
+            l2_ids_new = [client.chunkedgraph.get_leaves(r, stop_layer=stop_layer) for r in pot_roots]
 
-            # Note: instead of supervoxels we could also use higher level IDs
-            # (stop layer 3 or 4) which might be much faster
-
-            # Shuffle voxels
-            np.random.shuffle(svoxels)
-
-            # Generate sample
-            if sample >= 1:
-                smpl = svoxels[: sample]
-            else:
-                smpl = svoxels[: max(int(len(svoxels) * sample), 1)]
-
-            # Fetch up-to-date root IDs for the sampled supervoxels
-            roots = supervoxels_to_roots(smpl, dataset=vol, progress=False)
-
-            # Find unique Ids and count them
-            unique, counts = np.unique(roots, return_counts=True)
+            # Get the fraction of original L2 IDs in each of the new root IDs
+            counts = np.array([np.isin(l2_ids_orig, ids).sum() for ids in l2_ids_new])
+            counts = counts / len(l2_ids_orig)
 
             # Get sorted indices
             sort_ix = np.argsort(counts)
 
             # New Id is the most frequent ID
-            new_id = unique[sort_ix[-1]]
+            new_id = pot_roots[sort_ix[-1]]
 
-            # Confidence is the difference between the top and the 2nd most
-            # frequent ID
-            if len(unique) > 1:
-                conf = round((counts[sort_ix[-1]] - counts[sort_ix[-2]]) / sum(counts),
-                             2)
-            else:
-                conf = 1
+            # Confidence is the fraction of original L2 IDs in the new ID
+            conf = round(counts[sort_ix[-1]], 2)
     else:
         new_id = id
         conf = 1
