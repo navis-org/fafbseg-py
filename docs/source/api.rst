@@ -62,6 +62,7 @@ Misc:
     fafbseg.flywire.fetch_leaderboard
     fafbseg.flywire.get_neuropil_volumes
     fafbseg.flywire.get_lineage_graph
+    fafbseg.flywire.get_lr_position
 
 For interaction with the annotation/materialization engine:
 

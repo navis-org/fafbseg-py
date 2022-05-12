@@ -32,12 +32,13 @@ import cloudvolume as cv
 import datetime as dt
 import trimesh as tm
 import numpy as np
+import pandas as pd
 
 from .. import utils
 
 
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
-           'get_cave_client', 'get_neuropil_volumes']
+           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26'}
@@ -273,7 +274,7 @@ def parse_root_ids(x):
         ids = [x.id]
     elif isinstance(x, navis.NeuronList):
         ids = x.id
-    elif isinstance(x, (int, np.int)):
+    elif isinstance(x, (int, np.int64)):
         ids = [x]
     else:
         ids = utils.make_iterable(x, force_type=np.int64)
@@ -390,3 +391,82 @@ def parse_bounds(x):
         x = x.T
 
     return np.vstack((x.min(axis=1), x.max(axis=1))).T
+
+
+def get_lr_position(x, coordinates='nm'):
+    """Find out if given xyz positions are on the fly's left or right.
+
+    This works by:
+     1. Mirror positions from one side to the other (requires `flybrains`)
+     2. Substracting original from the mirrored x-coordinate
+
+    Parameters
+    ----------
+    x :             (N, 3) array | TreeNeuron | MeshNeuron | Dotprops
+                    Array of xyz coordinates or a neuron. If a navis neuron,
+                    will use nodes, vertex or point coordinates for TreeNeurons,
+                    MeshNeurons and Dotprops, respectively.
+    coordinates :   "nm" | "voxel"
+                    Whether coordinates are in nm or voxel space.
+
+    Returns
+    -------
+    xm :            (N, ) array
+                    A vector of point displacements in nanometers where 0 is
+                    at the midline and positive values are to the fly's right.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> # Three example points: right, left, ~center
+    >>> flywire.get_lr_position([[104904, 47464, 5461],
+    ...                          [140648, 49064, 2262],
+    ...                          [131256, 29984, 2358]],
+    ...                         coordinates='voxel')
+    array([110501.5, -39480. ,    306.5])
+
+    """
+    try:
+        import flybrains
+    except ImportError:
+        raise ImportError('This function requires `flybrains` to be '
+                          'installed:\n pip3 install flybrains')
+
+    # The FlyWire mirror registration is only part of the most recent version
+    try:
+        _ = navis.transforms.registry.find_template('FLYWIRE')
+    except ValueError:
+        raise ImportError('Looks like your version of `flybrains` is outdated. '
+                          'Please update:\n pip3 install flybrains -U')
+
+    navis.utils.eval_param(coordinates, name='coordinates',
+                           allowed_values=('nm', 'nanometers', 'nanometers',
+                                           'voxel', 'voxels'))
+
+    if navis.utils.is_iterable(x):
+        x = np.asarray(x)
+    elif isinstance(x, pd.DataFrame):
+        if x.shape[1] == 3:
+            x = x.values
+        elif all([c in x.columns for c in ['x', 'y', 'z']]):
+            x = x[['x', 'y', 'z']].values
+    elif isinstance(x, navis.TreeNeuron):
+        x = x.nodes[['x', 'y', 'z']].values
+    elif isinstance(x, navis.MeshNeuron):
+        x = x.vertices
+    elif isinstance(x, navis.Dotprops):
+        x = x.points
+
+    if not isinstance(x, np.ndarray):
+        raise TypeError(f'Expected numpy array or neuron, got "{type(x)}"')
+    elif x.ndim != 2 or x.shape[1] != 3:
+        raise TypeError(f'Expected (N, 3) numpy array, got {x.shape}')
+
+    # Scale if required
+    if coordinates in ('voxel', 'voxels'):
+        x = x * [4, 4, 40]
+
+    # Mirror -> this should be using the landmark-based transform in flybrains
+    m = navis.mirror_brain(x, template='FLYWIRE')
+
+    return (m[:, 0] - x[:, 0]) / 2
