@@ -113,7 +113,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         vol = parse_volume(dataset)
 
         # Make sure this is a valid integer
-        id = int(x)
+        id = np.int64(x)
 
         # Download the mesh
         mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False,
@@ -380,7 +380,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
                              f'`skeletonize_neuron`: {k}')
 
     # Make sure IDs are all integers
-    ids = np.asarray(ids).astype(np.int64)
+    ids = np.asarray(ids, dtype=np.int64)
 
     # Prepare the calls and parameters
     kwargs['progress'] = False

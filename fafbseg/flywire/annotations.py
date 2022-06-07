@@ -75,7 +75,7 @@ def is_proofread(x, cache=True, validate=True):
         x = [x]
 
     # Force into array and convert to integer
-    x = np.asarray(x).astype(np.int64)
+    x = np.asarray(x, type=np.int64)
 
     # Check if any of the roots are outdated -> can't check those
     if validate:
@@ -523,16 +523,16 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
             soma_rad = nuc.set_index('pt_root_id').rad_est.to_dict()
             for n in x:
                 # Skip if no soma found
-                if int(n.id) not in soma_pos:
+                if np.int64(n.id) not in soma_pos:
                     continue
 
                 if isinstance(n, navis.TreeNeuron):
-                    n.soma = n.snap(soma_pos[int(n.id)])[0]
-                    n.nodes.loc[n.nodes.node_id == n.soma, 'radius'] = soma_rad[int(n.id)]
+                    n.soma = n.snap(soma_pos[np.int64(n.id)])[0]
+                    n.nodes.loc[n.nodes.node_id == n.soma, 'radius'] = soma_rad[np.int64(n.id)]
                     n._clear_temp_attr()  # not sure why but this is necessary for some reason
                     n.reroot(n.soma, inplace=True)
                 elif isinstance(n, navis.MeshNeuron):
-                    n.soma_pos = soma_pos[int(n.id)]
+                    n.soma_pos = soma_pos[np.int64(n.id)]
     else:
         # Make sure the column exist even in an empty table
         nuc['rad_est'] = []
@@ -638,7 +638,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
             tags = [row.tag]
 
         if skip_existing:
-            existing_tags = existing.loc[existing.pt_root_id == int(row.valid_id),
+            existing_tags = existing.loc[existing.pt_root_id == np.int64(row.valid_id),
                                          'tag'].unique()
 
         for tag in tags:
@@ -734,11 +734,11 @@ def find_celltypes(x,
     # See if ``x`` is a root ID as string
     if isinstance(x, str):
         try:
-            x = int(x)
+            x = np.int64(x)
         except ValueError:
             pass
 
-    if isinstance(x, int):
+    if isinstance(x, (int, np.int64, np.int32)):
         x = np.array([x])
     elif isinstance(x, navis.NeuronList):
         x = x.id

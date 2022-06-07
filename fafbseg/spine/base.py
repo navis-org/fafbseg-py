@@ -167,7 +167,7 @@ class FlyCacheService(SpineService):
             resp.raise_for_status()
 
             # Parse response
-            centroids = {int(k): v for k, v in resp.json().items()}
+            centroids = {np.int64(k): v for k, v in resp.json().items()}
 
             # Filter to remaining IDs
             to_fetch = ids[~np.isin(ids, list(centroids))]
@@ -190,7 +190,7 @@ class FlyCacheService(SpineService):
                 data = resp.json()
 
                 # IDs will have been returned as strings
-                centroids.update({int(k): v for k, v in data.items()})
+                centroids.update({np.int64(k): v for k, v in data.items()})
 
                 pbar.update(len(this_chunk))
 

@@ -225,6 +225,8 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
         # Turn colors into hex
         # Also make sure keys are int (not np.int64)
+        # Not sure but this might cause issue on Windows systems
+        # But JSON doesn't like np.int64... so we're screwed
         seg_colors = {int(s): mcl.to_hex(c) for s, c in seg_colors.items()}
 
         # Assign colors

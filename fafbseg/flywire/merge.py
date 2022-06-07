@@ -86,7 +86,7 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     vol = parse_volume(flywire_dataset)
 
     # Make sure this is a valid integer
-    id = int(id)
+    id = np.int64(id)
 
     # Download the mesh
     mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]

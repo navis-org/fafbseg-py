@@ -80,7 +80,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
     networkx.DiGraph
 
     """
-    x = int(x)
+    x = np.int64(x)
 
     client = get_cave_client(dataset=dataset)
     G = client.chunkedgraph.get_lineage_graph(x, as_nx_graph=True)
@@ -141,7 +141,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
 
     if proofreading_status:
         from .annotations import get_annotations
-        nodes = np.array(list(G.nodes)).astype(np.int64)
+        nodes = np.array(list(G.nodes), dtype=np.int64)
         pr = get_annotations('proofreading_status_public_v1',
                              filter_in_dict=dict(valid_id=nodes))
         if len(pr):
@@ -919,7 +919,7 @@ def update_ids(id,
             elif any(pd.isnull(id)):
                 raise ValueError('`id` must not contain `None`')
 
-            id = np.array(id).astype(np.int64)
+            id = np.array(id, dtype=np.int64)
 
             res = pd.DataFrame()
             res['old_id'] = id
@@ -931,7 +931,7 @@ def update_ids(id,
         return res
 
     try:
-        id = int(id)
+        id = np.int64(id)
     except ValueError:
         raise ValueError(f'"{id} does not look like a valid root ID.')
 
@@ -953,7 +953,7 @@ def update_ids(id,
             conf = 1
         elif supervoxels:
             try:
-                supervoxels = int(supervoxels)
+                supervoxels = np.int64(supervoxels)
             except ValueError:
                 raise ValueError(f'"{supervoxels} does not look like a valid '
                                  'supervoxel ID.')

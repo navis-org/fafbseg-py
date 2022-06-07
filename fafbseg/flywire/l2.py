@@ -267,7 +267,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
         return navis.NeuronList(nl)
 
     # Turn into integer
-    root_id = int(root_id)
+    root_id = np.int64(root_id)
 
     # Get the cloudvolume
     vol = parse_volume(dataset)
@@ -335,8 +335,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
         get_l2data = retry(client.l2cache.get_l2data)
         l2_info = get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm', 'max_dt_nm'])
         # Missing L2 chunks will be {'id': {}}
-        new_co = {l2dict[int(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
-        new_r = {l2dict[int(k)]: v.get('max_dt_nm', 0) for k, v in l2_info.items() if v}
+        new_co = {l2dict[np.int64(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
+        new_r = {l2dict[np.int64(k)]: v.get('max_dt_nm', 0) for k, v in l2_info.items() if v}
 
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
@@ -551,7 +551,7 @@ def l2_meshes(x, threads=10, dataset='production', progress=True):
 
     """
     try:
-        x = int(x)
+        x = np.int64(x)
     except:
         raise ValueError(f'Unable to convert root ID {x} to integer')
 

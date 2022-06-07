@@ -366,7 +366,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
             if pre:
                 cols = ['pre_x', 'pre_y', 'pre_z',
                         'cleft_score', 'post'] + add_cols
-                presyn = syn.loc[syn.pre == int(n.id), cols
+                presyn = syn.loc[syn.pre == np.int64(n.id), cols
                                  ].rename({'pre_x': 'x',
                                            'pre_y': 'y',
                                            'pre_z': 'z',
@@ -376,7 +376,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
             if post:
                 cols = ['post_x', 'post_y', 'post_z',
                         'cleft_score', 'pre'] + add_cols
-                postsyn = syn.loc[syn.post == int(n.id), cols
+                postsyn = syn.loc[syn.post == np.int64(n.id), cols
                                   ].rename({'post_x': 'x',
                                             'post_y': 'y',
                                             'post_z': 'z',

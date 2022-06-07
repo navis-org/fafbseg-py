@@ -192,7 +192,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
         for n in x:
             presyn = postsyn = pd.DataFrame([])
             if pre:
-                presyn = syn.loc[syn.pre == int(n.id),
+                presyn = syn.loc[syn.pre == np.int64(n.id),
                                  ['pre_x', 'pre_y', 'pre_z',
                                   'cleft_scores', 'post']].rename({'pre_x': 'x',
                                                                    'pre_y': 'y',
@@ -201,7 +201,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=0,
                                                                   axis=1)
                 presyn['type'] = 'pre'
             if post:
-                postsyn = syn.loc[syn.post == int(n.id),
+                postsyn = syn.loc[syn.post == np.int64(n.id),
                                   ['post_x', 'post_y', 'post_z',
                                    'cleft_scores', 'pre']].rename({'post_x': 'x',
                                                                    'post_y': 'y',

@@ -58,13 +58,13 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
     --------
     >>> from fafbseg import flywire
     >>> m = flywire.get_mesh_neuron(720575940614131061)
-    >>> m.plot3d()  # doctest: +SKIP
+    >>> m.plot3d()                                              # doctest: +SKIP
 
     """
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(id):
-        id = np.asarray(id).astype(np.int64)
+        id = np.asarray(id, dtype=np.int64)
         if 0 in id:
             raise ValueError('Root ID 0 among the queried IDs')
 
@@ -93,7 +93,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
             return navis.NeuronList(results)
 
     # Make sure the ID is integer
-    id = int(id)
+    id = np.int64(id)
 
     # Fetch mesh
     mesh = vol.mesh.get(id, remove_duplicate_vertices=True)[id]
@@ -130,7 +130,7 @@ def _get_mesh(seg_id, vol):
             except DracoPy.FileTypeException:
                 mesh = Mesh.from_precomputed(frag)
 
-        mesh.segid = int(filename.split('/')[1].split(':')[0])
+        mesh.segid = np.int64(filename.split('/')[1].split(':')[0])
 
         fragments[i] = mesh
 

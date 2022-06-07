@@ -118,7 +118,7 @@ def segments_to_neuron(seg_ids, autoseg_instance, name_pattern="Google: {id}",
         skid2seg[v] = skid2seg.get(v, []) + [k]
 
     for n in nl:
-        n.seg_ids = skid2seg[int(n.id)]
+        n.seg_ids = skid2seg[np.int64(n.id)]
 
     return nl
 
@@ -159,7 +159,7 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
     seg_ids = utils.make_iterable(seg_ids)
 
     # Prepare map seg ID -> skeleton ID
-    seg2skid = {int(i): None for i in seg_ids}
+    seg2skid = {np.int64(i): None for i in seg_ids}
 
     # First find neurons by name
     # Do NOT change the order of "names"!
@@ -173,10 +173,10 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
 
     # Update map by those that could be found by name
     name2skid = by_name.set_index('name').skeleton_id.to_dict()
-    seg2skid.update({int(i): int(name2skid[n]) for i, n in zip(seg_ids, names) if n in by_name.name.values})
+    seg2skid.update({np.int64(i): np.int64(name2skid[n]) for i, n in zip(seg_ids, names) if n in by_name.name.values})
 
     # Look for missing IDs
-    not_found = [s for s in seg_ids if not seg2skid[int(s)]]
+    not_found = [s for s in seg_ids if not seg2skid[np.int64(s)]]
 
     # Try finding by annotation (temporarily raise logger level)
     if not_found:
@@ -198,7 +198,7 @@ def segments_to_skids(seg_ids, autoseg_instance, name_pattern="Google: {id}",
             for seg, a in zip(not_found, an):
                 for skid in annotations:
                     if a in annotations[skid]:
-                        seg2skid[int(seg)] = int(skid)
+                        seg2skid[np.int64(seg)] = np.int64(skid)
                         break
 
     # Figure out if we are still missing skeletons for any of the seg IDs
