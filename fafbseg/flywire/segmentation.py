@@ -931,7 +931,7 @@ def update_ids(id,
         return res
 
     try:
-        id = np.int64(id)
+        id = np.uint64(id)
     except ValueError:
         raise ValueError(f'"{id} does not look like a valid root ID.')
 
@@ -984,7 +984,7 @@ def update_ids(id,
 
     return pd.DataFrame([[id, new_id, conf, id != new_id]],
                         columns=['old_id', 'new_id', 'confidence', 'changed']
-                        ).astype({'old_id': int, 'new_id': int})
+                        ).astype({'old_id': np.uint64, 'new_id': np.uint64})
 
 
 def snap_to_id(locs, id, snap_zero=False, dataset='production',
