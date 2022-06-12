@@ -846,6 +846,7 @@ def update_ids(id,
     timestamp :     int | str | datetime
                     Find root ID(s) at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    Asking for a specific time will slow things down considerably.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
@@ -903,7 +904,7 @@ def update_ids(id,
             is_latest = is_latest_root(id, dataset=dataset)
         else:
             # No need to fetch is_latest if timestamp is specified
-            is_latest = None
+            is_latest = [None] * len(id)
 
         if isinstance(supervoxels, type(None)):
             res = [update_ids(x,
