@@ -43,7 +43,8 @@ __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'locs_to_supervoxels', 'skid_to_id', 'update_ids',
            'roots_to_supervoxels', 'supervoxels_to_roots',
            'neuron_to_segments', 'is_latest_root', 'is_valid_root',
-           'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph']
+           'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph',
+           'find_common_time']
 
 
 def get_lineage_graph(x, size=False, user=False, synapses=False,
@@ -810,6 +811,63 @@ def is_latest_root(id, dataset='production', **kwargs):
             is_latest[np.where(not_zero)[0][i:i+batch_size]] = np.array(r.json()['is_latest'])
 
     return is_latest
+
+
+def find_common_time(root_ids,
+                     progress=True,
+                     dataset='production'):
+    """Find a time at which given root IDs co-existed.
+
+    Parameters
+    ----------
+    root_ids :      list | np.ndarray
+                    Root IDs to check.
+    progress :      bool
+                    If True, shows progress bar.
+    dataset :       str | CloudVolume
+                    Against which FlyWire dataset to query:
+                      - "production" (current production dataset, fly_v31)
+                      - "sandbox" (i.e. fly_v26)
+
+    Returns
+    -------
+    datetime.datetime
+
+    """
+    root_ids = np.asarray(root_ids, dtype=np.int64)
+
+    client = get_cave_client(dataset=dataset)
+
+    # Get timestamps when roots were created
+    creations = client.chunkedgraph.get_root_timestamps(root_ids)
+
+    # Find out which IDs are still current
+    is_latest = client.chunkedgraph.is_latest_roots(root_ids)
+
+    # Prepare array with death times
+    deaths = np.array([dt.datetime.now(tz=dt.timezone.utc) for r in root_ids])
+
+    # Get lineage graph for outdated root IDs
+    G = client.chunkedgraph.get_lineage_graph(root_ids[~is_latest],
+                                              timestamp_past=min(creations),
+                                              as_nx_graph=True)
+
+    # Get the immediate successors
+    succ = np.array([next(G.successors(r)) for r in root_ids[~is_latest]])
+
+    # Add time of death
+    deaths[~is_latest] = client.chunkedgraph.get_root_timestamps(succ)
+
+    # Find the latest creation
+    latest_birth = max(creations)
+
+    # Find the earliest death
+    earliest_death = min(deaths)
+
+    if latest_birth > earliest_death:
+        raise ValueError('Given root IDs never existed at the same time.')
+
+    return latest_birth + (earliest_death - latest_birth) / 2
 
 
 def update_ids(id,

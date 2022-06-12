@@ -31,6 +31,7 @@ Interact with the segmentation:
     fafbseg.flywire.update_ids
     fafbseg.flywire.get_voxels
     fafbseg.flywire.is_proofread
+    fafbseg.flywire.find_common_time
 
 Fetch neurons:
 
