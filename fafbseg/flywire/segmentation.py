@@ -406,7 +406,6 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     timestamp :     int | str | datetime
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
-                    If timestamp is given, will ignore `use_cache`.
     batch_size :    int
                     Max number of supervoxel IDs per query. Reduce batch size if
                     you experience time outs.
@@ -624,7 +623,6 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
     timestamp :     int | str | datetime, optional
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
-                    If timestamp is given, will ignore `use_cache`.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -817,6 +815,7 @@ def is_latest_root(id, dataset='production', **kwargs):
 def update_ids(id,
                stop_layer=2,
                supervoxels=None,
+               timestamp=None,
                dataset='production',
                progress=True, **kwargs):
     """Retrieve the most recent version of given FlyWire (root) ID(s).
@@ -844,6 +843,9 @@ def update_ids(id,
     supervoxels :   int | list-like, optional
                     If provided will use these supervoxels to update ``id``
                     instead of sampling using the L2 IDs.
+    timestamp :     int | str | datetime
+                    Find root ID(s) at given date (and time). Int must be unix
+                    timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
@@ -897,12 +899,18 @@ def update_ids(id,
 
     if isinstance(id, (list, set, np.ndarray)):
         # Run is_latest once for all roots
-        is_latest = is_latest_root(id, dataset=dataset)
+        if isinstance(timestamp, type(None)):
+            is_latest = is_latest_root(id, dataset=dataset)
+        else:
+            # No need to fetch is_latest if timestamp is specified
+            is_latest = None
+
         if isinstance(supervoxels, type(None)):
             res = [update_ids(x,
                               dataset=dataset,
                               is_latest=il,
                               supervoxels=None,
+                              timestamp=timestamp,
                               stop_layer=stop_layer) for x, il, in navis.config.tqdm(zip(id, is_latest),
                                                                                desc='Updating',
                                                                                leave=False,
@@ -925,6 +933,7 @@ def update_ids(id,
             res['old_id'] = id
             res['new_id'] = id
             res.loc[~is_latest, 'new_id'] = supervoxels_to_roots(supervoxels[~is_latest],
+                                                                 timestamp=timestamp,
                                                                  dataset=dataset)
             res['conf'] = 1
             res['changed'] = res['new_id'] != res['old_id']
@@ -944,9 +953,31 @@ def update_ids(id,
     if isinstance(is_latest, type(None)):
         is_latest = is_latest_root(id, dataset=dataset)[0]
 
-    if not is_latest:
+    if isinstance(timestamp, np.datetime64):
+        timestamp = str(timestamp)
+
+    if timestamp:
         client = get_cave_client(dataset=dataset)
-        pot_roots = client.chunkedgraph.get_latest_roots(id)
+        get_leaves = retry(client.chunkedgraph.get_leaves)
+        l2_ids_orig = get_leaves(id, stop_layer=stop_layer)
+
+        get_roots = retry(vol.get_roots)
+        roots = get_roots(l2_ids_orig, timestamp=timestamp)
+
+        # Drop zeros
+        roots = roots[roots != 0]
+
+        if not len(roots):
+            new_id = 0
+            conf = 0
+        else:
+            uni, cnt = np.unique(roots, return_counts=True)
+            new_id = uni[np.argmax(cnt)]
+            conf = cnt[np.argmax(cnt)] / len(roots)
+    elif not is_latest:
+        client = get_cave_client(dataset=dataset)
+        get_latest_roots = retry(client.chunkedgraph.get_latest_roots)
+        pot_roots = get_latest_roots(id)
 
         if len(pot_roots) == 1:
             new_id = pot_roots[0]
@@ -957,14 +988,16 @@ def update_ids(id,
             except ValueError:
                 raise ValueError(f'"{supervoxels} does not look like a valid '
                                  'supervoxel ID.')
-            new_id = client.chunkedgraph.get_root_id(supervoxels_to_roots)
+            get_root_id = retry(client.chunkedgraph.get_root_id)
+            new_id = get_root_id(supervoxels_to_roots)
             conf = 1
         else:
             # Get L2 ids
             # Note: we could also use higher level IDs
             # (stop layer 3 or 4) which would be even fasters
-            l2_ids_orig = client.chunkedgraph.get_leaves(id, stop_layer=stop_layer)
-            l2_ids_new = [client.chunkedgraph.get_leaves(r, stop_layer=stop_layer) for r in pot_roots]
+            get_leaves = retry(client.chunkedgraph.get_leaves)
+            l2_ids_orig = get_leaves(id, stop_layer=stop_layer)
+            l2_ids_new = [get_leaves(r, stop_layer=stop_layer) for r in pot_roots]
 
             # Get the fraction of original L2 IDs in each of the new root IDs
             counts = np.array([np.isin(l2_ids_orig, ids).sum() for ids in l2_ids_new])
