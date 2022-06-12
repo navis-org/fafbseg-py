@@ -205,7 +205,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
                    transmitters=False, neuropils=False, live_query=True,
-                   batch_size=30, dataset='production', progress=True):
+                   batch_size=10, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
     Parameters
@@ -229,7 +229,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     attach :        bool
                     If True and ``x`` is Neuron/List, the synapses will be added
                     as ``.connectors`` table. For TreeNeurons (skeletons), the
-                    synapses will be mapped to the closest node.
+                    synapses will be mapped to the closest node. Note that the
+                    function will still return the full synapse table.
     min_score :     int, optional
                     Minimum "cleft score". The default of 30 is what Buhmann et al.
                     used in the paper.
@@ -246,7 +247,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     live_query :    bool
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table.
+                    with IDs that you got from another annotation table. Using
+                    the live query is much slower!
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -260,6 +262,34 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     (`x`), a given row might represent a presynapse for one and
                     a postsynapse for another neuron.
 
+
+    Examples
+    --------
+
+    Fetch synapses for a given root ID
+
+    >>> from fafbseg import flywire
+    >>> syn = flywire.fetch_synapses(720575940642744480)
+    >>> syn.head()
+               id valid   pre_x   pre_y  ...       oct       ser        da
+    0   178959090     t  488248  238240  ...  0.000532  0.000015  0.000346
+    2   205400582     t  469592  240224  ...  0.001383  0.005552  0.023057
+    4    68853638     t  442348   86348  ...  0.000002  0.000441  0.023308
+    7   176752216     t  455640  214792  ...  0.000039  0.066771  0.086935
+    10  178997778     t  473376  239832  ...  0.006675  0.000100  0.002978
+
+    Skeletonize a neuron and attach its synapses
+
+    >>> from fafbseg import flywire
+    >>> sk = flywire.skeletonize_neuron(720575940642744480)
+    >>> _ = flywire.fetch_synapses(sk, attach=True)
+    >>> sk.connectors.head()
+       connector_id       x       y       z  cleft_score          partner_id type  node_id
+    0             0  438416   95608  150240          117  720575940385508863  pre     2896
+    1             1  439776   89464  159680          152  720575940386246908  pre     3009
+    2             2  435140   94556  151640          139  720575940613778326  pre     2562
+    3             3  384384  100996  160960          146  720575940451774747  pre      843
+    4             4  448676   97180  148160          141  720575940637824189  pre     4344
 
     """
     if not pre and not post:
