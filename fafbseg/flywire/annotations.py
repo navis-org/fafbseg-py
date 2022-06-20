@@ -75,7 +75,7 @@ def is_proofread(x, cache=True, validate=True):
         x = [x]
 
     # Force into array and convert to integer
-    x = np.asarray(x, type=np.int64)
+    x = np.asarray(x, dtype=np.int64)
 
     # Check if any of the roots are outdated -> can't check those
     if validate:
