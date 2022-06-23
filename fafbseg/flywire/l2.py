@@ -189,8 +189,9 @@ def l2_graph(root_ids, progress=True, dataset='production'):
     return G
 
 
-def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
-                progress=True, max_threads=4, dataset='production', **kwargs):
+def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
+                omit_failures=None, progress=True, max_threads=4,
+                dataset='production', **kwargs):
     """Generate skeleton from L2 graph.
 
     Parameters
@@ -208,6 +209,9 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                         typically chunks that are either very small or new.
                         If False, chunks missing from L2 cache will be kept but
                         with their unrefined, approximate position.
+    l2_node_ids :       bool
+                        If True, will use the L2 IDs as node IDs (instead of
+                        just enumerating the nodes).
     omit_failures :     bool, optional
                         Determine behaviour when skeleton generation fails
                         (e.g. if the neuron has only a single chunk):
@@ -221,7 +225,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                         Number of parallel requests to make when fetching the
                         L2 skeletons.
     **kwargs
-                        Keyword arguments are passed through to Dotprops
+                        Keyword arguments are passed through to the `TreeNeuron`
                         initialization. Use to e.g. set extra properties.
 
     Returns
@@ -248,6 +252,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                          f'Got "{omit_failures}".')
 
     if navis.utils.is_iterable(root_id):
+        root_id = np.asarray(root_id, dtype=np.int64)
+
         get_l2_skels = partial(l2_skeleton, refine=refine, drop_missing=drop_missing,
                                omit_failures=omit_failures, dataset=dataset, **kwargs)
         if (max_threads > 1) and (len(root_id) > 1):
@@ -264,7 +270,8 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
                                                total=len(root_id),
                                                disable=not progress or len(root_id) == 1,
                                                leave=False)]
-        return navis.NeuronList(nl)
+
+        return navis.NeuronList(nl).idx[root_id]
 
     # Turn into integer
     root_id = np.int64(root_id)
@@ -370,6 +377,11 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, omit_failures=None,
             tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
     else:
         tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
+
+    if l2_node_ids:
+        ixdict = {ii: l2 for ii, l2 in enumerate(l2_ids)}
+        tn.nodes['node_id'] = tn.nodes.node_id.map(ixdict)
+        tn.nodes['parent_id'] = tn.nodes.parent_id.map(lambda x: ixdict.get(x, -1))
 
     return tn
 
