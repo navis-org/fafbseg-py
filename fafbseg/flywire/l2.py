@@ -35,7 +35,8 @@ from functools import partial
 
 from .utils import parse_volume, get_cave_client, retry
 
-__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info']
+__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info',
+           'find_anchor_loc']
 
 
 def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
@@ -133,6 +134,178 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
                    axis=1, inplace=True)
 
     return info_df
+
+
+def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, dataset='production'):
+    """Fetch info for given L2 chunks.
+
+    Parameters
+    ----------
+    l2_ids  :           int | list of ints
+                        FlyWire root ID(s) for which to fetch L2 infos.
+    progress :          bool
+                        Whether to show a progress bar.
+    chunksize :         int
+                        Number of L2 IDs per query.
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
+
+    # Get the L2 representative coordinates, vectors and (if required) volume
+    attributes = ['rep_coord_nm', 'pca', 'size_nm3']
+
+    l2_info = {}
+    with navis.config.tqdm(desc='Fetching L2 info',
+                           disable=not progress,
+                           total=len(l2_ids),
+                           leave=False) as pbar:
+        func = retry(client.l2cache.get_l2data)
+        for chunk_ix in np.arange(0, len(l2_ids), chunk_size):
+            chunk = l2_ids[chunk_ix: chunk_ix + chunk_size]
+            l2_info.update(func(chunk.tolist(), attributes=attributes))
+            pbar.update(len(chunk))
+
+    # L2 chunks without info will show as empty dictionaries
+    # Let's drop them to make our life easier (speeds up indexing too)
+    l2_info = {k: v for k, v in l2_info.items() if v}
+
+    if l2_info:
+        pts = np.vstack([i['rep_coord_nm'] for i in l2_info.values()])
+        vec = np.vstack([i.get('pca', [[None, None, None]])[0] for i in l2_info.values()])
+        sizes = np.array([i['size_nm3'] for i in l2_info.values()])
+        coo = np.array([i['rep_coord_nm'] for i in l2_info.values()])
+
+        info_df = pd.DataFrame()
+        info_df['id'] = list(l2_info.keys())
+        info_df['x'] = (pts[:, 0] / 4).astype(int)
+        info_df['y'] = (pts[:, 1] / 4).astype(int)
+        info_df['z'] = (pts[:, 2] / 40).astype(int)
+        info_df['vec_x'] = vec[:, 0]
+        info_df['vec_y'] = vec[:, 1]
+        info_df['vec_z'] = vec[:, 2]
+        info_df['size_nm3'] = sizes
+    else:
+        info_df = pd.DataFrame([], columns=['id',
+                                            'x', 'y', 'z',
+                                            'vec_x', 'vec_y', 'vec_z',
+                                            'size_nm3'])
+
+    return info_df
+
+
+def find_anchor_loc(root_ids,
+                    validate=False,
+                    max_threads=4,
+                    progress=True,
+                    dataset='production'):
+    """Find a representative coordinate.
+
+    This works by querying the L2 cache and using the representative coordinate
+    for the largest L2 chunk.
+
+    Parameters
+    ----------
+    root_ids :      int | list thereof
+                    Root ID(s) to get coordinate for.
+    validate :      bool
+                    If True, will validate the x/y/z position. I have yet to
+                    encounter a representative coordinate that wasn't mapping
+                    to the correct L2 chunk - therefore this parameter is False
+                    by default.
+    max_threads :   int
+                    Number of parallel threads to use.
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    if navis.utils.is_iterable(root_ids):
+        root_ids = np.asarray(root_ids).astype(np.uint64)
+        root_ids_unique = np.unique(root_ids)
+        info = []
+        with ThreadPoolExecutor(max_workers=max_threads) as pool:
+            func = partial(find_anchor_loc,
+                           dataset=dataset,
+                           validate=False,
+                           progress=False)
+            futures = pool.map(func, root_ids_unique)
+            info = [f for f in navis.config.tqdm(futures,
+                                                 desc='Fetching locations',
+                                                 total=len(root_ids_unique),
+                                                 disable=not progress or len(root_ids_unique) == 1,
+                                                 leave=False)]
+        df = pd.concat(info, axis=0, ignore_index=True)
+
+        # Validate
+        if validate:
+            has_loc = ~df.x.isnull()
+            if any(has_loc):
+                from .segmentation import locs_to_supervoxels
+                sv = locs_to_supervoxels(df.loc[has_loc, ['x', 'y', 'z']].values)
+                df['supervoxel'] = None
+                df.loc[has_loc, 'supervoxel'] = sv.astype(str)  # do not change str
+
+                # Get/Initialize the CAVE client
+                client = get_cave_client(dataset)
+
+                # Get root timestamps
+                ts = client.chunkedgraph.get_root_timestamps(df.root_id.values.tolist())
+
+                df['valid'] = False
+                for i in navis.config.trange(len(df),
+                                             desc='Validating',
+                                             disable=not progress or len(df) == 1,
+                                             leave=False):
+                    if df.supervoxel.values[i]:
+                        sv = np.uint64(df.supervoxel.values[i])
+                        r = client.chunkedgraph.get_root_id(sv, timestamp=ts[i])
+                        df.loc[i, 'valid'] = r == df.root_id.values[i]
+
+        # Make sure the original order is retained
+        df = df.set_index('root_id').loc[root_ids].reset_index(drop=False)
+
+        return df
+
+    root_ids = np.uint64(root_ids)
+
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset)
+
+    get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
+    l2_ids = get_l2_ids(root_ids)
+
+    get_l2data = retry(l2_chunk_info)
+    info = get_l2data(l2_ids, progress=progress)
+
+    if info.empty:
+        loc = [None, None, None]
+    else:
+        info.sort_values('size_nm3', ascending=False, inplace=True)
+        loc = info[['x', 'y', 'z']].values[0].tolist()
+
+    df = pd.DataFrame([[root_ids] + loc],
+                      columns=['root_id', 'x', 'y', 'z'])
+
+    if validate:
+        if not isinstance(loc[0], type(None)):
+            from .segmentation import locs_to_supervoxels
+            sv = locs_to_supervoxels([loc])[0]
+            df['supervoxel'] = sv
+
+            if sv:
+                ts = client.chunkedgraph.get_root_timestamps(root_ids)[0]
+                r = client.chunkedgraph.get_root_id(sv, timestamp=ts)
+                df['valid'] = r == root_ids
+            else:
+                df['valid'] = False
+
+    return df
 
 
 def l2_graph(root_ids, progress=True, dataset='production'):
