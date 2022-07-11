@@ -66,12 +66,36 @@ def get_neuropil_volumes(neuropils):
 
     Parameters
     ----------
-    neuropils :     str | list thereof
-                    Neuropil name(s) - e.g. 'LH_R' or ['LH_R', 'LH_L'].
+    neuropils :     str | list thereof | None
+                    Neuropil name(s) - e.g. 'LH_R' or ['LH_R', 'LH_L']. Use
+                    ``None`` to get an array of available neuropils.
 
     Returns
     -------
     meshes :        single navis.Volume or list thereof
+
+    Examples
+    --------
+
+    Load a single volume:
+
+    >>> from fafbseg import flywire
+    >>> al_r = flywire.get_neuropil_volumes('AL_R')
+    >>> al_r
+    <navis.Volume(name=AL_R, color=(0.85, 0.85, 0.85, 0.2), vertices.shape=(622, 3), faces.shape=(1240, 3))>
+
+    Load multiple volumes:
+
+    >>> from fafbseg import flywire
+    >>> al_lr = flywire.get_neuropil_volumes(['AL_R', 'AL_L'])
+    >>> al_lr
+    [<navis.Volume(name=AL_R, color=(0.85, 0.85, 0.85, 0.2), vertices.shape=(622, 3), faces.shape=(1240, 3))>,
+     <navis.Volume(name=AL_L, color=(0.85, 0.85, 0.85, 0.2), vertices.shape=(612, 3), faces.shape=(1228, 3))>]
+
+    Get a list of available volumes:
+
+     >>> from fafbseg import flywire
+     >>> available = flywire.get_neuropil_volumes(None)
 
     """
     if navis.utils.is_iterable(neuropils):
@@ -89,8 +113,11 @@ def get_neuropil_volumes(neuropils):
                 available.append(fname.replace('.stl', ''))
             available = sorted(available)
 
-            raise ValueError(f'No mesh for neuropil "{neuropils}". Available '
-                             f'neuropils: {", ".join(available)}')
+            if neuropils:
+                raise ValueError(f'No mesh for neuropil "{neuropils}". Available '
+                                 f'neuropils: {", ".join(available)}')
+            else:
+                return np.array(available)
 
         f = zip.read(f'{neuropils}.stl')
         m = tm.load_mesh(BytesIO(f), file_type='stl')
