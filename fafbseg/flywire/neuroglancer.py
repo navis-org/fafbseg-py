@@ -85,10 +85,10 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
     ----------
     segments :      int | list of int, optional
                     Segment IDs to have selected.
-    annotations :   (N, 3) array, optional
-                    2d of xyz coordinates that will be added as annotation
-                    layer. If you need more control over this, see
-                    :func:`fafbseg.flywire.add_annotation_layer`.
+    annotations :   (N, 3) array or dict of {name: (N, 3) array}, optional
+                    Array or dict of xyz coordinates that will be added as
+                    annotation layer(s). Should be in voxel coordinates. If you
+                    need more control over this, see :func:`fafbseg.flywire.add_annotation_layer`.
     coords :        (3, ) array, optional
                     (X, Y, Z) voxel coordinates to center on.
     skeletons :     navis.TreeNeuron | navis.CatmaidNeuron | NeuronList
@@ -241,7 +241,11 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         scene['navigation']['pose']['position']['voxelCoordinates'] = coords.round().astype(int).tolist()
 
     if not isinstance(annotations, type(None)):
-        scene = add_annotation_layer(annotations, scene)
+        if isinstance(annotations, np.ndarray):
+            scene = add_annotation_layer(annotations, scene)
+        elif isinstance(annotations, dict):
+            for l, an in annotations.items():
+                scene = add_annotation_layer(an, scene, name=l)
 
     if not isinstance(skeletons, type(None)):
         if isinstance(skeletons, navis.NeuronList):
@@ -327,7 +331,7 @@ def add_skeleton_layer(x, scene):
     return add_annotation_layer(stack, scene)
 
 
-def add_annotation_layer(annotations, scene, connected=False):
+def add_annotation_layer(annotations, scene, name=None, connected=False):
     """Add annotations as new layer to scene.
 
     Parameters
@@ -342,6 +346,8 @@ def add_annotation_layer(annotations, scene, connected=False):
 
     scene :         dict
                     Scene to add annotation layer to.
+    name :          str
+                    Name of the annotation layer.
     connected :     bool (TODO)
                     If True, point annotations will be treated as a segment of
                     connected points.
@@ -383,7 +389,10 @@ def add_annotation_layer(annotations, scene, connected=False):
                          f'ellipsoids or lines, respectively. Got {annotations.shape}')
 
     existing_an_layers = [l for l in scene['layers'] if l['type'] == 'annotation']
-    name = f'annotation{len(existing_an_layers)}'
+
+    if not name:
+        name = f'annotation{len(existing_an_layers)}'
+
     an_layer = {"type": "annotation",
                 "annotations": records,
                 "annotationTags": [],
