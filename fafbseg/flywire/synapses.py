@@ -243,6 +243,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     compared with the raw synapse information. Currently, we::
                         - drop autapses
                         - drop synapses from/to background (id 0)
+                        - drop synapses that are >10um from the skeleton (only
+                          if ``attach=True``)
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -452,6 +454,12 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
             if isinstance(n, navis.TreeNeuron):
                 tree = navis.neuron2KDTree(n, data='nodes')
                 dist, ix = tree.query(connectors[['x', 'y', 'z']].values)
+
+                too_far = dist > 10_000
+                if any(too_far) and clean:
+                    connectors = connectors[~too_far].copy()
+                    ix = ix[~too_far]
+
                 connectors['node_id'] = n.nodes.node_id.values[ix]
 
                 # Add an ID column for navis' sake
