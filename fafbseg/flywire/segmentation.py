@@ -390,9 +390,10 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
 
     # Update cache
     if use_cache:
-        with sv_cache.transact():
-            for i in miss:
-                sv_cache[i] = svoxels[i]
+        with Cache(directory='~/.fafbseg/svoxel_cache/') as sv_cache:
+            with sv_cache.transact():
+                for i in miss:
+                    sv_cache[i] = svoxels[i]
 
     return svoxels
 
