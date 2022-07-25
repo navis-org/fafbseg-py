@@ -434,7 +434,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
 
 def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
-                    neuropils=None, batch_size=30, dataset='production',
+                    neuropils=None, batch_size=1000, dataset='production',
                     progress=True):
     """Fetch adjacency matrix.
 
@@ -460,10 +460,11 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     batch_size :    int
-                    Number of IDs to query per batch. Too large batches might
-                    lead to truncated tables: currently individual queries can
-                    not return more than 200_000 rows and you will see a warning
-                    if that limit is exceeded.
+                    Number of IDs to query per batch. Too large batches can
+                    lead to truncated tables: currently individual queries do
+                    not return more than 200_000 connections. If you see a
+                    warning that this limit has been exceeded, decrease the
+                    batch size!
     live_query :    bool
                     Whether to query against the live data or against the latest
                     materialized table. The latter is useful if you are working
@@ -488,14 +489,22 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     targets = parse_root_ids(targets)
     both = np.unique(np.append(sources, targets))
 
+    client = get_cave_client(dataset=dataset)
+
     # Check if any of these root IDs are outdated
     if live_query:
         not_latest = both[~is_latest_root(both, dataset=dataset)]
         if any(not_latest):
             print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
                   'and connectivity might be inaccurrate.')
-
-    client = get_cave_client(dataset=dataset)
+    else:
+        ts_m = client.materialize.get_timestamp()
+        ts_r = client.chunkedgraph.get_root_timestamps(ids)
+        too_recent = ids[ts_r > ts_m]
+        if any(too_recent):
+            print(f'Root ID(s) {", ".join(too_recent.astype(str))} are more '
+                  'recent than the latest materialization. You can either try '
+                  'mapping these IDs back in time or use `live_query=True`')
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
     if live_query:
