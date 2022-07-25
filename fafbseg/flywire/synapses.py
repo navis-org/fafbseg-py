@@ -34,7 +34,11 @@ __all__ = ['fetch_synapses', 'fetch_connectivity', 'predict_transmitter',
            'fetch_adjacency', 'synapse_counts']
 
 
-def synapse_counts(x, by_neuropil=False, min_score=30, live_query=True,
+def split_axon_dendrite(x):
+    pass
+
+
+def synapse_counts(x, by_neuropil=False, min_score=30, live_query=False,
                    batch_size=10, dataset='production', **kwargs):
     """Fetch synapse counts for given root IDs.
 
@@ -298,14 +302,39 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     # Parse root IDs
     ids = parse_root_ids(x)
 
+    # Get the cave client
+    client = get_cave_client(dataset=dataset)
+
     # Check if any of these root IDs are outdated
     if live_query:
+        # For live queries we just need to make sure the root IDs are up-to-date
         not_latest = ids[~is_latest_root(ids, dataset=dataset)]
         if any(not_latest):
-            print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
-                  'and connectivity might be inaccurrate.')
+            print('Some root IDs are outdated and synapse/connectivity will be '
+                  f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
+                  'Try updating the root IDs using e.g. `flywire.update_ids` '
+                  'or `flywire.supervoxels_to_roots` if you have supervoxel IDs.')
+    else:
+        # For non-live queries we need to worry about two things:
+        # 1. Was the root ID already outdated when the materialization happened
+        ts_m = client.materialize.get_timestamp()
+        not_latest = ids[~client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)]
+        if any(not_latest):
+            print('Some root IDs were already outdated at the latest '
+                  'materialization and synapse/connectivity data will be '
+                  f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
+                  'Try updating the root IDs using e.g. `flywire.update_ids` '
+                  'or `flywire.supervoxels_to_roots` if you have supervoxel IDs.')
 
-    client = get_cave_client(dataset=dataset)
+        # 2. Is the root ID more recent than the materialization
+        ts_r = client.chunkedgraph.get_root_timestamps(ids)
+        too_recent = ids[ts_r > ts_m]
+        if any(too_recent):
+            print('Some root IDs are more recent than the latest '
+                  'materialization and synapse/connectivity data will be '
+                  f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
+                  'You can either try mapping these IDs back in time or use'
+                  '`live_query=True`.')
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score',
                'pre_pt_position', 'post_pt_position', 'id']
@@ -654,8 +683,13 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     if not upstream and not downstream:
         raise ValueError('`upstream` and `downstream` must not both be False')
 
+    if transmitters and style == 'catmaid':
+        raise ValueError('`style` must be "simple" when asking for transmitters')
+
     # Parse root IDs
     ids = parse_root_ids(x)
+
+    client = get_cave_client(dataset=dataset)
 
     # Check if any of these root IDs are outdated
     if live_query:
@@ -663,11 +697,14 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         if any(not_latest):
             print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
                   'and live connectivity might be inaccurrate.')
-
-    if transmitters and style == 'catmaid':
-        raise ValueError('`style` must be "simple" when asking for transmitters')
-
-    client = get_cave_client(dataset=dataset)
+    else:
+        ts_m = client.materialize.get_timestamp()
+        ts_r = client.chunkedgraph.get_root_timestamps(ids)
+        too_recent = ids[ts_r > ts_m]
+        if any(too_recent):
+            print(f'Root ID(s) {", ".join(too_recent.astype(str))} are more '
+                  'recent than the latest materialization. You can either try '
+                  'mapping these IDs back in time or use `live_query=True`')
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
 
