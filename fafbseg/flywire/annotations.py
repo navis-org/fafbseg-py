@@ -133,7 +133,8 @@ def get_materialization_versions(dataset='production'):
     client = get_cave_client(dataset)
 
     # Get currently existing versions
-    versions = client.materialize.get_versions()
+    get_versions = retry(client.materialize.get_versions)
+    versions = get_versions()
 
     # Fetch meta data
     meta = pd.DataFrame.from_records([client.materialize.get_version_metadata(v) for v in versions])
@@ -292,7 +293,7 @@ def get_annotations(table_name: str,
     split_positions :   bool
                         Whether to split x/y/z positions into separate columns.
     drop_invalid :      bool
-                        Whether to drop invalid (i.e. deleted or updated)
+                        Whether to drop invalidated (i.e. deleted or updated)
                         annotations.
     **filters
                         Additional filter queries. See Examples. This works only
@@ -309,19 +310,20 @@ def get_annotations(table_name: str,
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
 
     if materialization == 'live':
-        data = client.materialize.live_query(table=table_name,
-                                             timestamp=dt.datetime.utcnow(),
-                                             split_positions=split_positions,
-                                             **filters)
+        live_query = retry(client.materialize.live_query)
+        data = live_query(table=table_name,
+                          timestamp=dt.datetime.utcnow(),
+                          split_positions=split_positions,
+                          **filters)
     elif materialization:
         if materialization == 'latest':
             materialization = get_materialization_versions(dataset=dataset).version.max()
 
-        data = client.materialize.query_table(
-                       materialization_version=materialization,
-                       table=table_name,
-                       split_positions=split_positions,
-                       **filters)
+        query_table = retry(client.materialize.query_table)
+        data = query_table(materialization_version=materialization,
+                           table=table_name,
+                           split_positions=split_positions,
+                           **filters)
     else:
         raise ValueError('It is currently not possible to query the non-'
                          'materialized tables.')
