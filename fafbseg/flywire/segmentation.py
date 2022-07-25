@@ -18,6 +18,7 @@ import navis
 import requests
 import textwrap
 import time
+import copy
 
 import cloudvolume as cv
 import datetime as dt
@@ -34,7 +35,7 @@ from tqdm.auto import trange, tqdm
 from .. import spine
 from .. import xform
 
-from ..utils import make_iterable
+from ..utils import make_iterable, GSPointLoader
 from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
                     retry, get_cave_client, parse_bounds)
 
@@ -475,10 +476,8 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     return roots
 
 
-def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
+def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
     """Retrieve FlyWire supervoxel IDs at given location(s).
-
-    Use Eric Perlman's service on spine.
 
     Parameters
     ----------
@@ -493,6 +492,9 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
     coordinates :   "voxel" | "nm"
                     Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
+    backend :       "spine" | "cloudvolume"
+                    Which backend to use. Use "cloudvolume" only when spine
+                    doesn't work.
 
     Returns
     -------
@@ -509,6 +511,9 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
     array([79801454835332154, 79731086091150780], dtype=uint64)
 
     """
+    if backend not in ('spine', 'cloudvolume'):
+        raise ValueError(f'`backend` not recognised: {backend}')
+
     if isinstance(locs, pd.DataFrame):
         if np.all(np.isin(['fw.x', 'fw.y', 'fw.z'], locs.columns)):
             locs = locs[['fw.x', 'fw.y', 'fw.z']].values
@@ -522,8 +527,26 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel'):
         if not np.issubdtype(locs.dtype, np.number):
             locs = locs.astype(np.float64)
 
-    return spine.transform.get_segids(locs, segmentation='flywire_190410',
-                                      coordinates=coordinates, mip=mip)
+    if backend == 'spine':
+        return spine.transform.get_segids(locs, segmentation='flywire_190410',
+                                          coordinates=coordinates, mip=mip)
+    else:
+        vol = copy.deepcopy(parse_volume('production'))
+        # Lower mips appear to cause inconsistencies despite spine also only
+        # using mip 2 (IIRC?)
+        # vol.mip = 2
+        pl = GSPointLoader(vol)
+
+        if coordinates in ('voxel', 'voxels'):
+            locs = locs * [4, 4, 40]
+
+        pl.add_points(locs)
+
+        points, data = pl.load_all(max_workers=4,
+                                   progress=True,
+                                   return_sorted=True)
+
+        return data
 
 
 def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'):
@@ -608,8 +631,8 @@ def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'
     return summary
 
 
-def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
-                     coordinates='voxel'):
+def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
+                     dataset='production', coordinates='voxel'):
     """Retrieve FlyWire segment IDs (root IDs) at given location(s).
 
     Parameters
@@ -621,9 +644,14 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
     root_ids :      bool
                     If True, will return root IDs. If False, will return supervoxel
                     IDs.
-    timestamp :     int | str | datetime, optional
+    timestamp :     int | str | datetime | "mat", optional
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    "mat" will use the timestamp of the most recent
+                    materalization.
+    backend :       "spine" | "cloudvolume"
+                    Which backend to use. Use "cloudvolume" only when spine
+                    doesn't work because it's terribly slow.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -647,7 +675,7 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, dataset='production',
     array([720575940621039145, 720575940621039145])
 
     """
-    svoxels = locs_to_supervoxels(locs, coordinates=coordinates)
+    svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend)
 
     if not root_ids:
         return svoxels
