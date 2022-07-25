@@ -918,6 +918,9 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
                                      'been set to proofread')
             return pd.DataFrame(columns=['valid_id', 'x', 'y', 'z', 'success', 'errors'])
 
+    if 'user_id' not in x.columns:
+        x['user_id'] = ''
+
     session = requests.Session()
     future_session = FuturesSession(session=session, max_workers=max_threads)
 
@@ -926,11 +929,15 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
 
     futures = {}
     url = f'https://prod.flywire-daf.com/neurons/api/v1/mark_completion'
-    for i, (_, row) in enumerate(x.iterrows()):
-        post = dict(valid_id=str(row.valid_id),
-                    location=f'{row.x}, {row.y}, {row.z}',
+    for i_, x_, y_, z_, u_ in zip(x.valid_id.values,
+                                 x.x.values,
+                                 x.y.values,
+                                 x.z.values,
+                                 x.user_id.values):
+        post = dict(valid_id=str(i_),
+                    location=f'{x_}, {y_}, {z_}',
                     action='single',
-                    user_id=row.get('user_id', ''))
+                    user_id=u_)
 
         f = future_session.post(url, data=post)
         futures[f] = post
