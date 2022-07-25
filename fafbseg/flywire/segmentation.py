@@ -405,10 +405,13 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     Parameters
     ----------
     x :             int | list of int
-                    Supervoxel ID(s) to find the root(s) for.
-    timestamp :     int | str | datetime
+                    Supervoxel ID(s) to find the root(s) for. Also works for
+                    e.g. L2 IDs.
+    timestamp :     int | str | datetime | "mat", optional
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    "mat" will use the timestamp of the most recent
+                    materalization.
     batch_size :    int
                     Max number of supervoxel IDs per query. Reduce batch size if
                     you experience time outs.
@@ -438,13 +441,17 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     x = make_iterable(x, force_type=np.int64)
 
     # Check if IDs are valid (zeros are fine because we filter for them later on)
-    is_valid_supervoxel(x[(x != 0) & (x != '0')], raise_exc=True)
+    # is_valid_supervoxel(x[(x != 0) & (x != '0')], raise_exc=True)
 
     # Parse the volume
     vol = parse_volume(dataset)
 
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
+
+    if isinstance(timestamp, str) and timestamp == 'mat':
+        client = get_cave_client(dataset=dataset)
+        timestamp = client.materialize.get_timestamp()
 
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
