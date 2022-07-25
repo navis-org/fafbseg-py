@@ -35,7 +35,7 @@ __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
 
 def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
-                       assert_id_match=False, dataset='production',
+                       assert_id_match=False, dataset='production', threads=2,
                        progress=True, **kwargs):
     """Skeletonize FlyWire neuron.
 
@@ -70,6 +70,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          Against which FlyWire dataset to query::
                            - "production" (current production dataset, fly_v31)
                            - "sandbox" (i.e. fly_v26)
+    threads :            int
+                         Number of parallel threads to use for downloading the
+                         meshes.
     progress :           bool
                          Whether to show a progress bar or not.
 
@@ -90,19 +93,24 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     >>> n = flywire.skeletonize_neuron(720575940614131061)
 
     """
+    # TODOs:
+    # - drop single disconnected nodes?
+    # - heal fragmented neurons?
+    # - fix 0-radius nodes: these will be on 99.9% of the cases be leaf nodes
+    # - shave only high-strahler twigs
 
     if int(sk.__version__.split('.')[0]) < 1:
         raise ImportError('Please update skeletor to version >= 1.0.0: '
                           'pip3 install skeletor -U')
 
-    vol = parse_volume(dataset)
-
     if navis.utils.is_iterable(x):
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
+                                                    shave_skeleton=shave_skeleton,
                                                     remove_soma_hairball=remove_soma_hairball,
                                                     assert_id_match=assert_id_match,
                                                     dataset=dataset,
+                                                    threads=threads,
                                                     **kwargs)
                                  for n in navis.config.tqdm(x,
                                                             desc='Skeletonizing',
@@ -116,8 +124,15 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         id = np.int64(x)
 
         # Download the mesh
-        mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False,
-                            remove_duplicate_vertices=True)[id]
+        try:
+            old_parallel = vol.parallel
+            vol.parallel = threads
+            mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False,
+                                remove_duplicate_vertices=True)[id]
+        except BaseException:
+            raise
+        finally:
+            vol.parallel = old_parallel
     else:
         mesh = x
         id = getattr(mesh, 'segid', getattr(mesh, 'id', 0))
@@ -259,6 +274,7 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
     return sorted(candidates, key=lambda x: radii[x])[-1]
 
 
+def __detect_soma_mesh(mesh):
     """Try detecting the soma based on vertex clusters.
 
     Parameters
@@ -384,6 +400,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
 
     # Prepare the calls and parameters
     kwargs['progress'] = False
+    kwargs['threads'] = 1
     funcs = [skeletonize_neuron] * len(ids)
     parsed_kwargs = [kwargs] * len(ids)
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
