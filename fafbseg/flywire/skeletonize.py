@@ -86,6 +86,10 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     :func:`fafbseg.flywire.skeletonize_neuron_parallel`
                         Use this if you want to skeletonize many neurons in
                         parallel.
+    :func:`fafbseg.flywire.l2_skeleton`
+                        Generate a skeleton using the L2 cache. Much faster than
+                        skeletonization from scratch but the skeleton will be
+                        coarser.                        
 
     Examples
     --------

@@ -594,7 +594,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
                         Number of parallel requests to make when fetching the
                         L2 IDs (but not the L2 info).
     **kwargs
-                        Keyword arguments are passed through to Dotprops
+                        Keyword arguments are passed through to the `Dotprops`
                         initialization. Use to e.g. set extra properties.
 
     Returns
