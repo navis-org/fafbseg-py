@@ -24,6 +24,7 @@ import webbrowser
 import matplotlib.colors as mcl
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 from urllib.parse import urlparse, parse_qs, quote
 
@@ -95,7 +96,8 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     Skeleton(s) to add as annotation layer(s).
     seg_colors :    str | tuple | list | dict, optional
                     Single color (name or RGB tuple), or list or dictionary
-                    mapping colors to ``segments``.
+                    mapping colors to ``segments``. Can also be a numpy array
+                    of labels which will be automatically turned into colors.
     seg_groups :    list | dict, optional
                     List or dictionary mapping segments to groups. Each group
                     will get its own annotation layer.
@@ -170,11 +172,11 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         if not isinstance(seg_groups, dict):
             if not navis.utils.is_iterable(seg_groups):
                 raise TypeError(f'`seg_groups` must be dict or iterable, got "{type(seg_groups)}"')
-            if len(seg_groups) != len(all_segs):
-                raise ValueError(f'Got {len(seg_groups)} groups for {len(all_segs)} segments.')
+            if len(seg_groups) != len(segments):
+                raise ValueError(f'Got {len(seg_groups)} groups for {len(segments)} segments.')
 
             # Turn into dictionary
-            seg_groups = dict(zip(all_segs, seg_groups))
+            seg_groups = dict(zip(segments, seg_groups))
 
         # Check if dict is {id: group} or {group: [id1, id2, id3]}
         is_list = [isinstance(v, (list, tuple, set, np.ndarray)) for v in seg_groups.values()]
@@ -214,6 +216,19 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
             seg_colors = {s: seg_colors for s in all_segs}
         elif isinstance(seg_colors, tuple) and len(seg_colors) == 3:
             seg_colors = {s: seg_colors for s in all_segs}
+        elif isinstance(seg_colors, np.ndarray) and seg_colors.ndim == 1:
+            if len(seg_colors) != len(all_segs):
+                raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
+
+            uni_ = np.unique(seg_colors)
+            if len(uni_) > 20:
+                pal = 'hls'
+            elif len(uni_) > 10:
+                pal = 'tab20'
+            else:
+                pal = 'tab10'
+            _colors = dict(zip(uni_, sns.color_palette(pal, len(uni_))))
+            seg_colors = {s: _colors[l] for s, l in zip(all_segs, seg_colors)}
         elif not isinstance(seg_colors, dict):
             if not navis.utils.is_iterable(seg_colors):
                 raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
@@ -223,7 +238,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
             # Turn into dictionary
             seg_colors = dict(zip(all_segs, seg_colors))
 
-        # Turn colors into hex
+        # Turn colors into hex codes
         # Also make sure keys are int (not np.int64)
         # Not sure but this might cause issue on Windows systems
         # But JSON doesn't like np.int64... so we're screwed
@@ -231,6 +246,12 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
         # Assign colors
         scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
+
+        # Also color each groups
+        if not isinstance(seg_groups, type(None)):
+            for l in scene['layers']:
+                if l['name'] in groups:
+                    l['segmentColors'] = seg_colors
 
     # Set coordinates if provided
     if not isinstance(coords, type(None)):
@@ -386,7 +407,7 @@ def add_annotation_layer(annotations, scene, name=None, connected=False):
     else:
         raise ValueError('Expected annotations to be x/y/z coordinates of either'
                          '(N, 3), (N, 4) or (N, 2, 3) shape for points, '
-                         f'ellipsoids or lines, respectively. Got {annotations.shape}')    
+                         f'ellipsoids or lines, respectively. Got {annotations.shape}')
 
     if not name:
         existing_an_layers = [l for l in scene['layers'] if l['type'] == 'annotation']
