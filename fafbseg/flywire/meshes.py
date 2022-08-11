@@ -30,7 +30,7 @@ from .utils import parse_volume
 __all__ = ['get_mesh_neuron']
 
 
-def get_mesh_neuron(id, with_synapses=False, threads=None,
+def get_mesh_neuron(id, with_synapses=False, threads=2,
                     progress=True, dataset='production'):
     """Fetch FlyWire neuron as navis.MeshNeuron.
 
@@ -81,6 +81,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
             with ThreadPoolExecutor(max_workers=threads) as executor:
                 futures = {executor.submit(get_mesh_neuron, n,
                                            dataset=dataset,
+                                           threads=None,  # no need for threads in inner function
                                            with_synapses=with_synapses): n for n in id}
 
                 results = []
@@ -96,7 +97,14 @@ def get_mesh_neuron(id, with_synapses=False, threads=None,
     id = np.int64(id)
 
     # Fetch mesh
-    mesh = vol.mesh.get(id, remove_duplicate_vertices=True)[id]
+    try:
+        old_parallel = vol.parallel
+        vol.parallel = threads if threads else old_parallel
+        mesh = vol.mesh.get(id, remove_duplicate_vertices=True)[id]
+    except BaseException:
+        raise
+    finally:
+        vol.parallel = old_parallel
 
     # Turn into meshneuron
     n = navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
