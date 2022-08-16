@@ -444,7 +444,15 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                                                disable=not progress or len(root_id) == 1,
                                                leave=False)]
 
-        return navis.NeuronList(nl).idx[root_id]
+        # Turn into neuron list
+        nl = navis.NeuronList(nl)
+
+        # Bring in original order
+        if len(nl):
+            root_id = root_id[np.isin(root_id, nl.id)]
+            nl = nl.idx[root_id]
+
+        return nl
 
     # Turn into integer
     root_id = np.int64(root_id)
