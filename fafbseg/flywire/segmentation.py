@@ -411,7 +411,8 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
                     "mat" will use the timestamp of the most recent
-                    materalization.
+                    materialization. You can also use e.g. "mat_438" to get the
+                    root ID at a specific materialization.
     batch_size :    int
                     Max number of supervoxel IDs per query. Reduce batch size if
                     you experience time outs.
@@ -449,9 +450,14 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
 
-    if isinstance(timestamp, str) and timestamp == 'mat':
+    if isinstance(timestamp, str) and timestamp.startswith('mat'):
         client = get_cave_client(dataset=dataset)
-        timestamp = client.materialize.get_timestamp()
+        if timestamp == 'mat':
+            timestamp = client.materialize.get_timestamp()
+        else:
+            # Split e.g. 'mat_432' to extract version and query timestamp
+            version = int(timestamp.split('_')[1])
+            timestamp = client.materialize.get_timestamp(version)
 
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
@@ -656,7 +662,8 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
                     "mat" will use the timestamp of the most recent
-                    materalization.
+                    materalization. You can also use e.g. "mat_438" to get the
+                    root ID at a specific materialization.
     backend :       "spine" | "cloudvolume"
                     Which backend to use. Use "cloudvolume" only when spine
                     doesn't work because it's terribly slow.
