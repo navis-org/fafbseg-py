@@ -344,11 +344,13 @@ def parse_volume(vol, **kwargs):
             # Set and update defaults from kwargs
             defaults = dict(mip=0,
                             fill_missing=True,
+                            cache=False,
                             use_https=True,  # this way google secret is not needed
                             progress=False)
             defaults.update(kwargs)
 
             # Check if chunkedgraph secret exists
+            # This probably needs yanking!
             secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
             if not os.path.isfile(secret):
                 # If not secrets but environment variable use this
