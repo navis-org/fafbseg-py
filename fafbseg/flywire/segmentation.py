@@ -1423,7 +1423,7 @@ def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
 
 
 def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
-               use_mirror=True, dataset='production'):
+               use_mirror=True, threads=4, dataset='production'):
     """Fetch voxels making a up given root ID.
 
     Parameters
@@ -1431,8 +1431,9 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     x :             int
                     A single root ID.
     mip :           int
-                    Scale at which to fetch voxels. Mip 0, for example, is
-                    16 x 16 x 40nm.
+                    Scale at which to fetch voxels. For example, `mip=0` is
+                    at 16 x 16 x 40nm resolution. Every subsequent `mip` halves
+                    the resolution.
     sv_map :        bool
                     If True, additionally return a map with the L2 ID for each
                     voxel.
@@ -1449,6 +1450,8 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
                     segmentation for supervoxel look-up. Possibly slightly
                     slower than the production data set but doesn't incur
                     egress charges for Princeton.
+    threads :       int
+                    Number of parallel threads to use for fetching the data.
     progress :      bool
                     Whether to show a progress bar or not.
 
@@ -1510,12 +1513,14 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     ch_size = np.array(vol.mesh.meta.meta.graph_chunk_size)
     ch_size = ch_size // (vol.mip_resolution(mip) / vol.mip_resolution(0))
     old_mip = sv_vol.mip
+    old_parallel = sv_vol.parallel
     try:
         sv_vol.mip = mip
+        sv_vol.parallel = threads
         for ch in tqdm(l2_vxl,
                        disable=not progress,
                        leave=False,
-                       desc='Loading'):
+                       desc='Fetching voxels'):
             ct = sv_vol[ch[0]:ch[0] + ch_size[0],
                         ch[1]:ch[1] + ch_size[1],
                         ch[2]:ch[2] + ch_size[2]][:, :, :, 0]
@@ -1530,6 +1535,7 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
         raise
     finally:
         sv_vol.mip = old_mip
+        sv_vol.parallel = old_parallel
 
     # uint 16 should be sufficient because even at mip 0 the volume has
     # shape (54100, 28160, 7046) -> doesn't exceed 65_535
