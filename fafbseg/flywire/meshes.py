@@ -235,62 +235,21 @@ def detect_soma(x, min_rad=800, N=3, progress=True, dataset='production'):
     return centers[candidates[-1]]
 
 
-def mesh_neuron(x, mip=2):
+def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, dataset='production'):
     """Create high quality mesh for given neuron."""
     try:
         import sparsecubes as sc
-        from sparsecubse.core import surface_voxel_mask
     except ImportError:
         raise ImportError('Meshing requires sparse-cubes:\n  pip3 install sparse-cubes')
 
     from .segmentation import get_voxels
 
     # Get voxels for this neuron
-    vxl, sv_map = get_voxels(x, mip=mip, sv_map=True)
+    vxl = get_voxels(x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset)
 
-    # For get the l2 ID for each supervoxel
-    l2_ids = vol.get_roots(sv_map, stop_layer=2)
+    vol = parse_volume(dataset)
+    spacing = vol.scales[mip]['resolution']
 
-    # Get the l2 graph
-    G = l2_graph(x)
+    mesh = sc.marching_cubes(vxl, spacing=spacing)
 
-    # Now go over each supervoxel
-    for sv, ix in navis.config.tqdm(np.unique(sv_map, return_index=True)):
-        # Get the voxels for this supervoxel
-        is_this_sv = sv_map == sv
-        this_vxl = vxl[is_this_sv]
-
-        if not len(this_vxl):
-            continue
-
-        # Create a matrix for this supervoxel
-        mn = this_vxl.min(axis=0) - 1
-        mx = this_vxl.max(axis=0) + 1
-
-        # Get all voxels that should not be connected
-        is_this_l2 = l2_ids == l2_ids[ix]
-        is_adjacent_l2 = np.isin(l2_ids, list(G.neighbors(l2_ids[ix])))
-        to_test = ~is_this_l2 & ~is_adjacent_l2
-
-        # If nothing to check, continue
-        if not len(to_test):
-            continue
-
-        # Find "other" voxels that touch voxels for this supervoxel
-        try:
-            from pykdtree.kdtree import KDTree
-        except ImportError:
-            from scipy.spatial import cKDTree as KDTree
-        tree = KDTree(this_vxl)
-        dist, ix = tree.query(vxl[to_test],
-                              distance_upper_bound=1.5)
-
-        to_remove = np.zeros(len(vxl), dtype=bool)
-        to_test_ix = np.where(to_test)[0]
-        to_remove_ix = to_test_ix[dist < np.inf]
-        to_remove[to_remove_ix] = True
-
-        vxl = vxl[~to_remove]
-        sv_map = sv_map[~to_remove]
-
-    return vxl
+    return navis.MeshNeuron(mesh, id=x, units='1 nm')
