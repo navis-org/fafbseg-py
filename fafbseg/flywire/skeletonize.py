@@ -21,6 +21,7 @@ import inspect
 
 import multiprocessing as mp
 import networkx as nx
+import pandas as pd
 import numpy as np
 import skeletor as sk
 import trimesh as tm
@@ -28,7 +29,7 @@ import trimesh as tm
 from .segmentation import snap_to_id, is_latest_root
 from .utils import parse_volume
 from .meshes import detect_soma
-from .annotations import get_somas
+from .annotations import get_somas, is_materialized_root
 
 
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
@@ -89,7 +90,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     :func:`fafbseg.flywire.l2_skeleton`
                         Generate a skeleton using the L2 cache. Much faster than
                         skeletonization from scratch but the skeleton will be
-                        coarser.                        
+                        coarser.
 
     Examples
     --------
@@ -108,6 +109,15 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                           'pip3 install skeletor -U')
 
     if navis.utils.is_iterable(x):
+        # Make sure these are root IDs
+        x = np.asarray(x).astype(np.int64)
+
+        # Fetch all somas in one go (note that this will only find somas for
+        # roots that actually existed at the time)
+        # For neurons without a soma we'll be doing more sophisticated checks
+        # when we skeletonize
+        kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
+
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
                                                     shave_skeleton=shave_skeleton,
@@ -141,11 +151,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         mesh = x
         id = getattr(mesh, 'segid', getattr(mesh, 'id', 0))
 
+    # Pop nuclei from kwargs before passing them to skeletonization
+    nuc = kwargs.pop('_nuclei', pd.DataFrame())
+
     mesh = sk.utilities.make_trimesh(mesh, validate=False)
 
     # Fix things before we skeletonize
     # This also drops fluff
-    mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=100)
+    mesh = sk.pre.fix_mesh(mesh,
+                           inplace=True,
+                           remove_disconnected=100 if len(mesh.vertices) > 100 else None)
 
     # Skeletonize
     defaults = dict(waves=1, step_size=1)
@@ -178,12 +193,31 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         tn._nodes = tn.nodes.loc[~tn.nodes.node_id.isin(twigs)].copy()
         tn._clear_temp_attr()
 
-    # See if we can find a soma based on the nucleus segmentation
-    if is_latest_root(id):
-        materialization = 'live'
+    # If nuclei have already been fetched for all neurons
+    if not nuc.empty:
+        soma = nuc[nuc.pt_root_id == id]
     else:
-        materialization = 'latest'
-    soma = get_somas(id, dataset=dataset, materialization=materialization)
+        soma = pd.DataFrame()
+
+    if soma.empty:
+        # See if we can find a soma based on the nucleus segmentation
+        if is_materialized_root(id):
+            materialization = 'latest'
+        elif is_latest_root(id):
+            materialization = 'live'
+        else:
+            materialization = None
+
+        if materialization:
+            try:
+                soma = get_somas(id, dataset=dataset, materialization=materialization)
+            except requests.HTTPError:
+                navis.config.logger.warning(f'Failed to fetch soma for {id} from '
+                                            'nucleus table.')
+                soma = pd.DataFrame()
+        else:
+            soma = pd.DataFrame()
+
     if not soma.empty:
         soma = tn.snap(soma.iloc[0].pt_position)[0]
     else:
@@ -405,6 +439,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
     # Prepare the calls and parameters
     kwargs['progress'] = False
     kwargs['threads'] = 1
+    kwargs['_nuclei'] = get_somas(ids, dataset=kwargs.get('dataset', 'production'))
     funcs = [skeletonize_neuron] * len(ids)
     parsed_kwargs = [kwargs] * len(ids)
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
