@@ -30,7 +30,7 @@ from .utils import parse_volume
 __all__ = ['get_mesh_neuron']
 
 
-def get_mesh_neuron(id, with_synapses=False, threads=2,
+def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=2,
                     progress=True, dataset='production'):
     """Fetch FlyWire neuron as navis.MeshNeuron.
 
@@ -43,6 +43,13 @@ def get_mesh_neuron(id, with_synapses=False, threads=2,
                         synapse predicted by Buhmann et al. (2020).
                         A "synapse score" (confidence) threshold of 30 is
                         applied.
+    omit_failures :     bool, optional
+                        Determine behaviour when mesh download fails
+                        (e.g. if there is no mesh):
+                         - ``None`` (default) will raise an exception
+                         - ``True`` will skip the offending neuron (might result
+                           in an empty ``NeuronList``)
+                         - ``False`` will return an empty ``MeshNeuron``
     threads :           bool | int, optional
                         Whether to use threads to fetch meshes in parallel.
     dataset :           str | CloudVolume
@@ -61,6 +68,10 @@ def get_mesh_neuron(id, with_synapses=False, threads=2,
     >>> m.plot3d()                                              # doctest: +SKIP
 
     """
+    if omit_failures not in (None, True, False):
+        raise ValueError('`omit_failures` must be either None, True or False. '
+                         f'Got "{omit_failures}".')
+
     vol = parse_volume(dataset)
 
     if navis.utils.is_iterable(id):
@@ -70,6 +81,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=2,
 
         if not threads or threads == 1:
             return navis.NeuronList([get_mesh_neuron(n, dataset=dataset,
+                                                     omit_failures=omit_failures,
                                                      with_synapses=with_synapses)
                                      for n in navis.config.tqdm(id,
                                                                 desc='Fetching',
@@ -81,6 +93,7 @@ def get_mesh_neuron(id, with_synapses=False, threads=2,
             with ThreadPoolExecutor(max_workers=threads) as executor:
                 futures = {executor.submit(get_mesh_neuron, n,
                                            dataset=dataset,
+                                           omit_failures=omit_failures,
                                            threads=None,  # no need for threads in inner function
                                            with_synapses=with_synapses): n for n in id}
 
@@ -98,11 +111,17 @@ def get_mesh_neuron(id, with_synapses=False, threads=2,
 
     # Fetch mesh
     try:
-        old_parallel = vol.parallel
+        old_parallel = vol.parallel  # note: this seems to be reset by cloudvolume
         vol.parallel = threads if threads else old_parallel
         mesh = vol.mesh.get(id, remove_duplicate_vertices=True)[id]
     except BaseException:
-        raise
+        if omit_failures == None:
+            raise
+        elif omit_failures:
+            return navis.NeuronList([])
+        # If no omission, return empty MeshNeuron
+        else:
+            return navis.MeshNeuron(None, id=id, units='1 nm', dataset=dataset, **kwargs)
     finally:
         vol.parallel = old_parallel
 
