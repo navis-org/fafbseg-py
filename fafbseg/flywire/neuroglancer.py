@@ -13,6 +13,7 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 import copy
+import itertools
 import json
 import navis
 import pymaid
@@ -56,12 +57,13 @@ MINIMAL_SCENE = {'layers': [{'source': 'precomputed://gs://microns-seunglab/dros
                               {"source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
                                "type": "segmentation",
                                "objectAlpha": 0.2,
+                               "ignoreSegmentInteractions": True,
                                "segmentColors": { "1": "#808080"},
                                "segments": ["1"],
                                 "skeletonRendering": {"mode2d": "lines_and_points",
                                                       "mode3d": "lines"},
                                "name": "brain_mesh_v141.surf",
-                               "visible": False
+                               "visible": True
                                 }],
                  'navigation': {'pose': {'position': {'voxelSize': [4, 4, 40],
                                                       'voxelCoordinates': [118073, 57192, 4070]}},  # default
@@ -165,8 +167,9 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         segments = make_iterable(segments, force_type=str).tolist()
 
         # Add to, not replace already selected segments
-        present = scene['layers'][seg_layer_ix].get('segments', [])
-        scene['layers'][seg_layer_ix]['segments'] = present + segments
+        if isinstance(seg_groups, type(None)):
+            present = scene['layers'][seg_layer_ix].get('segments', [])
+            scene['layers'][seg_layer_ix]['segments'] = present + segments
 
     if not isinstance(seg_groups, type(None)):
         if not isinstance(seg_groups, dict):
@@ -174,6 +177,11 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                 raise TypeError(f'`seg_groups` must be dict or iterable, got "{type(seg_groups)}"')
             if len(seg_groups) != len(segments):
                 raise ValueError(f'Got {len(seg_groups)} groups for {len(segments)} segments.')
+
+            seg_groups = np.asarray(seg_groups)
+
+            if seg_groups.dtype != object:
+                seg_groups = [f'group_{i}' for i in seg_groups]
 
             # Turn into dictionary
             seg_groups = dict(zip(segments, seg_groups))
@@ -194,7 +202,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
         for g in groups:
             scene['layers'].append(copy.deepcopy(scene['layers'][seg_layer_ix]))
-            scene['layers'][-1]['name'] = str(g)
+            scene['layers'][-1]['name'] = f'{g}'
             scene['layers'][-1]['segments'] = [str(s) for s in groups[g]]
             scene['layers'][-1]['visible'] = False
 
@@ -208,7 +216,9 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     # All present segments
     seg_layer = scene['layers'][seg_layer_ix]
-    all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
+    #all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
+    all_segs = segments
+
 
     # See if we need to assign colors
     if not isinstance(seg_colors, type(None)):
@@ -222,17 +232,22 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
             uni_ = np.unique(seg_colors)
             if len(uni_) > 20:
-                pal = 'hls'
+                # Note the +1 to avoid starting and ending on the same color
+                pal = sns.color_palette('hls', len(uni_) + 1)
+                # Shuffle to avoid having two neighbouring clusters with
+                # similar colours
+                rng = np.random.default_rng(1985)
+                rng.shuffle(pal)
             elif len(uni_) > 10:
-                pal = 'tab20'
+                pal = sns.color_palette('tab20', len(uni_))
             else:
-                pal = 'tab10'
-            _colors = dict(zip(uni_, sns.color_palette(pal, len(uni_))))
+                pal = sns.color_palette('tab10', len(uni_))
+            _colors = dict(zip(uni_, pal))
             seg_colors = {s: _colors[l] for s, l in zip(all_segs, seg_colors)}
         elif not isinstance(seg_colors, dict):
             if not navis.utils.is_iterable(seg_colors):
                 raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
-            if len(seg_colors) != len(all_segs):
+            if len(seg_colors) < len(all_segs):
                 raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
 
             # Turn into dictionary
@@ -242,7 +257,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         # Also make sure keys are int (not np.int64)
         # Not sure but this might cause issue on Windows systems
         # But JSON doesn't like np.int64... so we're screwed
-        seg_colors = {int(s): mcl.to_hex(c) for s, c in seg_colors.items()}
+        seg_colors = {str(s): mcl.to_hex(c) for s, c in seg_colors.items()}
 
         # Assign colors
         scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
@@ -251,7 +266,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         if not isinstance(seg_groups, type(None)):
             for l in scene['layers']:
                 if l['name'] in groups:
-                    l['segmentColors'] = seg_colors
+                    l['segmentColors'] = {s: seg_colors[s] for s in l['segments']}
 
     # Set coordinates if provided
     if not isinstance(coords, type(None)):
