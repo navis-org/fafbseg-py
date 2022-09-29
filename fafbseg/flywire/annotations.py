@@ -127,6 +127,76 @@ def is_proofread(x, cache=True, validate=True):
     return np.isin(x, PR_TABLE.pt_root_id.values)
 
 
+@retry
+def is_materialized_root(id, materialization='latest'):
+    """Check if root existed at the time of materialization.
+
+    Parameters
+    ----------
+    id :            int | list-like
+                    Single ID or list of FlyWire (root) IDs.
+    materialization : "latest" | int
+                    Which materialization to check. If "latest" will use the
+                    latest available one in the cave client.
+
+    Returns
+    -------
+    numpy array
+                    Array of booleans
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.is_materialized_root(720575940621039145)
+    array([False])
+
+    """
+    id = make_iterable(id, force_type=int)
+
+    # Generaate array we can fill
+    is_mat = np.zeros(len(id), dtype=bool)
+
+    # Get timestamp at materalization
+    client = get_cave_client('production')
+    ts_mat = client.materialize.get_timestamp(None if materialization == 'latest' else materialization)
+
+    # Get root timestamps
+    ts_root_gen = client.chunkedgraph.get_root_timestamps(id)
+
+    # Root IDs younger than the materialization can already be left at false
+    older = ts_root_gen < ts_mat
+
+    # Check which of the old-enough roots are still up-to-date
+    if any(older):
+        il = is_latest_root(id[older])
+
+        if any(il):
+
+            is_mat[np.where(older)[0][il]] = True
+
+        if any(~il):
+            # For those that aren't up-to-date anymore we have to make sure that
+            # the were still "alive" at the materialization
+            was_alive = []
+            for i, ts in zip(id[older][~il], ts_root_gen[older][~il]):
+                # Get the lineage graph from the root's creation right up to the
+                # materialization
+                G = client.chunkedgraph.get_lineage_graph(np.uint64(i),
+                                                          timestamp_past=ts,
+                                                          timestamp_future=ts_mat, as_nx_graph=True)
+                try:
+                    # If there is a successor, this root was already dead
+                    _ = next(G.successors(i))
+                    was_alive.append(False)
+                except StopIteration:
+                    was_alive.append(True)
+            was_alive = np.array(was_alive)
+            if any(was_alive):
+                is_mat[np.where(older)[0][was_alive]] = True
+
+    return is_mat
+
+
 def get_materialization_versions(dataset='production'):
     """Fetch info on the available materializations."""
     # Get/Initialize the CAVE client
