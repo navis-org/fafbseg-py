@@ -23,8 +23,10 @@ from functools import partial
 from pathlib import Path
 from tqdm.auto import trange
 
-from .segmentation import is_latest_root
+from .segmentation import (is_latest_root, fetch_edit_history,
+                           get_lineage_graph, roots_to_supervoxels)
 from .utils import parse_root_ids, get_cave_client, retry, get_synapse_areas
+from .annotations import get_materialization_versions
 
 from ..utils import make_iterable
 from ..synapses.utils import catmaid_table
@@ -38,7 +40,7 @@ def split_axon_dendrite(x):
     pass
 
 
-def synapse_counts(x, by_neuropil=False, min_score=30, live_query=False,
+def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto',
                    batch_size=10, dataset='production', **kwargs):
     """Fetch synapse counts for given root IDs.
 
@@ -56,10 +58,13 @@ def synapse_counts(x, by_neuropil=False, min_score=30, live_query=False,
     min_score :     int, optional
                     Minimum "cleft score". The default of 30 is what Buhmann et al.
                     used in the paper.
-    live_query :    bool
-                    Whether to query against the live data or against the latest
-                    materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table.
+    mat :           int | str, optional
+                    Which materialization to query:
+                     - 'auto' (default) tries to find the most recent
+                       materialization version at which all the query IDs existed
+                     - 'latest' uses the latest materialized table
+                     - 'live' queries against the live data - this will be much slower!
+                     - pass an integer (e.g. `447`) to use a specific materialization version
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -87,7 +92,8 @@ def synapse_counts(x, by_neuropil=False, min_score=30, live_query=False,
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=True, attach=False,
                          min_score=min_score,
-                         transmitters=True, live_query=live_query,
+                         transmitters=True,
+                         mat=mat,
                          neuropils=by_neuropil,
                          batch_size=batch_size,
                          dataset=dataset, **kwargs)
@@ -125,7 +131,7 @@ def synapse_counts(x, by_neuropil=False, min_score=30, live_query=False,
     return counts
 
 
-def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
+def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
                         neuropils=None, batch_size=10, dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
@@ -149,10 +155,13 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
     weighted :      bool
                     If True, will weight predictions based on confidence: higher
                     cleft score = more weight.
-    live_query :    bool
-                    Whether to query against the live data or against the latest
-                    materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table.
+    mat :           int | str, optional
+                    Which materialization to query:
+                     - 'auto' (default) tries to find the most recent
+                       materialization version at which all the query IDs existed
+                     - 'latest' uses the latest materialized table
+                     - 'live' queries against the live data - this will be much slower!
+                     - pass an integer (e.g. `447`) to use a specific materialization version
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter predictions to these ROIs.
@@ -184,7 +193,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
     """
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
-                         transmitters=True, live_query=live_query,
+                         transmitters=True, mat=mat,
                          neuropils=neuropils is not None,
                          batch_size=batch_size,
                          dataset=dataset, **kwargs)
@@ -208,7 +217,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, live_query=True,
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
-                   transmitters=False, neuropils=False, live_query=True,
+                   transmitters=False, neuropils=False, mat='auto',
                    batch_size=10, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
@@ -250,11 +259,13 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     lead to truncated tables: currently individual queries can
                     not return more than 200_000 rows and you will see a warning
                     if that limit is exceeded.
-    live_query :    bool
-                    Whether to query against the live data or against the latest
-                    materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table. Using
-                    the live query is much slower!
+    mat :           int | str, optional
+                    Which materialization to query:
+                     - 'auto' (default) tries to find the most recent
+                       materialization version at which all the query IDs existed
+                     - 'latest' uses the latest materialized table
+                     - 'live' queries against the live data - this will be much slower!
+                     - pass an integer (e.g. `447`) to use a specific materialization version
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -301,42 +312,28 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     if not pre and not post:
         raise ValueError('`pre` and `post` must not both be False')
 
+    if isinstance(mat, str):
+        if mat not in ('latest', 'live', 'auto'):
+            raise ValueError('`mat` must be "auto", "latest", "live" or '
+                             f'integer, got "{mat}"')
+    elif not isinstance(mat, int):
+        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
+                         f'got "{type(mat)}"')
+
     # Parse root IDs
     ids = parse_root_ids(x)
 
     # Get the cave client
     client = get_cave_client(dataset=dataset)
 
-    # Check if any of these root IDs are outdated
-    if live_query:
-        # For live queries we just need to make sure the root IDs are up-to-date
-        not_latest = ids[~is_latest_root(ids, dataset=dataset)]
-        if any(not_latest):
-            print('Some root IDs are outdated and synapse/connectivity will be '
-                  f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
-                  'Try updating the root IDs using e.g. `flywire.update_ids` '
-                  'or `flywire.supervoxels_to_roots` if you have supervoxel IDs.')
-    else:
-        # For non-live queries we need to worry about two things:
-        # 1. Was the root ID already outdated when the materialization happened
-        ts_m = client.materialize.get_timestamp()
-        not_latest = ids[~client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)]
-        if any(not_latest):
-            print('Some root IDs were already outdated at the latest '
-                  'materialization and synapse/connectivity data will be '
-                  f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
-                  'Try updating the root IDs using e.g. `flywire.update_ids` '
-                  'or `flywire.supervoxels_to_roots` if you have supervoxel IDs.')
+    # Check if IDs existed at this materialization
+    if mat == 'latest':
+        mat = client.materialize.version
 
-        # 2. Is the root ID more recent than the materialization
-        ts_r = client.chunkedgraph.get_root_timestamps(ids)
-        too_recent = ids[ts_r > ts_m]
-        if any(too_recent):
-            print('Some root IDs are more recent than the latest '
-                  'materialization and synapse/connectivity data will be '
-                  f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
-                  'You can either try mapping these IDs back in time or use'
-                  '`live_query=True`.')
+    if mat == 'auto':
+        mat = _find_mat_version(ids, dataset=dataset)
+    else:
+        _check_ids(ids, mat=mat, dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score',
                'pre_pt_position', 'post_pt_position', 'id']
@@ -344,7 +341,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
-    if live_query:
+    if mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
@@ -354,6 +351,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
                        split_positions=True,
+                       materialization_version=mat,
                        select_columns=columns)
 
     syn = []
@@ -371,7 +369,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         df.attrs = {}
 
     # Combine results from batches
-    syn = pd.concat([s for s in syn if not s.empty], axis=0, ignore_index=True)
+    syn = pd.concat(syn, axis=0, ignore_index=True)
 
     # Depending on how queries were batched, we need to drop duplicate synapses
     syn.drop_duplicates('id', inplace=True)
@@ -470,7 +468,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     return syn
 
 
-def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
+def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                     neuropils=None, batch_size=1000, dataset='production',
                     progress=True):
     """Fetch adjacency matrix.
@@ -502,10 +500,13 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
                     not return more than 200_000 connections. If you see a
                     warning that this limit has been exceeded, decrease the
                     batch size!
-    live_query :    bool
-                    Whether to query against the live data or against the latest
-                    materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table.
+    mat :           int | str, optional
+                    Which materialization to query:
+                     - 'auto' (default) tries to find the most recent
+                       materialization version at which all the query IDs existed
+                     - 'latest' uses the latest materialized table
+                     - 'live' queries against the live data - this will be much slower!
+                     - pass an integer (e.g. `447`) to use a specific materialization version
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -521,6 +522,14 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     if isinstance(targets, type(None)):
         targets = sources
 
+    if isinstance(mat, str):
+        if mat not in ('latest', 'live', 'auto'):
+            raise ValueError('`mat` must be "auto", "latest", "live" or '
+                             f'integer, got "{mat}"')
+    elif not isinstance(mat, int):
+        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
+                         f'got "{type(mat)}"')
+
     # Parse root IDs
     sources = parse_root_ids(sources)
     targets = parse_root_ids(targets)
@@ -528,23 +537,17 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
     client = get_cave_client(dataset=dataset)
 
-    # Check if any of these root IDs are outdated
-    if live_query:
-        not_latest = both[~is_latest_root(both, dataset=dataset)]
-        if any(not_latest):
-            print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
-                  'and connectivity might be inaccurrate.')
+    # Check if IDs existed at this materialization
+    if mat == 'latest':
+        mat = client.materialize.version
+
+    if mat == 'auto':
+        mat = _find_mat_version(ids, dataset=dataset)
     else:
-        ts_m = client.materialize.get_timestamp()
-        ts_r = client.chunkedgraph.get_root_timestamps(ids)
-        too_recent = ids[ts_r > ts_m]
-        if any(too_recent):
-            print(f'Root ID(s) {", ".join(too_recent.astype(str))} are more '
-                  'recent than the latest materialization. You can either try '
-                  'mapping these IDs back in time or use `live_query=True`')
+        _check_ids(ids, mat=mat, dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
-    if live_query:
+    if mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
@@ -552,6 +555,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
     else:
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
+                       materialization_version=mat,
                        select_columns=columns)
 
     syn = []
@@ -627,7 +631,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, live_query=True,
 
 def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        upstream=True, downstream=True, transmitters=False,
-                       neuropils=None, batch_size=30, live_query=True,
+                       neuropils=None, batch_size=30, mat='auto',
                        dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
@@ -672,10 +676,13 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     lead to truncated tables: currently individual queries can
                     not return more than 200_000 rows and you will see a warning
                     if that limit is exceeded.
-    live_query :    bool
-                    Whether to query against the live data or against the latest
-                    materialized table. The latter is useful if you are working
-                    with IDs that you got from another annotation table.
+    mat :           int | str, optional
+                    Which materialization to query:
+                     - 'auto' (default) tries to find the most recent
+                       materialization version at which all the query IDs existed
+                     - 'latest' uses the latest materialized table
+                     - 'live' queries against the live data - this will be much slower!
+                     - pass an integer (e.g. `447`) to use a specific materialization version
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -694,32 +701,34 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     if transmitters and style == 'catmaid':
         raise ValueError('`style` must be "simple" when asking for transmitters')
 
+    if isinstance(mat, str):
+        if mat not in ('latest', 'live', 'auto'):
+            raise ValueError('`mat` must be "auto", "latest", "live" or '
+                             f'integer, got "{mat}"')
+    elif not isinstance(mat, int):
+        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
+                         f'got "{type(mat)}"')
+
     # Parse root IDs
     ids = parse_root_ids(x)
 
     client = get_cave_client(dataset=dataset)
 
-    # Check if any of these root IDs are outdated
-    if live_query:
-        not_latest = ids[~is_latest_root(ids, dataset=dataset)]
-        if any(not_latest):
-            print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
-                  'and live connectivity might be inaccurrate.')
+    # Check if IDs existed at this materialization
+    if mat == 'latest':
+        mat = client.materialize.version
+
+    if mat == 'auto':
+        mat = _find_mat_version(ids, dataset=dataset)
     else:
-        ts_m = client.materialize.get_timestamp()
-        ts_r = client.chunkedgraph.get_root_timestamps(ids)
-        too_recent = ids[ts_r > ts_m]
-        if any(too_recent):
-            print(f'Root ID(s) {", ".join(too_recent.astype(str))} are more '
-                  'recent than the latest materialization. You can either try '
-                  'mapping these IDs back in time or use `live_query=True`')
+        _check_ids(ids, mat=mat, dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
 
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
-    if live_query:
+    if mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
@@ -727,6 +736,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     else:
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
+                       materialization_version=mat,
                        select_columns=columns)
 
     syn = []
@@ -744,7 +754,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         df.attrs = {}
 
     # Combine results from batches
-    syn = pd.concat([s for s in syn if not s.empty], axis=0, ignore_index=True)
+    syn = pd.concat(syn, axis=0, ignore_index=True)
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
@@ -808,3 +818,85 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         cn_table['pred_conf'] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
 
     return cn_table
+
+
+def _check_ids(ids, mat, dataset='production'):
+    """Check IDs whether they existed at given materialization.
+
+    Parameters
+    ----------
+    ids :       iterable
+    mat :       "live" | "latest" | int
+
+    Returns
+    -------
+    None
+
+    """
+    client = get_cave_client(dataset=dataset)
+
+    ids = np.asarray(ids)
+
+    # Check if any of these root IDs are outdated
+    if mat == 'live':
+        not_latest = ids[~is_latest_root(ids, dataset=dataset)]
+        if any(not_latest):
+            print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+                  'and live connectivity might be inaccurrate.')
+    else:
+        if mat == 'latest':
+            mat = client.materialize.version
+
+        # Is the root ID more recent than the materialization?
+        ts_m = client.materialize.get_timestamp(mat)
+        ts_r = client.chunkedgraph.get_root_timestamps(ids)
+        too_recent = ids[ts_r > ts_m]
+        if any(too_recent):
+            print('Some root IDs are more recent than materialization '
+                  f'{mat} and synapse/connectivity data will be '
+                  f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
+                  'You can either try mapping these IDs back in time or use'
+                  '`mat="auto"`.')
+
+        # Those that aren't too young might be too old
+        ids = ids[ts_r <= ts_m]
+        if len(ids):
+            # This only checks if these were the up to date roots at the given time
+            # hence it doesn't tell us whether the root is too young or too old
+            # but since we checked the too young roots before we can assume
+            # the roots flagged here are too old
+            not_latest = ids[~client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)]
+            if any(not_latest):
+                print('Some root IDs were already outdated at materialization '
+                      f'{mat} and synapse/connectivity data will be '
+                      f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
+                      'Try updating the root IDs using `flywire.update_ids` '
+                      'or `flywire.supervoxels_to_roots` if you have supervoxel IDs,'
+                      ' or pick a different materialization version.')
+
+
+def _find_mat_version(ids, dataset='production'):
+    """Find a materialization version (or live) for given IDs."""
+    ids = np.asarray(ids)
+
+    client = get_cave_client(dataset=dataset)
+
+    # Go over each version (start with the most recent)
+    for i, version in enumerate(client.materialize.get_versions()[::-1]):
+        ts_m = client.materialize.get_timestamp(version)
+
+        # Check which root IDs were valid at the time
+        is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
+
+        if all(is_valid):
+            print(f'Using materialization version {version}')
+            return version
+
+    # If no version found, see if we can get by with the live version
+    if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
+        print(f'Using live materialization')
+        return 'live'
+
+    raise ValueError('Given root IDs could not be mapped to a common '
+                     'materialization version (including live). Try updating '
+                     'roots to a single timestamp and rerun your query.')
