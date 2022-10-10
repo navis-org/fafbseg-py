@@ -542,9 +542,9 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         mat = client.materialize.version
 
     if mat == 'auto':
-        mat = _find_mat_version(ids, dataset=dataset)
+        mat = _find_mat_version(both, dataset=dataset)
     else:
-        _check_ids(ids, mat=mat, dataset=dataset)
+        _check_ids(both, mat=mat, dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
     if mat == 'live':
