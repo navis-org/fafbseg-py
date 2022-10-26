@@ -82,7 +82,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
                                                  total=len(root_ids),
                                                  disable=not progress or len(root_ids) == 1,
                                                  leave=False)]
-        return pd.concat(info, axis=0)
+        return pd.concat(info, axis=0).reset_index(drop=True)
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
