@@ -25,8 +25,9 @@ from tqdm.auto import trange
 
 from .segmentation import (is_latest_root, fetch_edit_history,
                            get_lineage_graph, roots_to_supervoxels)
-from .utils import parse_root_ids, get_cave_client, retry, get_synapse_areas
-from .annotations import get_materialization_versions
+from .utils import (parse_root_ids, get_cave_client, retry, get_synapse_areas,
+                    find_mat_version)
+from .annotations import get_materialization_versions, is_proofread
 
 from ..utils import make_iterable
 from ..synapses.utils import catmaid_table
@@ -209,7 +210,8 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
             syn = syn[~syn.neuropil.isin(filter_out)]
 
         # Avoid setting-on-copy warning
-        syn = syn.copy()
+        if syn._is_view:
+            syn = syn.copy()
 
     # Process the predictions
     return collapse_nt_predictions(syn, single_pred=single_pred,
@@ -331,7 +333,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         mat = client.materialize.version
 
     if mat == 'auto':
-        mat = _find_mat_version(ids, dataset=dataset)
+        mat = find_mat_version(ids, dataset=dataset)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
@@ -406,7 +408,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         syn = syn[(syn.pre != 0) & (syn.post != 0)]
 
     # Avoid copy warning
-    syn = syn.copy()
+    if syn._is_view:
+        syn = syn.copy()
 
     if neuropils:
         syn['neuropil'] = get_synapse_areas(syn['id'].values)
@@ -542,11 +545,15 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         mat = client.materialize.version
 
     if mat == 'auto':
-        mat = _find_mat_version(both, dataset=dataset)
+        mat = find_mat_version(both, dataset=dataset)
     else:
         _check_ids(both, mat=mat, dataset=dataset)
 
     columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
+
+    if not isinstance(neuropils, type(None)):
+        columns.append('id')
+
     if mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
@@ -605,7 +612,8 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
             if filter_out:
                 syn = syn[~syn.neuropil.isin(filter_out)]
 
-            syn = syn.copy()
+            if syn._is_view:
+                syn = syn.copy()
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
@@ -630,9 +638,9 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
 
 
 def fetch_connectivity(x, clean=True, style='simple', min_score=30,
-                       upstream=True, downstream=True, transmitters=False,
-                       neuropils=None, batch_size=30, mat='auto',
-                       dataset='production', progress=True):
+                       upstream=True, downstream=True, proofread_only=False,
+                       transmitters=False, neuropils=None, batch_size=30,
+                       mat='auto', dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
     Parameters
@@ -657,6 +665,8 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     Whether to fetch upstream connectivity of ```x``.
     downstream :    bool
                     Whether to fetch downstream connectivity of ```x``.
+    proofread_only: bool
+                    Whether to filter out root IDs that have not been proofread.
     transmitters :  bool
                     If True, will attach the best guess for the transmitter
                     for a given connection based on the predictions in Eckstein
@@ -719,11 +729,11 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         mat = client.materialize.version
 
     if mat == 'auto':
-        mat = _find_mat_version(ids, dataset=dataset)
+        mat = find_mat_version(ids, dataset=dataset)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
-    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
+    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score', 'id']
 
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
@@ -756,6 +766,9 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
+    # Depending on how queries were batched, we need to drop duplicate synapses
+    syn.drop_duplicates('id', inplace=True)
+
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
         neuropils = make_iterable(neuropils)
@@ -771,8 +784,6 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                 syn = syn[syn.neuropil.isin(filter_in)]
             if filter_out:
                 syn = syn[~syn.neuropil.isin(filter_out)]
-
-            syn = syn.copy()
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
@@ -800,6 +811,16 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     # Turn into connectivity table
     cn_table = syn.groupby(['pre', 'post'], as_index=False).size().rename({'size': 'weight'}, axis=1)
 
+    # Filter to proofread neurons only
+    if proofread_only:
+        all_ids = np.unique(cn_table[['pre', 'post']].values.flatten())
+        is_pr = all_ids[is_proofread(all_ids, materialization=mat)]
+
+        # Make sure we don't drop our query neurons
+        is_pr = np.append(is_pr, ids)
+
+        cn_table = cn_table[cn_table.pre.isin(is_pr) & cn_table.post.isin(is_pr)]
+
     # Style
     if style == 'catmaid':
         cn_table = catmaid_table(cn_table, query_ids=ids)
@@ -808,9 +829,6 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         cn_table.reset_index(drop=True, inplace=True)
 
     if transmitters:
-        # Avoid copy warning
-        syn = syn.copy()
-
         # Generate per-neuron predictions
         pred = collapse_nt_predictions(syn, single_pred=True, id_col='pre')
 
@@ -873,30 +891,3 @@ def _check_ids(ids, mat, dataset='production'):
                       'Try updating the root IDs using `flywire.update_ids` '
                       'or `flywire.supervoxels_to_roots` if you have supervoxel IDs,'
                       ' or pick a different materialization version.')
-
-
-def _find_mat_version(ids, dataset='production'):
-    """Find a materialization version (or live) for given IDs."""
-    ids = np.asarray(ids)
-
-    client = get_cave_client(dataset=dataset)
-
-    # Go over each version (start with the most recent)
-    for i, version in enumerate(client.materialize.get_versions()[::-1]):
-        ts_m = client.materialize.get_timestamp(version)
-
-        # Check which root IDs were valid at the time
-        is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
-
-        if all(is_valid):
-            print(f'Using materialization version {version}')
-            return version
-
-    # If no version found, see if we can get by with the live version
-    if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
-        print(f'Using live materialization')
-        return 'live'
-
-    raise ValueError('Given root IDs could not be mapped to a common '
-                     'materialization version (including live). Try updating '
-                     'roots to a single timestamp and rerun your query.')

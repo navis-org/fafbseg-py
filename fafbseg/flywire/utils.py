@@ -469,7 +469,7 @@ def get_lr_position(x, coordinates='nm'):
                           'Please update:\n pip3 install flybrains -U')
 
     navis.utils.eval_param(coordinates, name='coordinates',
-                           allowed_values=('nm', 'nanometers', 'nanometers',
+                           allowed_values=('nm', 'nanometer', 'nanometers',
                                            'voxel', 'voxels'))
 
     if navis.utils.is_iterable(x):
@@ -499,3 +499,32 @@ def get_lr_position(x, coordinates='nm'):
     m = navis.mirror_brain(x, template='FLYWIRE')
 
     return (m[:, 0] - x[:, 0]) / 2
+
+
+def find_mat_version(ids, verbose=True, dataset='production'):
+    """Find a materialization version (or live) for given IDs."""
+    ids = np.asarray(ids)
+
+    client = get_cave_client(dataset=dataset)
+
+    # Go over each version (start with the most recent)
+    for i, version in enumerate(sorted(client.materialize.get_versions(), reverse=True)):
+        ts_m = client.materialize.get_timestamp(version)
+
+        # Check which root IDs were valid at the time
+        is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
+
+        if all(is_valid):
+            if verbose:
+                print(f'Using materialization version {version}')
+            return version
+
+    # If no version found, see if we can get by with the live version
+    if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
+        if verbose:
+            print(f'Using live materialization')
+        return 'live'
+
+    raise ValueError('Given root IDs could not be mapped to a common '
+                     'materialization version (including live). Try updating '
+                     'roots to a single timestamp and rerun your query.')

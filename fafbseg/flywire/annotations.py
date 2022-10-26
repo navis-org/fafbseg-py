@@ -28,7 +28,7 @@ import pandas as pd
 from requests_futures.sessions import FuturesSession
 
 from ..utils import make_iterable
-from .utils import get_cave_client, retry, get_chunkedgraph_secret
+from .utils import get_cave_client, retry, get_chunkedgraph_secret, find_mat_version
 from .segmentation import (locs_to_segments, supervoxels_to_roots, is_latest_root,
                            update_ids)
 
@@ -40,28 +40,28 @@ __all__ = ['get_somas', 'get_materialization_versions',
            'is_proofread', 'find_celltypes', 'list_annotation_tables']
 
 
-PR_TABLE = None
-PR_META = None
+PR_TABLE = {}
 ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_table = None
 
 
-def is_proofread(x, cache=True, validate=True):
+def is_proofread(x, materialization='latest', cache=True, validate=True):
     """Test if neuron has been set to `proofread`.
-
-    Under the hood, this uses a cached version of the proofreading table which
-    is updated everytime this function gets called.
 
     Parameters
     ----------
     x  :            int | list of int
                     Root IDs to check.
+    materialization : "latest" | "live" | "auto" | int
+                    Which materialization to check. If "latest" will use the
+                    latest available one in the cave client.
     validate :      bool
                     Whether to validate IDs.
     cache :         bool
                     Use and update a locally cached version of the proofreading
                     table. Setting this to ``False`` will force fetching the
-                    full table which is considerably slower.
+                    full table which is considerably slower. Does not apply
+                    if `materialization='live'`.
 
     Returns
     -------
@@ -69,7 +69,7 @@ def is_proofread(x, cache=True, validate=True):
                     Boolean array.
 
     """
-    global PR_TABLE, PR_META
+    global PR_TABLE
 
     if not isinstance(x, (np.ndarray, set, list, pd.Series)):
         x = [x]
@@ -80,51 +80,35 @@ def is_proofread(x, cache=True, validate=True):
     # Check if any of the roots are outdated -> can't check those
     if validate:
         il = is_latest_root(x)
-        if any(~il):
+        if any(~il) and materialization == 'live':
             print("At least some root ID(s) outdated and will therefore show up as "
                   f"not proofread: {x[~il]}")
 
     # Get available materialization versions
     client = get_cave_client('production')
-    mat_versions = client.materialize.get_versions()
 
-    # Check if the cached version is outdated
-    if cache and PR_META:
-        if max(mat_versions) > PR_META['mat_version']:
-            PR_TABLE = None
-            PR_META = None
+    if materialization == 'latest':
+        mat_versions = client.materialize.get_versions()
+        materialization = max(mat_versions)
+    elif materialization == 'auto':
+        materialization = find_mat_version(x, dataset='production')
 
-    # If nothing cached catch the table from scratch
-    if isinstance(PR_TABLE, type(None)) or not cache:
-        # This ought to automatically use the most recent materialization version
-        PR_META = dict(timestamp=dt.datetime.utcnow(),
-                       mat_version=max(mat_versions))
-        PR_TABLE = client.materialize.live_query(table='proofreading_status_public_v1',
-                                                 timestamp=PR_META['timestamp'])
-        # Only keep relevant rows and columns
-        PR_TABLE = PR_TABLE.loc[PR_TABLE.valid == 't', ['pt_supervoxel_id', 'pt_root_id']]
-    else:
-        # Update root IDs
-        now = dt.datetime.utcnow()
-        # get_delta_roots currently acts up if there are no new roots
-        # (i.e. if this gets called in quick succession)
-        try:
-            old_roots, _ = client.chunkedgraph.get_delta_roots(PR_META['timestamp'], now)
-        except requests.exceptions.HTTPError as e:
-            if "need at least one array" in str(e):
-                old_roots = []
+    if materialization == 'live':
+        # For live materialization only do on-the-run queries
+        table = client.materialize.live_query(table='proofreading_status_public_v1',
+                                              filter_in_dict=dict(pt_root_id=x))
+    elif isinstance(materialization, int):
+        if cache:
+            if materialization in PR_TABLE:
+                table = PR_TABLE[materialization]
             else:
-                raise
-        except BaseException:
-            raise
+                table = client.materialize.query_table(table='proofreading_status_public_v1')
+                PR_TABLE[materialization] = table
+        else:
+            table = client.materialize.query_table(table='proofreading_status_public_v1',
+                                                   filter_in_dict=dict(pt_root_id=x))
 
-        to_update = PR_TABLE.pt_root_id.isin(old_roots)
-        if any(to_update):
-            new_roots = supervoxels_to_roots(PR_TABLE.loc[to_update, 'pt_supervoxel_id'].values)
-            PR_TABLE.loc[to_update, 'pt_root_id'] = new_roots
-        PR_META['timestamp'] = now
-
-    return np.isin(x, PR_TABLE.pt_root_id.values)
+    return np.isin(x, table.pt_root_id.values)
 
 
 @retry
