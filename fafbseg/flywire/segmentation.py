@@ -82,7 +82,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
     networkx.DiGraph
 
     """
-    x = np.int64(x)
+    x = np.uint64(x)
 
     client = get_cave_client(dataset=dataset)
     G = client.chunkedgraph.get_lineage_graph(x, as_nx_graph=True)
@@ -452,7 +452,7 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
 
     if isinstance(timestamp, str) and timestamp.startswith('mat'):
         client = get_cave_client(dataset=dataset)
-        if timestamp == 'mat':
+        if timestamp == 'mat' or timestamp == 'mat_latest':
             timestamp = client.materialize.get_timestamp()
         else:
             # Split e.g. 'mat_432' to extract version and query timestamp
