@@ -549,10 +549,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
     else:
         _check_ids(both, mat=mat, dataset=dataset)
 
-    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score']
-
-    if not isinstance(neuropils, type(None)):
-        columns.append('id')
+    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score', 'id']
 
     if mat == 'live':
         func = partial(retry(client.materialize.live_query),
