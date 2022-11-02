@@ -481,7 +481,7 @@ def decode_url(url, ret='brief'):
     if ret == 'brief':
         seg_layers = [l for l in scene['layers'] if l.get('type') == 'segmentation_with_graph']
         an_layers = [l for l in scene['layers'] if l.get('type') == 'annotation']
-        return {'position': scene['navigation']['pose']['position']['voxelCoordinates'],
+        return {'position': scene['navigation']['pose']['position'].get('voxelCoordinates', None),
                 'annotations': [a for l in an_layers for a in l.get('annotations', [])],
                 'selected': [s for l in seg_layers for s in l.get('segments', [])]}
 
