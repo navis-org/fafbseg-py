@@ -854,7 +854,7 @@ def _check_ids(ids, mat, dataset='production'):
 
     ids = np.asarray(ids)
 
-    _is_latest_roots = retry(client.is_latest_roots)
+    _is_latest_roots = retry(client.chunkedgraph.is_latest_roots)
     _get_timestamp = retry(client.materialize.get_timestamp)
     _get_root_timestamps = retry(client.chunkedgraph.get_root_timestamps)
 
