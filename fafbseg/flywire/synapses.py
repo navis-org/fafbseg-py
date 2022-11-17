@@ -854,9 +854,13 @@ def _check_ids(ids, mat, dataset='production'):
 
     ids = np.asarray(ids)
 
+    _is_latest_roots = retry(client.is_latest_roots)
+    _get_timestamp = retry(client.materialize.get_timestamp)
+    _get_root_timestamps = retry(client.chunkedgraph.get_root_timestamps)
+
     # Check if any of these root IDs are outdated
     if mat == 'live':
-        not_latest = ids[~is_latest_root(ids, dataset=dataset)]
+        not_latest = ids[~_is_latest_root(ids, dataset=dataset)]
         if any(not_latest):
             print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
                   'and live connectivity might be inaccurrate.')
@@ -865,8 +869,8 @@ def _check_ids(ids, mat, dataset='production'):
             mat = client.materialize.version
 
         # Is the root ID more recent than the materialization?
-        ts_m = client.materialize.get_timestamp(mat)
-        ts_r = client.chunkedgraph.get_root_timestamps(ids)
+        ts_m = _get_timestamp(mat)
+        ts_r = _get_root_timestamps(ids)
         too_recent = ids[ts_r > ts_m]
         if any(too_recent):
             print('Some root IDs are more recent than materialization '
@@ -882,7 +886,7 @@ def _check_ids(ids, mat, dataset='production'):
             # hence it doesn't tell us whether the root is too young or too old
             # but since we checked the too young roots before we can assume
             # the roots flagged here are too old
-            not_latest = ids[~client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)]
+            not_latest = ids[~_is_latest_roots(ids, timestamp=ts_m)]
             if any(not_latest):
                 print('Some root IDs were already outdated at materialization '
                       f'{mat} and synapse/connectivity data will be '
