@@ -214,8 +214,10 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
             syn = syn.copy()
 
     # Process the predictions
-    return collapse_nt_predictions(syn, single_pred=single_pred,
+    pred = collapse_nt_predictions(syn, single_pred=single_pred,
                                    weighted=weighted, id_col='pre')
+
+    return pred.reindex(make_iterable(x), axis=1)
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,

@@ -92,6 +92,8 @@ def collapse_nt_predictions(pred, single_pred=False, weighted=True, id_col=None)
                        ...
 
     """
+    if pred.empty:
+        return pd.DataFrame(None, index=trans)
 
     if id_col is not None:
         # Collapse predictions for every unique value of id_col
