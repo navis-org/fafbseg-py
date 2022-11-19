@@ -102,11 +102,13 @@ def is_proofread(x, materialization='latest', cache=True, validate=True):
             if materialization in PR_TABLE:
                 table = PR_TABLE[materialization]
             else:
-                table = client.materialize.query_table(table='proofreading_status_public_v1')
+                table = client.materialize.query_table(table='proofreading_status_public_v1',
+                                                       materialization_version=materialization)
                 PR_TABLE[materialization] = table
         else:
             table = client.materialize.query_table(table='proofreading_status_public_v1',
-                                                   filter_in_dict=dict(pt_root_id=x))
+                                                   filter_in_dict=dict(pt_root_id=x),
+                                                   materialization_version=materialization)
 
     return np.isin(x, table.pt_root_id.values)
 
