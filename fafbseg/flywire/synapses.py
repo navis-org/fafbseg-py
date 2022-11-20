@@ -470,6 +470,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
             n.connectors = connectors
 
+    syn.attrs['materialization'] = mat
+
     return syn
 
 
@@ -816,9 +818,9 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         is_pr = all_ids[is_proofread(all_ids, materialization=mat)]
 
         # Make sure we don't drop our query neurons
-        is_pr = np.append(is_pr, ids)
+        keep = np.append(is_pr, ids)
 
-        cn_table = cn_table[cn_table.pre.isin(is_pr) & cn_table.post.isin(is_pr)]
+        cn_table = cn_table[cn_table.pre.isin(keep) & cn_table.post.isin(keep)]
 
     # Style
     if style == 'catmaid':
@@ -833,6 +835,8 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
 
         cn_table['pred_nt'] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
         cn_table['pred_conf'] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
+
+    cn_table.attrs['materialization'] = mat
 
     return cn_table
 
