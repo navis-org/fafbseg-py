@@ -332,7 +332,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
     # Check if IDs existed at this materialization
     if mat == 'latest':
-        mat = client.materialize.version
+        mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
         mat = find_mat_version(ids, dataset=dataset)
@@ -546,7 +546,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
 
     # Check if IDs existed at this materialization
     if mat == 'latest':
-        mat = client.materialize.version
+        mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
         mat = find_mat_version(both, dataset=dataset)
@@ -727,7 +727,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
 
     # Check if IDs existed at this materialization
     if mat == 'latest':
-        mat = client.materialize.version
+        mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
         mat = find_mat_version(ids, dataset=dataset)
@@ -870,7 +870,7 @@ def _check_ids(ids, mat, dataset='production'):
                   'and live connectivity might be inaccurrate.')
     else:
         if mat == 'latest':
-            mat = client.materialize.version
+            mat = client.materialize.most_recent_version()
 
         # Is the root ID more recent than the materialization?
         ts_m = _get_timestamp(mat)

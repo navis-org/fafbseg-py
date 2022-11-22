@@ -373,7 +373,7 @@ def get_annotations(table_name: str,
                           **filters)
     elif materialization:
         if materialization == 'latest':
-            materialization = get_materialization_versions(dataset=dataset).version.max()
+            materialization = client.materialize.most_recent_version()
 
         query_table = retry(client.materialize.query_table)
         data = query_table(materialization_version=materialization,
