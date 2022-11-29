@@ -65,6 +65,7 @@ Misc:
     fafbseg.flywire.get_neuropil_volumes
     fafbseg.flywire.get_lineage_graph
     fafbseg.flywire.get_lr_position
+    fafbseg.flywire.get_voxels
 
 For interaction with the annotation/materialization engine:
 
@@ -78,6 +79,7 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
+    fafbseg.find_celltypes
 
 Google segmentation
 -------------------
