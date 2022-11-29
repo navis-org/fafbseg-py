@@ -79,7 +79,7 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
-    fafbseg.find_celltypes
+    fafbseg.flywire.find_celltypes
 
 Google segmentation
 -------------------
