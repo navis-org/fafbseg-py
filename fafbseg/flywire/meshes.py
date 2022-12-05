@@ -18,6 +18,7 @@ import navis
 import numpy as np
 import skeletor as sk
 import trimesh as tm
+import cloudvolume as cv
 
 from cloudvolume.mesh import Mesh
 from collections import defaultdict
@@ -131,6 +132,126 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=2,
     if with_synapses:
         _ = fetch_synapses(n, attach=True, min_score=30, dataset=dataset,
                            progress=False)
+
+    return n
+
+
+def get_mesh_neuron_flat(id, lod=3, with_synapses=False, omit_failures=None,
+                         threads=10, progress=True):
+    """Fetch FlyWire neuron as navis.MeshNeuron.
+
+    This uses the flat segmentation for materialization 526.
+
+
+    Parameters
+    ----------
+    id  :               int | list of int
+                        Segment ID(s) to fetch meshes for. Currently, the root
+                        IDs must have existed at materialization 526.
+    lod :               int [0-3]
+                        Level-of-detail; higher = lower resolution. Note that not
+                        all meshes are available at the lowest resolution (lod 3).
+                        If that happens, we will automatically try to fetch the
+                        next lowest one.
+    with_synapses :     bool
+                        If True, will also load a connector table with
+                        synapse predicted by Buhmann et al. (2020).
+                        A "synapse score" (confidence) threshold of 30 is
+                        applied.
+    omit_failures :     bool, optional
+                        Determine behaviour when mesh download fails
+                        (e.g. if there is no mesh):
+                         - ``None`` (default) will raise an exception
+                         - ``True`` will skip the offending neuron (might result
+                           in an empty ``NeuronList``)
+                         - ``False`` will return an empty ``MeshNeuron``
+    threads :           bool | int, optional
+                        Whether to use threads to fetch meshes in parallel.
+
+    Return
+    ------
+    navis.MeshNeuron
+
+    """
+    if omit_failures not in (None, True, False):
+        raise ValueError('`omit_failures` must be either None, True or False. '
+                         f'Got "{omit_failures}".')
+
+    vol = cv.CloudVolume('precomputed://gs://flywire_v141_m526',
+                         use_https=True, parallel=False,
+                         progress=False, cache=False)
+
+    if navis.utils.is_iterable(id):
+        id = np.asarray(id, dtype=np.int64)
+        if 0 in id:
+            raise ValueError('Root ID 0 among the queried IDs')
+
+        if not threads or threads == 1:
+            return navis.NeuronList([get_mesh_neuron_flat(n,
+                                                          lod=lod,
+                                                          omit_failures=omit_failures,
+                                                          with_synapses=with_synapses)
+                                     for n in navis.config.tqdm(id,
+                                                                desc='Fetching',
+                                                                disable=not progress,
+                                                                leave=False)])
+        else:
+            if not isinstance(threads, int):
+                raise TypeError(f'`threads` must be int or `None`, got "{type(threads)}".')
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = {executor.submit(get_mesh_neuron_flat, n,
+                                           lod=lod,
+                                           omit_failures=omit_failures,
+                                           threads=None,  # no need for threads in inner function
+                                           with_synapses=with_synapses): n for n in id}
+
+                results = []
+                for f in navis.config.tqdm(as_completed(futures),
+                                           total=len(futures),
+                                           desc='Fetching',
+                                           disable=not progress,
+                                           leave=False):
+                    results.append(f.result())
+            return navis.NeuronList(results)
+
+    # Make sure the ID is integer
+    id = np.int64(id)
+
+    # Fetch mesh
+    try:
+        old_parallel = vol.parallel  # note: this seems to be reset by cloudvolume
+        vol.parallel = threads if threads else old_parallel
+        lod_ = lod
+        while lod >= 0:
+            try:
+                mesh = vol.mesh.get(id, lod=lod_)[id]
+                break
+            except cv.exceptions.MeshDecodeError:
+                lod_ -= 1
+            except BaseException:
+                if omit_failures == None:
+                    raise
+                elif omit_failures:
+                    return navis.NeuronList([])
+                # If no omission, return empty MeshNeuron
+                else:
+                    return navis.MeshNeuron(None, id=id, units='1 nm', **kwargs)
+        if lod_ <= 0:
+            if omit_failures == None:
+                raise BaseException(f'No neuron with root id {id} found.')
+            elif omit_failures:
+                return navis.NeuronList([])
+            # If no omission, return empty MeshNeuron
+            else:
+                return navis.MeshNeuron(None, id=id, units='1 nm',  **kwargs)
+    finally:
+        vol.parallel = old_parallel
+
+    # Turn into meshneuron
+    n = navis.MeshNeuron(mesh, id=id, units='nm', lod=lod_)
+
+    if with_synapses:
+        _ = fetch_synapses(n, attach=True, min_score=30, mat=526, progress=False)
 
     return n
 
