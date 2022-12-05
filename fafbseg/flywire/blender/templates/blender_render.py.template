@@ -1,0 +1,133 @@
+import bpy
+import os
+
+
+def set_color(name, c):
+    ob = bpy.data.objects[name]
+    mat = bpy.data.materials.new(name='')
+    ob.active_material = mat
+    ob.active_material.diffuse_color = c
+
+    if "$STYLE" == 'eevee':
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes["Principled BSDF"]
+
+        # Diffuse color
+        bsdf.inputs[0].default_value = (c[0], c[1], c[2], 1)
+
+        # This sets up subsurface scattering
+        #bsdf.inputs[1].default_value = 1
+        #bsdf.inputs[3].default_value = (c[0], c[1], c[2], 1)
+        # For eevee we have to use proper materials to get transparency
+        if c[3] < 1:
+            bsdf.inputs[21].default_value = c[3]
+            mat.blend_method = 'BLEND'
+            mat.shadow_method = 'NONE'
+
+
+if __name__ == '__main__':
+    # clear scene of default box
+    bpy.ops.wm.read_homefile()
+    try:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    except BaseException:
+        pass
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=True)
+
+    # get temporary files from templated locations
+    mesh_files = $MESH_FILES
+
+    for i, filename in enumerate(mesh_files):  # use data.objects instead of context.scene.objects
+        print(f'Importing mesh {i + 1} of {len(mesh_files)}: {filename}')
+        bpy.ops.import_scene.gltf(filepath=os.path.abspath(filename),
+                                  import_pack_images=False,
+                                  import_shading='SMOOTH',
+                                  guess_original_bind_pose=False)
+
+    for ob in bpy.data.objects:
+        if 'world' in ob.name:
+            continue
+        ob.scale = (1/10_000, 1/10_000, 1/10_000)
+        if ob.type == 'MESH':
+            mesh = ob.data
+            values = [True] * len(mesh.polygons)
+            mesh.polygons.foreach_set("use_smooth", values)
+
+    # Note that for some unknown reason this has to come after loading the meshes
+    bpy.data.scenes["Scene"].render.film_transparent = True
+    bpy.data.scenes["Scene"].render.resolution_percentage = $RESOLUTION_PERC
+    if "$STYLE" == 'workbench':
+        bpy.context.scene.render.engine = 'BLENDER_WORKBENCH'
+        bpy.data.scenes["Scene"].display.shading.show_cavity = True
+        bpy.data.scenes["Scene"].display.shading.cavity_ridge_factor = 2.5
+        bpy.data.scenes["Scene"].display.shading.cavity_valley_factor = 2.5
+        #bpy.data.scenes["Scene"].display.shading.show_shadows = True
+        #bpy.data.scenes["Scene"].display.shading.shadow_intensity = .5
+        bpy.data.scenes["Scene"].display.shading.light = 'MATCAP'
+        bpy.data.scenes["Scene"].display.shading.studio_light = 'ceramic_lightbulb.exr'
+        bpy.data.scenes["Scene"].display.shading.show_object_outline = True
+    elif "$STYLE" == 'eevee':
+        bpy.context.scene.eevee.taa_render_samples = $SAMPLES
+        bpy.ops.object.light_add(type='SUN',
+                                 align='WORLD',
+                                 location=(34.79918670654297, 9.324756622314453, 7.474506378173828),
+                                 scale=(1, 1, 1))
+        l = bpy.data.objects['Sun']
+        l.rotation_euler = (3.828986167907715, -0.04730623587965965, 0.9500978589057922)
+        l.data.energy = 2
+        l.data.angle = 1  # lower = sharper shadows
+
+    colors = $COLORS
+    if colors:
+        for i, c in enumerate(colors):
+            set_color(f'mesh_{i}', c)
+
+    if 'neuropil' in bpy.data.objects:
+        set_color(f'neuropil', (0.9, 0.9, 0.9, 0.1))
+
+    # Add camera
+    bpy.ops.object.camera_add(enter_editmode=False,
+                              align='VIEW',
+                              location=(53.0392951965332, 77.42987060546875, 23.135988235473633),
+                              rotation=(4.71238899230957, -0.0, 0.),
+                              scale=(1, 1, 1))
+    bpy.data.scenes['Scene'].camera = bpy.data.objects['Camera']
+
+    if $SAVE:
+        filepath = "$FILEPATH"
+        print(f'Saving file to "{filepath}"')
+        bpy.ops.wm.save_as_mainfile(filepath=filepath)
+
+    imagepath = "$IMAGEPATH"
+    if $RENDER:
+        for view in $VIEWS:
+            c = bpy.data.objects['Camera']
+            if view == 'lateral':
+                # Set camera to lateral
+                c.rotation_euler = (4.675978660583496, 1.5911912898403102e-09, 1.659862995147705)
+                c.location = (-63.90861129760742, -21.566360473632812, 19.48180389404297)
+                c.data.type = 'ORTHO'
+                c.data.ortho_scale = 62
+
+                if "neuropil" in bpy.data.objects:
+                    mat = bpy.data.objects['neuropil'].active_material
+                    if "$STYLE" == 'eevee':
+                        mat.show_transparent_back = True
+                        mat.use_backface_culling = True
+            else:
+                c.rotation_euler = (4.71238899230957, -0.0, 0.)
+                c.location = (53.0392951965332, 77.42987060546875, 23.135988235473633)
+                c.data.type = 'PERSP'
+
+                if "neuropil" in bpy.data.objects:
+                    mat = bpy.data.objects['neuropil'].active_material
+                    if "$STYLE" == 'eevee':
+                        mat.show_transparent_back = True
+                        mat.use_backface_culling = False
+
+            path = '.'.join(imagepath.split('.')[:-1])
+            ext = imagepath.split('.')[-1]
+            bpy.context.scene.render.filepath = f'{path}_{view}.{ext}'
+            print(f'Rendering and saving image to "{bpy.context.scene.render.filepath}"')
+            bpy.ops.render.render(write_still=True)
