@@ -225,7 +225,8 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     return df.loc[df.sum(axis=1).sort_values(ascending=False).index]
 
 
-def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
+def fetch_edit_history(x, dataset='production', progress=True, errors='raise',
+                       max_threads=4):
     """Fetch edit history for given neuron(s).
 
     Note that neurons that haven't seen any edits will simply not show up in
@@ -294,7 +295,15 @@ def fetch_edit_history(x, dataset='production', progress=True, max_threads=4):
             if 'Read timed out' in r.json().get('message', ''):
                 continue
 
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except BaseException:
+            if errors == 'raise':
+                raise
+            else:
+                print(f'Error fetching logs for {i}')
+                continue            
+
         this_df = pd.DataFrame(r.json())
         this_df['segment'] = i
         df.append(this_df)
