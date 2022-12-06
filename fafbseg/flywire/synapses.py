@@ -864,7 +864,7 @@ def _check_ids(ids, mat, dataset='production'):
 
     # Check if any of these root IDs are outdated
     if mat == 'live':
-        not_latest = ids[~_is_latest_root(ids, dataset=dataset)]
+        not_latest = ids[~_is_latest_roots(ids, dataset=dataset)]
         if any(not_latest):
             print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
                   'and live connectivity might be inaccurrate.')
