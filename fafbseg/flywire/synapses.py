@@ -88,7 +88,7 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto',
 
     """
     # Parse root IDs
-    ids = parse_root_ids(x)
+    ids = parse_root_ids(x).astype(np.int64)
 
     # First get the synapses
     syn = fetch_synapses(x, pre=True, post=True, attach=False,
@@ -217,7 +217,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
     pred = collapse_nt_predictions(syn, single_pred=single_pred,
                                    weighted=weighted, id_col='pre')
 
-    return pred.reindex(make_iterable(x).astype(int), axis=1)
+    return pred.reindex(make_iterable(x).astype(np.int64), axis=1)
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
@@ -325,7 +325,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                          f'got "{type(mat)}"')
 
     # Parse root IDs
-    ids = parse_root_ids(x)
+    ids = parse_root_ids(x).astype(np.int64)
 
     # Get the cave client
     client = get_cave_client(dataset=dataset)
@@ -538,8 +538,8 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                          f'got "{type(mat)}"')
 
     # Parse root IDs
-    sources = parse_root_ids(sources)
-    targets = parse_root_ids(targets)
+    sources = parse_root_ids(sources).astype(np.int64)
+    targets = parse_root_ids(targets).astype(np.int64)
     both = np.unique(np.append(sources, targets))
 
     client = get_cave_client(dataset=dataset)
@@ -668,6 +668,8 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     Whether to fetch downstream connectivity of ```x``.
     proofread_only: bool
                     Whether to filter out root IDs that have not been proofread.
+                    Query IDs (i.e. `x`) will never be excluded regardless of
+                    proofreading status!
     transmitters :  bool
                     If True, will attach the best guess for the transmitter
                     for a given connection based on the predictions in Eckstein
