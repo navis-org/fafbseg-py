@@ -180,7 +180,7 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     >>> hist.T.plot()
 
     """
-    assert isinstance(days, (int, np.int))
+    assert isinstance(days, (int, np.integer))
     assert days >= 0
 
     session = requests.Session()
@@ -302,7 +302,7 @@ def fetch_edit_history(x, dataset='production', progress=True, errors='raise',
                 raise
             else:
                 print(f'Error fetching logs for {i}')
-                continue            
+                continue
 
         this_df = pd.DataFrame(r.json())
         this_df['segment'] = i

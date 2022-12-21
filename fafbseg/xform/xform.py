@@ -61,7 +61,7 @@ class SpineTransform(BaseTransform):
         assert isinstance(fw_dataset, str)
         assert isinstance(inv_dataset, str)
         assert direction in ('forward', 'inverse')
-        assert isinstance(mip, (int, np.int))
+        assert isinstance(mip, (int, np.integer))
         assert coordinates in ('voxels', 'nanometers')
         assert on_fail in ('warn', 'ignore', 'raise')
 

@@ -291,7 +291,7 @@ class SynapseService(SpineService):
         dict
 
         """
-        assert isinstance(synapse_id, (int, np.int, str))
+        assert isinstance(synapse_id, (int, np.integer, str))
 
         self.validate_collection(collection)
 
@@ -393,7 +393,7 @@ class TransformService(SpineService):
 
     def validate_mip(self, mip, dataset):
         """Validate mip for given dataset."""
-        assert isinstance(mip, (int, np.int))
+        assert isinstance(mip, (int, np.integer))
         if mip < 0:
             available_scales = sorted(self.info[dataset]['scales'])
             mip = available_scales[-mip - 1]
@@ -675,7 +675,7 @@ def query_spine_transform(x, dataset, query, coordinates='nm', mip=2,
                            'nanometer', 'nanometers',
                            'nanometre', 'nanometres',
                            'vxl', 'voxel', 'voxels']
-    assert isinstance(mip, (int, np.int))
+    assert isinstance(mip, (int, np.integer))
 
     if mip < 0:
         available_scales = sorted(TRANSFORM_SERVICE_INFO[dataset]['scales'])

@@ -99,7 +99,7 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
         for n in overlaps.columns:
             this = overlaps[overlaps[n] > 0][n]
             ids.update(dict(zip(this.index.values, [n] * this.shape[0])))
-    elif isinstance(x, (int, np.int)):
+    elif isinstance(x, (int, np.integer)):
         ids = {x: x}
     else:
         ids = {n: n for n in utils.make_iterable(x)}
