@@ -222,7 +222,7 @@ def get_mesh_neuron_flat(id, lod=3, with_synapses=False, omit_failures=None,
         old_parallel = vol.parallel  # note: this seems to be reset by cloudvolume
         vol.parallel = threads if threads else old_parallel
         lod_ = lod
-        while lod >= 0:
+        while lod_ >= 0:
             try:
                 mesh = vol.mesh.get(id, lod=lod_)[id]
                 break
