@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from requests_futures.sessions import FuturesSession
+from tqdm.auto import tqdm
 
 from ..utils import make_iterable
 from .utils import get_cave_client, retry, get_chunkedgraph_secret, find_mat_version
@@ -45,7 +46,7 @@ ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_table = None
 
 
-def is_proofread(x, materialization='latest', cache=True, validate=True):
+def is_proofread(x, materialization='auto', cache=True, validate=True):
     """Test if neuron has been set to `proofread`.
 
     Parameters
@@ -78,9 +79,9 @@ def is_proofread(x, materialization='latest', cache=True, validate=True):
     x = np.asarray(x, dtype=np.int64)
 
     # Check if any of the roots are outdated -> can't check those
-    if validate:
+    if validate and materialization == 'live':
         il = is_latest_root(x)
-        if any(~il) and materialization == 'live':
+        if any(~il):
             print("At least some root ID(s) outdated and will therefore show up as "
                   f"not proofread: {x[~il]}")
 
@@ -96,6 +97,7 @@ def is_proofread(x, materialization='latest', cache=True, validate=True):
     if materialization == 'live':
         # For live materialization only do on-the-run queries
         table = client.materialize.live_query(table='proofreading_status_public_v1',
+                                              timestamp=dt.datetime.utcnow(),
                                               filter_in_dict=dict(pt_root_id=x))
     elif isinstance(materialization, int):
         if cache:
@@ -507,7 +509,8 @@ def upload_annotations(table_name: str,
     return resp
 
 
-def get_somas(x=None, materialization='live', split_positions=False, dataset='production'):
+def get_somas(x=None, materialization='auto',
+              split_positions=False, dataset='production'):
     """Fetch nuclei segmentation for given neuron(s).
 
     Parameters
@@ -516,8 +519,9 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
                         FlyWire root ID(s) or neurons for which to fetch soma
                         infos. Use ``None`` to fetch complete list of annotated
                         nuclei. If neurons, will set their soma and soma radius
-                        if one is found.
-    materialization :   "live" | "latest" | int | bool
+                        if one is found. Importantly, we assume that the neurons
+                        are in nanometer space.
+    materialization :   "auto" |"live" | "latest" | int | bool
                         Which materialization version to fetch. You can also
                         provide an ID (int) for a specific materialization
                         version (see ``get_materialization_versions``). Set to
@@ -552,6 +556,8 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
             root_ids = x.id.astype(np.int64)
         else:
             root_ids = make_iterable(x, force_type=np.int64)
+        if materialization == 'auto':
+            materialization = find_mat_version(root_ids, dataset=dataset)
         filter_in_dict = {'pt_root_id': root_ids}
 
     nuc = get_annotations('nuclei_v1',
@@ -575,9 +581,14 @@ def get_somas(x=None, materialization='live', split_positions=False, dataset='pr
             nuc.drop(start_cols + end_cols, inplace=True, axis=1)
         nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2
 
+        return nuc
+
         # If NeuronList, set their somas
         if isinstance(x, navis.NeuronList):
-            soma_pos = nuc.set_index('pt_root_id').pt_position.to_dict()
+            if not split_positions:
+                soma_pos = nuc.set_index('pt_root_id').pt_position.to_dict()
+            else:
+                soma_pos = dict(zip(nuc.pt_root_id, nuc[['pt_position_x', 'pt_position_y', 'pt_position_z']].values))
             soma_rad = nuc.set_index('pt_root_id').rad_est.to_dict()
             for n in x:
                 # Skip if no soma found
