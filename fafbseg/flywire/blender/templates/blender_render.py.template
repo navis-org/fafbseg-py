@@ -86,6 +86,11 @@ if __name__ == '__main__':
     if 'neuropil' in bpy.data.objects:
         set_color(f'neuropil', (0.9, 0.9, 0.9, 0.1))
 
+    labels = $LABELS
+    if labels:
+        for i, l in enumerate(labels):
+            bpy.data.objects[f'mesh_{i}'].name = l
+
     # Add camera
     bpy.ops.object.camera_add(enter_editmode=False,
                               align='VIEW',
@@ -108,8 +113,19 @@ if __name__ == '__main__':
                 c.rotation_euler = (4.675978660583496, 1.5911912898403102e-09, 1.659862995147705)
                 c.location = (-63.90861129760742, -21.566360473632812, 19.48180389404297)
                 c.data.type = 'ORTHO'
-                c.data.ortho_scale = 62
+                c.data.ortho_scale = 72
 
+                if "neuropil" in bpy.data.objects:
+                    mat = bpy.data.objects['neuropil'].active_material
+                    if "$STYLE" == 'eevee':
+                        mat.show_transparent_back = True
+                        mat.use_backface_culling = True
+            elif view == 'dorsal':
+                # Set camera to dorsal
+                c.rotation_euler = (6.2831854820251465, 3.1415929794311523, -0.0)
+                c.location = (51.810123443603516, -12.586719512939453, -96.71295928955078)
+                c.data.type = 'ORTHO'
+                c.data.ortho_scale = 90
                 if "neuropil" in bpy.data.objects:
                     mat = bpy.data.objects['neuropil'].active_material
                     if "$STYLE" == 'eevee':
@@ -118,6 +134,7 @@ if __name__ == '__main__':
             else:
                 c.rotation_euler = (4.71238899230957, -0.0, 0.)
                 c.location = (53.0392951965332, 77.42987060546875, 23.135988235473633)
+                c.data.lens = 40
                 c.data.type = 'PERSP'
 
                 if "neuropil" in bpy.data.objects:

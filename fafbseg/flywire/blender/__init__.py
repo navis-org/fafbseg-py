@@ -42,8 +42,8 @@ NEUROPIL_MESH = None
 
 
 def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True,
-                   use_flat=True, colors=None, views=('frontal', ), debug=False,
-                   res_perc=100, samples=64):
+                   use_flat=True, colors=None, labels=None, views=('frontal', ),
+                   debug=False, res_perc=100, samples=64):
     """Render neurons using Blender.
 
     Parameters
@@ -63,6 +63,9 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
                 if `x` is root ID(s).
     colors :    dict | list | str | tuple
                 List of colors, one for each neuron.
+    labels :    list, optional
+                One label per mesh. If provided will use these for names in the
+                Blender file.
     views :     tuple
                 Combination of 'frontal' and/or 'lateral'.
     res_perc :  int
@@ -77,9 +80,12 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
         raise ImportError('Blender 3D unavailable (no executable not found).')
     _blender_executable = tm.interfaces.blender._blender_executable
 
+    if isinstance(views, str):
+        views = (views, )
+
     assert style in ('workbench', 'eevee')
     for v in views:
-        assert v in ('frontal', 'lateral')
+        assert v in ('frontal', 'lateral', 'dorsal')
 
     if isinstance(x, navis.MeshNeuron):
         meshes = [x.trimesh]
@@ -88,7 +94,21 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
     elif isinstance(x, tm.Trimesh):
         meshes = [x]
     elif isinstance(x, navis.NeuronList):
-        meshes = [n.trimesh for n in x if isinstance(n, navis.MeshNeuron)]
+        meshes = []
+        for n in x:
+            if isinstance(n, navis.MeshNeuron):
+                meshes.append(n.trimesh)
+            elif isinstance(n, navis.TreeNeuron):
+                meshes.append(navis.conversion.tree2meshneuron(n))
+    elif isinstance(x, list):
+        meshes = []
+        for o in x:
+            if isinstance(o, tm.Trimesh):
+                meshes.append(o)
+            elif isinstance(o, navis.MeshNeuron):
+                meshes.append(o.trimesh)
+            else:
+                raise TypeError(f'Unable to render {type(o)}')
     else:
         if not use_flat:
             meshes = get_mesh_neuron(x)
@@ -98,6 +118,10 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
             meshes = [n.trimesh for n in meshes]
         else:
             meshes = [meshes.trimesh]
+
+    zero_faces = np.array([len(m.faces) == 0 for m in meshes])
+    if any(zero_faces):
+        raise ValueError(f'{zero_faces.sum()} meshes have no faces')
 
     meshes = {f'mesh_{i}': m for i, m in enumerate(meshes)}
 
@@ -142,6 +166,7 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
                       samples=samples,
                       style=style,
                       views=views,
+                      labels=labels,
                       debug=debug) as blend:
         result = blend.run(_blender_executable
                            + ' --background --python $SCRIPT')
@@ -158,6 +183,7 @@ class RenderScript:
                  save=None,
                  debug=False,
                  colors=None,
+                 labels=None,
                  res_perc=100,
                  samples=64,
                  views=('frontal', ),
@@ -176,8 +202,10 @@ class RenderScript:
         self.style = style
         self.views = views
         self.samples = samples
+        self.labels = labels
 
         assert isinstance(self.meshes, dict)
+        assert isinstance(self.labels, (type(None), list))
 
     def __enter__(self):
         # Windows has problems with multiple programs using open files so we close
@@ -225,6 +253,7 @@ class RenderScript:
         self.replacement['STYLE'] = self.style
         self.replacement['VIEWS'] = self.views
         self.replacement['SAMPLES'] = self.samples
+        self.replacement['LABELS'] = self.labels
 
         script_text = Template(self.script).substitute(self.replacement)
         if platform.system() == 'Windows':
