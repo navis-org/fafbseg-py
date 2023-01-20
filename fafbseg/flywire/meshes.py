@@ -165,6 +165,8 @@ def get_mesh_neuron_flat(id, lod=3, with_synapses=False, omit_failures=None,
                          - ``True`` will skip the offending neuron (might result
                            in an empty ``NeuronList``)
                          - ``False`` will return an empty ``MeshNeuron``
+                         - ``'fallback'`` will try fetching and downsampling the
+                           neuron from the chunked graph instead
     threads :           bool | int, optional
                         Whether to use threads to fetch meshes in parallel.
 
@@ -173,7 +175,7 @@ def get_mesh_neuron_flat(id, lod=3, with_synapses=False, omit_failures=None,
     navis.MeshNeuron
 
     """
-    if omit_failures not in (None, True, False):
+    if omit_failures not in (None, True, False, 'fallback'):
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
 
@@ -229,16 +231,17 @@ def get_mesh_neuron_flat(id, lod=3, with_synapses=False, omit_failures=None,
             except cv.exceptions.MeshDecodeError:
                 lod_ -= 1
             except BaseException:
-                if omit_failures == None:
-                    raise
-                elif omit_failures:
-                    return navis.NeuronList([])
-                # If no omission, return empty MeshNeuron
-                else:
-                    return navis.MeshNeuron(None, id=id, units='1 nm', **kwargs)
+                lod_ = -1
+                break
         if lod_ <= 0:
             if omit_failures == None:
                 raise BaseException(f'No neuron with root id {id} found.')
+            elif omit_failures == 'fallback':
+                mesh = get_mesh_neuron(id, omit_failures=True)
+                # Downsample by a factor of 2**lod
+                if lod > 0:
+                    navis.downsample_neuron(mesh, lod**2, inplace=True)
+                mesh = mesh.trimesh
             elif omit_failures:
                 return navis.NeuronList([])
             # If no omission, return empty MeshNeuron
