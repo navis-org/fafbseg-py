@@ -105,44 +105,45 @@ if __name__ == '__main__':
         bpy.ops.wm.save_as_mainfile(filepath=filepath)
 
     imagepath = "$IMAGEPATH"
-    if $RENDER:
-        for view in $VIEWS:
-            c = bpy.data.objects['Camera']
-            if view == 'lateral':
-                # Set camera to lateral
-                c.rotation_euler = (4.675978660583496, 1.5911912898403102e-09, 1.659862995147705)
-                c.location = (-63.90861129760742, -21.566360473632812, 19.48180389404297)
-                c.data.type = 'ORTHO'
-                c.data.ortho_scale = 72
+    for view in $VIEWS:
+        c = bpy.data.objects['Camera']
+        if view == 'lateral':
+            # Set camera to lateral
+            c.rotation_euler = (4.675978660583496, 1.5911912898403102e-09, 1.659862995147705)
+            c.location = (-63.90861129760742, -21.566360473632812, 19.48180389404297)
+            c.data.type = 'ORTHO'
+            c.data.ortho_scale = 72
 
-                if "neuropil" in bpy.data.objects:
-                    mat = bpy.data.objects['neuropil'].active_material
-                    if "$STYLE" == 'eevee':
-                        mat.show_transparent_back = True
-                        mat.use_backface_culling = True
-            elif view == 'dorsal':
-                # Set camera to dorsal
-                c.rotation_euler = (6.2831854820251465, 3.1415929794311523, -0.0)
-                c.location = (51.810123443603516, -12.586719512939453, -96.71295928955078)
-                c.data.type = 'ORTHO'
-                c.data.ortho_scale = 90
-                if "neuropil" in bpy.data.objects:
-                    mat = bpy.data.objects['neuropil'].active_material
-                    if "$STYLE" == 'eevee':
-                        mat.show_transparent_back = True
-                        mat.use_backface_culling = True
-            else:
-                c.rotation_euler = (4.71238899230957, -0.0, 0.)
-                c.location = (53.0392951965332, 77.42987060546875, 23.135988235473633)
-                c.data.lens = 40
-                c.data.type = 'PERSP'
+            if "neuropil" in bpy.data.objects:
+                mat = bpy.data.objects['neuropil'].active_material
+                if "$STYLE" == 'eevee':
+                    mat.show_transparent_back = True
+                    mat.use_backface_culling = True
+        elif view == 'dorsal':
+            # Set camera to dorsal
+            c.rotation_euler = (6.2831854820251465, 3.1415929794311523, -0.0)
+            c.location = (51.810123443603516, -12.586719512939453, -96.71295928955078)
+            c.data.type = 'ORTHO'
+            c.data.ortho_scale = 90
 
-                if "neuropil" in bpy.data.objects:
-                    mat = bpy.data.objects['neuropil'].active_material
-                    if "$STYLE" == 'eevee':
-                        mat.show_transparent_back = True
-                        mat.use_backface_culling = False
+            if "neuropil" in bpy.data.objects:
+                mat = bpy.data.objects['neuropil'].active_material
+                if "$STYLE" == 'eevee':
+                    mat.show_transparent_back = True
+                    mat.use_backface_culling = True
+        else:
+            c.rotation_euler = (4.71238899230957, -0.0, 0.)
+            c.location = (53.0392951965332, 77.42987060546875, 23.135988235473633)
+            c.data.lens = 40
+            c.data.type = 'PERSP'
 
+            if "neuropil" in bpy.data.objects:
+                mat = bpy.data.objects['neuropil'].active_material
+                if "$STYLE" == 'eevee':
+                    mat.show_transparent_back = True
+                    mat.use_backface_culling = False
+
+        if $RENDER:
             path = '.'.join(imagepath.split('.')[:-1])
             ext = imagepath.split('.')[-1]
             bpy.context.scene.render.filepath = f'{path}_{view}.{ext}'
