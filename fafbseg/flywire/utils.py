@@ -386,7 +386,9 @@ def retry(func, retries=5, cooldown=2):
                 warnings.simplefilter("ignore")
                 try:
                     return func(*args, **kwargs)
-                except requests.HTTPError:
+                except KeyboardInterrupt:
+                    raise
+                except requests.RequestException:
                     if i >= retries:
                         raise
                 except BaseException:
