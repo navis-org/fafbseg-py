@@ -543,6 +543,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
         # Drop nodes that are still at their unrefined chunk position
         if drop_missing:
+            frac_refined = has_new.sum() / len(has_new)
             if not any(has_new):
                 msg = (f'Unable to refine: no L2 info for root ID {root_id} '
                        'available. Set `drop_missing=False` to use unrefined '
@@ -554,6 +555,11 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                     # If no omission, return empty TreeNeuron
                 else:
                     return navis.TreeNeuron(None, id=root_id, units='1 nm', **kwargs)
+            elif frac_refined < .5:
+                msg = (f'Root ID {root_id} has only {frac_refined:.1%} of their '
+                       'L2 IDs in the cache. Set `drop_missing=False` to use '
+                       'unrefined positions.')
+                navis.config.logger.warning(msg)
 
             tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
     else:
