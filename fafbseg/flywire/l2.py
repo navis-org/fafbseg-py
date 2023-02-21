@@ -562,6 +562,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                 navis.config.logger.warning(msg)
 
             tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
+            tn._l2_chunks_missing = (~has_new).sum()
     else:
         tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
 
@@ -691,7 +692,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
     # L2 chunks without info will show as empty dictionaries
     # Let's drop them to make our life easier (speeds up indexing too)
-    # Note that small L2 chunks won't have a `pca`
+    # Note that small L2 chunks won't have a `pca` entry
     l2_info = {k: v for k, v in l2_info.items() if 'pca' in v}
 
     # Generate dotprops
@@ -716,6 +717,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
                 # If no omission, add empty Dotprops
                 dps.append(navis.Dotprops(None, k=None, id=root,
                                           units='1 nm', **kwargs))
+                dps[-1]._l2_chunks_missing = len(ids)
             continue
 
         pts = np.vstack([i['rep_coord_nm'] for i in this_info])
@@ -730,6 +732,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
         # Generate the actual dotprops
         dps.append(navis.Dotprops(points=pts, vect=vec, id=root, k=None,
                                   units='1 nm', **kwargs))
+        dps[-1]._l2_chunks_missing = len(ids) - len(this_info)
 
     return navis.NeuronList(dps)
 
