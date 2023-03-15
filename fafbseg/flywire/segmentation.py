@@ -1009,6 +1009,15 @@ def update_ids(id,
             raise ValueError('DataFrame must contain either `root_id` or '
                              '`root` column.')
 
+    if isinstance(timestamp, str) and timestamp.startswith('mat'):
+        client = get_cave_client(dataset=dataset)
+        if timestamp == 'mat' or timestamp == 'mat_latest':
+            timestamp = client.materialize.get_timestamp()
+        else:
+            # Split e.g. 'mat_432' to extract version and query timestamp
+            version = int(timestamp.split('_')[1])
+            timestamp = client.materialize.get_timestamp(version)
+
     if isinstance(id, (list, set, np.ndarray)):
         # Run is_latest once for all roots
         if isinstance(timestamp, type(None)):
