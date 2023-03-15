@@ -527,6 +527,12 @@ def shorten_url(scene, ngl_url=None, state_url=None, refresh_session=False):
     if not isinstance(scene, (dict, str)):
         raise TypeError(f'Expected `scene` to be dict or string, got "{type(scene)}"')
 
+    if not state_url:
+        state_url = STATE_URL
+
+    if not ngl_url:
+        ngl_url = NGL_URL
+
     if isinstance(scene, str):
         scene = decode_url(scene)
 
@@ -545,11 +551,11 @@ def shorten_url(scene, ngl_url=None, state_url=None, refresh_session=False):
         session.cookies.set_cookie(cookie_obj)
 
     # Upload state
-    url = f'{STATE_URL}/post'
+    url = f'{state_url}/post'
     resp = session.post(url, data=json.dumps(scene))
     resp.raise_for_status()
 
-    return f'{NGL_URL}/?json_url={resp.json()}'
+    return f'{ngl_url}/?json_url={resp.json()}'
 
 
 def neurons_to_url(x, top_N=1, downsample=False, coordinates='nm'):
