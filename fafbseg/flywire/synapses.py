@@ -41,7 +41,7 @@ def split_axon_dendrite(x):
     pass
 
 
-def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto',
+def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=False,
                    batch_size=10, dataset='production', **kwargs):
     """Fetch synapse counts for given root IDs.
 
@@ -91,16 +91,17 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto',
     ids = parse_root_ids(x).astype(np.int64)
 
     # First get the synapses
-    syn = fetch_synapses(x, pre=True, post=True, attach=False,
+    syn = fetch_synapses(ids, pre=True, post=True, attach=False,
                          min_score=min_score,
                          transmitters=True,
                          mat=mat,
                          neuropils=by_neuropil,
+                         filtered=filtered,
                          batch_size=batch_size,
                          dataset=dataset, **kwargs)
 
-    pre = syn[syn.pre.isin(x)]
-    post = syn[syn.post.isin(x)]
+    pre = syn[syn.pre.isin(ids)]
+    post = syn[syn.post.isin(ids)]
 
     if not by_neuropil:
         counts = pd.DataFrame()
@@ -221,7 +222,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
 
 
 def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
-                   transmitters=False, neuropils=False, mat='auto',
+                   transmitters=False, neuropils=False, mat='auto', filtered=False,
                    batch_size=10, dataset='production', progress=True):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
@@ -345,12 +346,24 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
-    if mat == 'live':
+    if mat == 'live' and filtered:
+        raise ValueError("Can't fetch filtered synapses for live query.")
+    elif mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
                        split_positions=True,
                        select_columns=columns)
+    elif filtered:
+        columns.remove('id')
+        columns.append('id_x')
+        func = partial(retry(client.materialize.join_query),
+                       tables=[[client.materialize.synapse_table, 'id'],
+                               ['valid_synapses_nt_v2', 'target_id']],
+                       materialization_version=mat,
+                       split_positions=True,
+                       #select_columns=columns, # this does not work with join queries
+                       )
     else:
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
@@ -364,9 +377,17 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     disable=not progress or len(ids) <= batch_size):
         batch = ids[i:i+batch_size]
         if post:
-            syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
+            if not filtered:
+                filter_in_dict = dict(post_pt_root_id=batch)
+            else:
+                filter_in_dict = dict(synapses_nt_v1=dict(post_pt_root_id=batch))
+            syn.append(func(filter_in_dict=filter_in_dict))
         if pre:
-            syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
+            if not filtered:
+                filter_in_dict = dict(pre_pt_root_id=batch)
+            else:
+                filter_in_dict = dict(synapses_nt_v1=dict(pre_pt_root_id=batch))
+            syn.append(func(filter_in_dict=filter_in_dict))
 
     # Drop attrs to avoid issues when concatenating
     for df in syn:
@@ -374,9 +395,6 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
-
-    # Depending on how queries were batched, we need to drop duplicate synapses
-    syn.drop_duplicates('id', inplace=True)
 
     # Rename some of those columns
     syn.rename({'post_pt_root_id': 'post',
@@ -387,8 +405,12 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                 'pre_pt_position_x': 'pre_x',
                 'pre_pt_position_y': 'pre_y',
                 'pre_pt_position_z': 'pre_z',
+                'id_x': 'id',  # this exists if we made a join query
                 },
                axis=1, inplace=True)
+
+    # Depending on how queries were batched, we need to drop duplicate synapses
+    syn.drop_duplicates('id', inplace=True)
 
     if transmitters:
         syn.rename({'ach': 'acetylcholine',
@@ -640,8 +662,9 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
 
 def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        upstream=True, downstream=True, proofread_only=False,
-                       transmitters=False, neuropils=None, batch_size=30,
-                       mat='auto', dataset='production', progress=True):
+                       transmitters=False, neuropils=None, filtered=False,
+                       batch_size=30, mat='auto', dataset='production',
+                       progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
     Parameters
@@ -741,10 +764,18 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     if transmitters:
         columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
 
-    if mat == 'live':
+    if mat == 'live' and filtered:
+        raise ValueError("Can't fetch filtered synapses for live query.")
+    elif mat == 'live':
         func = partial(retry(client.materialize.live_query),
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
+                       select_columns=columns)
+    elif filtered:
+        func = partial(retry(client.materialize.join_query),
+                       tables=[[client.materialize.synapse_table, 'id'],
+                               ['valid_synapses_nt_v2', 'target_id']],
+                       materialization_version=mat,
                        select_columns=columns)
     else:
         func = partial(retry(client.materialize.query_table),
@@ -758,9 +789,17 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     disable=not progress or len(ids) <= batch_size):
         batch = ids[i:i+batch_size]
         if upstream:
-            syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
+            if not filtered:
+                filter_in_dict = dict(post_pt_root_id=batch)
+            else:
+                filter_in_dict = dict(synapses_nt_v1=dict(post_pt_root_id=batch))
+            syn.append(func(filter_in_dict=filter_in_dict))
         if downstream:
-            syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
+            if not filtered:
+                filter_in_dict = dict(pre_pt_root_id=batch)
+            else:
+                filter_in_dict = dict(synapses_nt_v1=dict(pre_pt_root_id=batch))
+            syn.append(func(filter_in_dict=filter_in_dict))
 
     # Drop attrs to avoid issues when concatenating
     for df in syn:
