@@ -80,7 +80,7 @@ session = None
 
 def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                seg_colors=None, seg_groups=None, invis_segs=None,
-               dataset='production', scene=None,
+               dataset='production', scene=None, ngl_url=None,
                open_browser=False, to_clipboard=False, short=True):
     """Encode data as FlyWire neuroglancer scene.
 
@@ -150,7 +150,8 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         raise TypeError(f'Expected `scene` as dict or str, got "{type(scene)}"')
 
     # First add selected segments
-    seg_layer_ix = [i for i, l in enumerate(scene['layers']) if l['type'] == 'segmentation_with_graph']
+    seg_layer_ix = [i for i, l in enumerate(scene['layers']) if (l['type'] == 'segmentation_with_graph' or l['name'] == 'flywire_v141_m526')]
+
     if not seg_layer_ix:
         scene['layers'].append(MINIMAL_SCENE['layers'][1].copy())
         scene['layers'][-1]['source'] = scene['layers'][-1]['source'].format(dataset=dataset)
@@ -170,6 +171,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         if isinstance(seg_groups, type(None)):
             present = scene['layers'][seg_layer_ix].get('segments', [])
             scene['layers'][seg_layer_ix]['segments'] = present + segments
+
 
     if not isinstance(seg_groups, type(None)):
         if not isinstance(seg_groups, dict):
@@ -219,14 +221,13 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
     #all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
     all_segs = segments
 
-
     # See if we need to assign colors
     if not isinstance(seg_colors, type(None)):
         if isinstance(seg_colors, str):
             seg_colors = {s: seg_colors for s in all_segs}
         elif isinstance(seg_colors, tuple) and len(seg_colors) == 3:
             seg_colors = {s: seg_colors for s in all_segs}
-        elif isinstance(seg_colors, np.ndarray) and seg_colors.ndim == 1:
+        elif isinstance(seg_colors, (np.ndarray, pd.Series, pd.Categorical)) and seg_colors.ndim == 1:
             if len(seg_colors) != len(all_segs):
                 raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
 
@@ -297,7 +298,10 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                                               '"').replace("True",
                                                            "true").replace("False",
                                                                            "false")
-        url = f'{NGL_URL}/#!{quote(scene_str)}'
+        if not ngl_url:
+            ngl_url = NGL_URL
+
+        url = f'{ngl_url}/#!{quote(scene_str)}'
 
     if open_browser:
         try:
