@@ -450,13 +450,17 @@ def decode_url(url, ret='brief'):
     ----------
     url :       str
                 URL to decode. Can be shortened URL.
-    ret :       "brief" | "full"
-                If "brief", will only return "position" (in voxels), "selected"
-                segment IDs and "annotations". If full, will return entire scene.
+    ret :       "brief" | "dataframe" | "full"
+                What to return:
+                 - "brief" will only return "position" (in voxels),  "selected",
+                   segment IDs and "annotations"
+                 - "dataframe" will return a frame with segment IDs and which
+                   layers they came from
+                 - "full", will return entire scene
 
     Returns
     -------
-    dict
+    dict or DataFrame
 
     Examples
     --------
@@ -468,7 +472,7 @@ def decode_url(url, ret='brief'):
 
     """
     assert isinstance(url, (str, dict))
-    assert ret in ['brief', 'full']
+    assert ret in ('brief', 'full', 'dataframe')
 
     query = parse_qs(urlparse(url).query, keep_blank_values=True)
 
@@ -483,22 +487,35 @@ def decode_url(url, ret='brief'):
         scene = query
 
     if ret == 'brief':
-        seg_layers = [l for l in scene['layers'] if l.get('type') == 'segmentation_with_graph']
+        seg_layers = [l for l in scene['layers'] if 'segmentation_with_graph' in l.get('type')]
         an_layers = [l for l in scene['layers'] if l.get('type') == 'annotation']
         return {'position': scene['navigation']['pose']['position'].get('voxelCoordinates', None),
                 'annotations': [a for l in an_layers for a in l.get('annotations', [])],
                 'selected': [s for l in seg_layers for s in l.get('segments', [])]}
+    elif ret == 'dataframe':
+        segs = []
+        seg_layers = [l for l in scene['layers'] if 'segmentation' in l.get('type')]
+        for l in seg_layers:
+            for s in l.get('segments', []):
+                segs.append([int(s), l['name']])
+        return pd.DataFrame(segs, columns=['segment', 'layer'])
 
     return scene
 
 
-def shorten_url(scene, refresh_session=False):
+def shorten_url(scene, ngl_url=None, state_url=None, refresh_session=False):
     """Generate short url for given scene.
 
     Parameters
     ----------
     scene :             dict | str
                         Scene to encode as short URL. Can be dict or a full URL.
+    ngl_url :           str, optional
+                        Base neuroglancer URL. If not provided will use the
+                        FlyWire neuroglancer.
+    state_url :         str, optional
+                        URL for the state server. If not provided will use the
+                        default state server for FlyWire.
     refresh_session :   bool
                         If True will force refreshing the session.
 
