@@ -37,7 +37,7 @@ from .. import xform
 
 from ..utils import make_iterable, GSPointLoader
 from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
-                    retry, get_cave_client, parse_bounds)
+                    retry, get_cave_client, parse_bounds, package_timestamp)
 
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
@@ -799,13 +799,19 @@ def skid_to_id(x,
 
 
 @retry
-def is_latest_root(id, dataset='production', **kwargs):
+def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
     """Check if root is the current one.
 
     Parameters
     ----------
     id :            int | list-like
                     Single ID or list of FlyWire (root) IDs.
+    timestamp :     int | str | datetime | "mat", optional
+                    Checks if roots existed at given date (and time). Int must
+                    be unix timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
+                    "mat" will use the timestamp of the most recent
+                    materialization. You can also use e.g. "mat_438" to get the
+                    root ID at a specific materialization.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query:
                       - "production" (current production dataset, fly_v31)
@@ -828,8 +834,6 @@ def is_latest_root(id, dataset='production', **kwargs):
     array([True])
 
     """
-    dataset = FLYWIRE_DATASETS.get(dataset, dataset)
-
     id = make_iterable(id, force_type=str)
 
     # The server doesn't like being asked for zeros
@@ -843,7 +847,28 @@ def is_latest_root(id, dataset='production', **kwargs):
     session = requests.Session()
     token = get_chunkedgraph_secret()
     session.headers['Authorization'] = f"Bearer {token}"
-    url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/is_latest_roots?int64_as_str=1'
+    url = ('https://prod.flywire-daf.com/segmentation/api/v1/table/'
+           f'{FLYWIRE_DATASETS.get(dataset, dataset)}/is_latest_roots?int64_as_str=1')
+
+    if isinstance(timestamp, str) and timestamp.startswith('mat'):
+        client = get_cave_client(dataset=dataset)
+        if timestamp == 'mat' or timestamp == 'mat_latest':
+            timestamp = client.materialize.get_timestamp()
+        else:
+            # Split e.g. 'mat_432' to extract version and query timestamp
+            version = int(timestamp.split('_')[1])
+            timestamp = client.materialize.get_timestamp(version)
+
+    if isinstance(timestamp, np.datetime64):
+        timestamp = str(timestamp)
+
+    if isinstance(timestamp, str):
+        timestamp = dt.datetime.fromisoformat(timestamp)
+
+    if timestamp is not None:
+        params = package_timestamp(timestamp)
+    else:
+        params = None
 
     batch_size = 100_000
     with navis.config.tqdm(desc='Checking',

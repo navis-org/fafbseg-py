@@ -530,3 +530,17 @@ def find_mat_version(ids, verbose=True, dataset='production'):
     raise ValueError('Given root IDs could not be mapped to a common '
                      'materialization version (including live). Try updating '
                      'roots to a single timestamp and rerun your query.')
+
+
+def package_timestamp(timestamp, name="timestamp"):
+    # Copied from caveclient
+    if timestamp is None:
+        query_d = {}
+    else:
+        if timestamp.tzinfo is None:
+            timestamp = pytz.UTC.localize(timestamp)
+        else:
+            timestamp = timestamp.astimezone(dt.timezone.utc)
+
+        query_d = {name: timestamp.timestamp()}
+    return query_d
