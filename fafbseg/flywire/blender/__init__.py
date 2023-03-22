@@ -103,7 +103,13 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
     elif isinstance(x, list):
         meshes = []
         for o in x:
-            if isinstance(o, tm.Trimesh):
+            if isinstance(o, navis.NeuronList):
+                for n in o:
+                    if isinstance(n, navis.MeshNeuron):
+                        meshes.append(n.trimesh)
+                    elif isinstance(n, navis.TreeNeuron):
+                        meshes.append(navis.conversion.tree2meshneuron(n))
+            elif isinstance(o, tm.Trimesh):
                 meshes.append(o)
             elif isinstance(o, navis.MeshNeuron):
                 meshes.append(o.trimesh)
@@ -142,9 +148,7 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
         import flybrains
         global NEUROPIL_MESH
         if not NEUROPIL_MESH:
-            NEUROPIL_MESH = flybrains.FAFB14.mesh#navis.xform_brain(flybrains.FAFB14.mesh,
-                                              #source='FAFB14',
-                                              #target='FAFB14.1')
+            NEUROPIL_MESH = flybrains.FLYWIRE.mesh
         meshes['neuropil'] = NEUROPIL_MESH
 
     # Load the template
