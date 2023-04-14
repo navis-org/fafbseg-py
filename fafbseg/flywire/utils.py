@@ -40,11 +40,16 @@ from .. import utils
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
            'get_cave_client', 'get_neuropil_volumes', 'get_lr_position']
 
-FLYWIRE_DATASETS = {'production': 'fly_v31',
-                    'sandbox': 'fly_v26'}
+FLYWIRE_DATASETS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
+                    'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
+                    'flat_630': 'precomputed://gs://flywire_v141_m630',
+                    'flat_571': 'precomputed://gs://flywire_v141_m526'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
+                 'flat_630': 'flywire_fafb_production',
+                 'flat_571': 'flywire_fafb_production',
                  'sandbox': 'flywire_fafb_sandbox'}
+
 
 # Initialize without a volume
 fw_vol = None
@@ -331,13 +336,10 @@ def parse_volume(vol, **kwargs):
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
 
             # This is the new url
-            vol = f'graphene://https://prod.flywire-daf.com/segmentation/table/{vol}'
+            # vol = f'graphene://https://prod.flywire-daf.com/segmentation/table/{vol}'
 
             # This might eventually become the new url
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation_proc/table/{vol}'
-
-        if not vol.startswith('graphene://'):
-            vol = f'graphene://{vol}'
 
         #  Change default volume if necessary
         if not fw_vol or getattr(fw_vol, 'path', None) != vol:
@@ -351,11 +353,11 @@ def parse_volume(vol, **kwargs):
 
             # Check if chunkedgraph secret exists
             # This probably needs yanking!
-            secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
-            if not os.path.isfile(secret):
-                # If not secrets but environment variable use this
-                if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
-                    defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
+            #secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
+            #if not os.path.isfile(secret):
+            #    # If not secrets but environment variable use this
+            #    if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
+            #        defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
 
             fw_vol = cv.CloudVolume(vol, **defaults)
             fw_vol.path = vol
@@ -505,6 +507,12 @@ def get_lr_position(x, coordinates='nm'):
 
 def find_mat_version(ids, verbose=True, dataset='production'):
     """Find a materialization version (or live) for given IDs."""
+    # If dataset is the flat segmentation we can take a shortcut
+    if dataset == 'flat_630':
+        return 630
+    elif dataset == 'flat_571':
+        return 571
+
     ids = np.asarray(ids)
 
     client = get_cave_client(dataset=dataset)

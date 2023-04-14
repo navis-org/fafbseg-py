@@ -18,7 +18,9 @@ import numbers
 import os
 import requests
 import inspect
+import pathlib
 
+import cloudvolume as cv
 import multiprocessing as mp
 import networkx as nx
 import pandas as pd
@@ -37,7 +39,7 @@ __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
 def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                        assert_id_match=False, dataset='production', threads=2,
-                       progress=True, **kwargs):
+                       save_to=None, progress=True, **kwargs):
     """Skeletonize FlyWire neuron.
 
     Note that this is optimized to be primarily fast which comes at the cost
@@ -71,9 +73,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          Against which FlyWire dataset to query::
                            - "production" (current production dataset, fly_v31)
                            - "sandbox" (i.e. fly_v26)
+                           - "flat_630" or "flat_571" will use the flat
+                             segmentations matching the respective materialization
+                             versions. By default these use `lod=2`, you can
+                             change that behaviour by passing `lod` as keyword
+                             argument.
     threads :            int
                          Number of parallel threads to use for downloading the
                          meshes.
+    save_to :            str, optional
+                         If provided will save skeleton as SWC at `{save_to}/{id}.swc`.
     progress :           bool
                          Whether to show a progress bar or not.
 
@@ -98,6 +107,13 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     >>> n = flywire.skeletonize_neuron(720575940614131061)
 
     """
+    if save_to is not None:
+        save_to = pathlib.Path(save_to)
+        if not save_to.exists():
+            raise ValueError('`save_to` must be an existing directory')
+        if not save_to.is_dir():
+            raise ValueError('`save_to` must be a directory')
+
     # TODOs:
     # - drop single disconnected nodes?
     # - heal fragmented neurons?
@@ -125,6 +141,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                                                     assert_id_match=assert_id_match,
                                                     dataset=dataset,
                                                     threads=threads,
+                                                    save_to=save_to,
                                                     **kwargs)
                                  for n in navis.config.tqdm(x,
                                                             desc='Skeletonizing',
@@ -141,8 +158,18 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         try:
             old_parallel = vol.parallel
             vol.parallel = threads
-            mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False,
-                                remove_duplicate_vertices=True)[id]
+            if vol.path.startswith('graphene'):
+                mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
+            elif vol.path.startswith('precomputed'):
+                lod_ = kwargs.pop('lod', 2)
+                while lod_ >= 0:
+                    try:
+                        mesh = vol.mesh.get(id, lod=lod_)[id]
+                        break
+                    except cv.exceptions.MeshDecodeError:
+                        lod_ -= 1
+                    except BaseException:
+                        raise
         except BaseException:
             raise
         finally:
@@ -157,10 +184,12 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     mesh = sk.utilities.make_trimesh(mesh, validate=False)
 
     # Fix things before we skeletonize
-    # This also drops fluff
+    # Drop disconnected pieces that represent less than 0.05% of total size
+    to_remove = int(0.0001 * mesh.vertices.shape[0])
+    to_remove = None if to_remove == 0 else to_remove
     mesh = sk.pre.fix_mesh(mesh,
                            inplace=True,
-                           remove_disconnected=100 if len(mesh.vertices) > 100 else None)
+                           remove_disconnected=to_remove)
 
     # Skeletonize
     defaults = dict(waves=1, step_size=1)
@@ -201,21 +230,13 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
     if soma.empty:
         # See if we can find a soma based on the nucleus segmentation
-        if is_materialized_root(id):
-            materialization = 'latest'
-        elif is_latest_root(id):
-            materialization = 'live'
-        else:
-            materialization = None
-
-        if materialization:
-            try:
-                soma = get_somas(id, dataset=dataset, materialization=materialization)
-            except requests.HTTPError:
-                navis.config.logger.warning(f'Failed to fetch soma for {id} from '
-                                            'nucleus table.')
-                soma = pd.DataFrame()
-        else:
+        try:
+            soma = get_somas(id, dataset=dataset, materialization='auto')
+        except KeyboardInterrupt:
+            raise
+        except requests.HTTPError:
+            navis.config.logger.warning(f'Failed to fetch soma for {id} from '
+                                        'nucleus table.')
             soma = pd.DataFrame()
 
     if not soma.empty:
@@ -265,6 +286,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                               max_workers=4,
                               verbose=True)
         tn.nodes[['x', 'y', 'z']] = new_locs
+
+    if save_to is not None:
+        navis.write_swc(tn, save_to / f'{tn.id}.swc')
 
     return tn
 
@@ -429,7 +453,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
 
     sig = inspect.signature(skeletonize_neuron)
     for k in kwargs:
-        if k not in sig.parameters:
+        if k not in sig.parameters and k not in ('lod', ):
             raise ValueError('unexpected keyword argument for '
                              f'`skeletonize_neuron`: {k}')
 
@@ -468,6 +492,8 @@ def _worker_wrapper(x):
     f, args, kwargs = x
     try:
         return f(*args, **kwargs)
+    except KeyboardInterrupt:
+        raise
     # We implement a single retry in case of HTTP errors
     except requests.HTTPError:
         try:
