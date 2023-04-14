@@ -332,7 +332,7 @@ def get_annotation_table_info(table_name: str,
 
 
 def get_annotations(table_name: str,
-                    materialization='live',
+                    materialization='latest',
                     split_positions: bool = False,
                     drop_invalid: bool = True,
                     dataset: str = 'production',
