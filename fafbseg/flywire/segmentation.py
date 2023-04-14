@@ -882,7 +882,7 @@ def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
             # Update progress bar
             pbar.update(len(batch))
 
-            r = session.post(url, json=post)
+            r = session.post(url, json=post, params=params)
 
             r.raise_for_status()
 
