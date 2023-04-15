@@ -40,10 +40,13 @@ from .. import utils
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
            'get_cave_client', 'get_neuropil_volumes', 'get_lr_position']
 
-FLYWIRE_DATASETS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
-                    'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
-                    'flat_630': 'precomputed://gs://flywire_v141_m630',
-                    'flat_571': 'precomputed://gs://flywire_v141_m526'}
+FLYWIRE_DATASETS = {'production': 'fly_v31',
+                    'sandbox': 'fly_v26'}
+
+FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
+                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
+                'flat_630': 'precomputed://gs://flywire_v141_m630',
+                'flat_571': 'precomputed://gs://flywire_v141_m526'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
                  'flat_630': 'flywire_fafb_production',
@@ -330,7 +333,7 @@ def parse_volume(vol, **kwargs):
         if not utils.is_url(vol):
             # We are assuming this is the dataset
             # Map "production" and "sandbox" with to their correct designations
-            vol = FLYWIRE_DATASETS.get(vol, vol)
+            vol = FLYWIRE_URLS.get(vol, vol)
 
             # Below is supposedly the "old" api (/1.0/)
             # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
