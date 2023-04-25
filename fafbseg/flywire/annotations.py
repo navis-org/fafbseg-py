@@ -139,7 +139,7 @@ def is_materialized_root(id, materialization='latest'):
     array([False])
 
     """
-    id = make_iterable(id, force_type=int)
+    id = make_iterable(id, force_type=np.int64)
 
     # Generaate array we can fill
     is_mat = np.zeros(len(id), dtype=bool)
