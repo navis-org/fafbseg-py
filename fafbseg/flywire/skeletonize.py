@@ -53,17 +53,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          ID(s) or trimesh of the FlyWire neuron(s) you want to
                          skeletonize.
     shave_skeleton :     bool
-                         If True, we will "shave" the skeleton by removing all
-                         single-node terminal twigs. This should get rid of
-                         bristles on the backbone that can occur if the neurites
-                         are very big.
+                         If True, we will attempt to remove any "bristles" on
+                         the on the backbone which typically occur if the
+                         neurites are very big (or badly segmented).
     remove_soma_hairball : bool
                          If True, we will try to drop the hairball that is
                          typically created inside the soma. Note that while this
                          should work just fine for 99% of neurons, it's not very
                          smart and there is always a small chance that we
                          remove stuff that should not have been removed. Also
-                         only works if the neuron has it's nucleus annotated
+                         only works if the neuron has its nucleus annotated
                          (see :func:`fafbseg.flywire.get_somas`).
     assert_id_match :    bool
                          If True, will check if skeleton nodes map to the
@@ -181,7 +180,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     # Pop nuclei from kwargs before passing them to skeletonization
     nuc = kwargs.pop('_nuclei', pd.DataFrame())
 
-    mesh = sk.utilities.make_trimesh(mesh, validate=False)
+    mesh = sk.utilities.make_trimesh(mesh, validate=True)
 
     # Fix things before we skeletonize
     # Drop disconnected pieces that represent less than 0.05% of total size
@@ -210,6 +209,26 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
 
     if shave_skeleton:
+        # Get child -> parent distances
+        d = navis.morpho.mmetrics.parent_dist(tn, root_dist=0)
+        # Find all nodes whose parent is more than a micron away (suspicious)
+        long = tn.nodes[d >= 1000].node_id.values
+        # Now start shaving
+        while True:
+            # Find segments containing leafs
+            leaf_segs = [seg for seg in tn.small_segments if seg[0] in tn.leafs.node_id.values]
+            # Among the leaf segments find those that are either only 1 node
+            # or have any of the suspicously long (> micron) connections
+            to_remove = [seg for seg in leaf_segs if any(np.isin(seg, long)) or (len(seg) <= 2)]
+            # Turn list of lists into list of node IDs
+            to_remove = [n for l in to_remove for n in l[:-1]]
+
+            # If nothing more to remove, we can stop here
+            if not len(to_remove):
+                break
+
+            navis.subset_neuron(tn, ~tn.nodes.node_id.isin(to_remove), inplace=True)
+
         # Get branch points
         bp = tn.nodes.loc[tn.nodes.type == 'branch', 'node_id'].values
 
