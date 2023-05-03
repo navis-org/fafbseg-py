@@ -220,6 +220,10 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
             # Among the leaf segments find those that are either only 1 node
             # or have any of the suspicously long (> micron) connections
             to_remove = [seg for seg in leaf_segs if any(np.isin(seg, long)) or (len(seg) <= 2)]
+
+            # Make sure we don't drop very long segments
+            to_remove = [seg for seg in to_remove if len(seg) < 10]
+
             # Turn list of lists into list of node IDs
             to_remove = [n for l in to_remove for n in l[:-1]]
 
