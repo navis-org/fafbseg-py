@@ -169,6 +169,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                         lod_ -= 1
                     except BaseException:
                         raise
+                if lod_ < 0:
+                    raise ValueError(f'Root ID {id} does not appear to exist for'
+                                     f'"{dataset}"')
         except BaseException:
             raise
         finally:
