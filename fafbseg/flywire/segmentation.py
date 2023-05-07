@@ -1033,6 +1033,8 @@ def update_ids(id,
         else:
             raise ValueError('DataFrame must contain either `root_id` or '
                              '`root` column.')
+    elif isinstance(id, pd.Series):
+        id = id.values
 
     if isinstance(timestamp, str) and timestamp.startswith('mat'):
         client = get_cave_client(dataset=dataset)
