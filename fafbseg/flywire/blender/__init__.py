@@ -29,7 +29,7 @@ import matplotlib.colors as mcl
 from trimesh import exchange
 from trimesh.util import log
 
-from ..meshes import get_mesh_neuron, get_mesh_neuron_flat
+from ..meshes import get_mesh_neuron
 
 
 # find the current absolute path to this directory
@@ -116,10 +116,7 @@ def render_blender(x, style='workbench', fimage=None, fblend=None, neuropil=True
             else:
                 raise TypeError(f'Unable to render {type(o)}')
     else:
-        if not use_flat:
-            meshes = get_mesh_neuron(x)
-        else:
-            meshes = get_mesh_neuron_flat(x)
+        meshes = get_mesh_neuron(x, dataset='production' if not use_flat else 'flat_630')
         if isinstance(x, navis.NeuronList):
             meshes = [n.trimesh for n in meshes]
         else:
