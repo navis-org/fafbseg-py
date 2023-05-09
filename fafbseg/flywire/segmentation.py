@@ -486,6 +486,8 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
                 roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
                                                                 stop_layer=stop_layer,
                                                                 timestamp=timestamp)
+            except KeyboardInterrupt:
+                raise
             except BaseException:
                 if not retry:
                     raise
