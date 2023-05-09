@@ -443,24 +443,33 @@ def add_annotation_layer(annotations, scene, name=None, connected=False):
     return scene
 
 
-def decode_url(url, ret='brief'):
+def decode_url(url, format='brief'):
     """Decode neuroglancer URL.
 
     Parameters
     ----------
-    url :       str
-                URL to decode. Can be shortened URL.
-    ret :       "brief" | "dataframe" | "full"
+    url :       str | list of str
+                URL(s) to decode. Can be shortened URL. Note that not all
+                `format` work with multiple URLs.
+    format :    "segments" | "visible" | "annotations" | "brief" | "dataframe" | "full"
                 What to return:
-                 - "brief" will only return "position" (in voxels),  "selected",
-                   segment IDs and "annotations"
-                 - "dataframe" will return a frame with segment IDs and which
+                 - "segments" returns only segments (visible and invisible)
+                 - "visible" returns only visible segments
+                 - "annotations" returns only annotations
+                 - "brief" only returns position (in voxels),  selected
+                   segment IDs and annotations
+                 - "dataframe" returns a frame with segment IDs and which
                    layers they came from
-                 - "full", will return entire scene
+                 - "full" returns entire scene
 
     Returns
     -------
-    dict or DataFrame
+    list
+                If format is "segments", "visible" or "annotations".
+    dict
+                If format is "full" or "brief".
+    DataFrame
+                If format='dataframe'.
 
     Examples
     --------
@@ -471,8 +480,13 @@ def decode_url(url, ret='brief'):
      'selected': ['720575940621039145']}
 
     """
+    if isinstance(url, list):
+        if format != 'dataframe':
+            raise ValueError('Can only parse multiple URLs if format="dataframe"')
+        return pd.concat([decode_url(u, format=format) for u in url], axis=0)
+
     assert isinstance(url, (str, dict))
-    assert ret in ('brief', 'full', 'dataframe')
+    assert format in ('brief', 'full', 'dataframe', 'segments', 'visible', "annotations")
 
     query = parse_qs(urlparse(url).query, keep_blank_values=True)
 
@@ -486,13 +500,13 @@ def decode_url(url, ret='brief'):
     else:
         scene = query
 
-    if ret == 'brief':
+    if format == 'brief':
         seg_layers = [l for l in scene['layers'] if 'segmentation_with_graph' in l.get('type')]
         an_layers = [l for l in scene['layers'] if l.get('type') == 'annotation']
         return {'position': scene['navigation']['pose']['position'].get('voxelCoordinates', None),
                 'annotations': [a for l in an_layers for a in l.get('annotations', [])],
                 'selected': [s for l in seg_layers for s in l.get('segments', [])]}
-    elif ret == 'dataframe':
+    elif format == 'dataframe':
         segs = []
         seg_layers = [l for l in scene['layers'] if 'segmentation' in l.get('type')]
         for l in seg_layers:
