@@ -66,6 +66,11 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=Fals
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -133,7 +138,7 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=Fals
     return counts
 
 
-def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
+def predict_transmitter(x, single_pred=False, weighted=True, mat='auto', filtered=False,
                         neuropils=None, batch_size=10, dataset='production', **kwargs):
     """Fetch neurotransmitter predictions for neurons.
 
@@ -164,6 +169,11 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter predictions to these ROIs.
@@ -197,6 +207,7 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto',
     syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
                          transmitters=True, mat=mat,
                          neuropils=neuropils is not None,
+                         filtered=filtered,
                          batch_size=batch_size,
                          dataset=dataset, **kwargs)
 
@@ -271,6 +282,11 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (link to CAVE website).
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
@@ -355,14 +371,12 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                        split_positions=True,
                        select_columns=columns)
     elif filtered:
-        columns.remove('id')
-        columns.append('id_x')
         func = partial(retry(client.materialize.join_query),
                        tables=[[client.materialize.synapse_table, 'id'],
                                ['valid_synapses_nt_v2', 'target_id']],
                        materialization_version=mat,
                        split_positions=True,
-                       #select_columns=columns, # this does not work with join queries
+                       select_columns={client.materialize.synapse_table: columns},
                        )
     else:
         func = partial(retry(client.materialize.query_table),
@@ -405,7 +419,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                 'pre_pt_position_x': 'pre_x',
                 'pre_pt_position_y': 'pre_y',
                 'pre_pt_position_z': 'pre_z',
-                'id_x': 'id',  # this exists if we made a join query
+                'idx': 'id',  # this may exists if we made a join query
+                'id_x': 'id',  # this may exists if we made a join query
                 },
                axis=1, inplace=True)
 
@@ -498,9 +513,20 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
 
 def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
-                    neuropils=None, batch_size=1000, dataset='production',
-                    progress=True):
+                    neuropils=None, filtered=False, batch_size=1000,
+                    dataset='production', progress=True):
     """Fetch adjacency matrix.
+
+    Notes
+    -----
+    As of May 2023, CAVE provides "views" of materialized tables. This includes
+    a view with neuron edges (as opposed to individual synaptic connections)
+    which can be much faster to query. We will automatically use use the
+    view _if_:
+     1. `filtered=True` (default is `False`)
+     2. `min_score=None` or `min_score=50` (default is 30)
+     3. `neuropils=None` (default is `None`)
+     4. `mat!='live'` (default is "auto" which can end up as "live")
 
     Parameters
     ----------
@@ -523,6 +549,11 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches can
                     lead to truncated tables: currently individual queries do
@@ -582,6 +613,23 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                        table=client.materialize.synapse_table,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
+    elif filtered:
+        has_view = 'valid_connection_v2' in client.materialize.get_views(mat)
+        no_np = isinstance(neuropils, type(None))
+        no_score_thresh = not min_score or min_score == 50
+        if has_view & no_np & no_score_thresh:
+            columns = ['pre_pt_root_id', 'post_pt_root_id', 'n_syn']
+            func = partial(retry(client.materialize.query_view),
+                           view_name='valid_connection_v2',
+                           select_columns=columns,
+                           materialization_version=mat)
+            filtered = False  # Set to false since we don't need the join
+        else:
+            func = partial(retry(client.materialize.join_query),
+                        tables=[[client.materialize.synapse_table, 'id'],
+                                ['valid_synapses_nt_v2', 'target_id']],
+                        materialization_version=mat,
+                        select_columns={client.materialize.synapse_table: columns})
     else:
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
@@ -596,8 +644,14 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         for k in range(0, len(targets), batch_size):
             target_batch = targets[k:k+batch_size]
 
-            this = func(filter_in_dict=dict(post_pt_root_id=target_batch,
-                                            pre_pt_root_id=source_batch))
+            if not filtered:
+                filter_in_dict = dict(post_pt_root_id=target_batch,
+                                      pre_pt_root_id=source_batch)
+            else:
+                filter_in_dict = dict(synapses_nt_v1=dict(post_pt_root_id=target_batch,
+                                                          pre_pt_root_id=source_batch))
+
+            this = func(filter_in_dict=filter_in_dict)
 
             # We need to drop the .attrs (which contain meta data from queries)
             # Otherwise we run into issues when concatenating
@@ -617,7 +671,10 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         return adj
 
     # Depending on how queries were batched, we need to drop duplicate synapses
-    syn.drop_duplicates('id', inplace=True)
+    if 'id' in syn.columns:
+        syn.drop_duplicates('id', inplace=True)
+    else:
+        syn.drop_duplicates(['pre_pt_root_id', 'post_pt_root_id', 'n_syn'], inplace=True)
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
@@ -639,16 +696,21 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                 syn = syn.copy()
 
     # Rename some of those columns
-    syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
+    syn.rename({'post_pt_root_id': 'post',
+                'pre_pt_root_id': 'pre',
+                'n_syn': 'weight'},
                axis=1, inplace=True)
 
     # Next we need to run some clean-up:
     # Drop below threshold connections
-    if min_score:
+    if min_score and 'cleft_score' in syn.columns:
         syn = syn[syn.cleft_score >= min_score]
 
     # Aggregate
-    cn = syn.groupby(['pre', 'post'], as_index=False).size()
+    if 'weight' not in syn.columns:
+        cn = syn.groupby(['pre', 'post'], as_index=False).size()
+    else:
+        cn = syn
     cn.columns = ['source', 'target', 'weight']
 
     # Pivot
@@ -667,6 +729,17 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        progress=True):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
+    Notes
+    -----
+    As of May 2023, CAVE provides "views" of materialized tables. This includes
+    a view with neuron edges (as opposed to individual synaptic connections)
+    which can be much faster to query. We will automatically use use the
+    view _if_:
+     1. `filtered=True` (default is `False`)
+     2. `min_score=None` or `min_score=50` (default is 30)
+     3. `neuropils=None` (default is `None`)
+     4. `mat!='live'` (default is "auto" which can end up as "live")
+
     Parameters
     ----------
     x :             int | list of int | Neuron/List
@@ -677,9 +750,8 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     clean :         bool
                     If True, we will perform some clean up of the connectivity
                     compared with the raw synapse information. Currently, we::
-                        - drop autapses
-                        - drop synapses from/to background (id 0)
-
+                     - drop autapses
+                     - drop synapses from/to background (id 0)
     style :         "simple" | "catmaid"
                     Style of the returned table.
     min_score :     int
@@ -707,6 +779,11 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -721,9 +798,8 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                      - pass an integer (e.g. `447`) to use a specific materialization version
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
-
+                     - "production" (current production dataset, fly_v31)
+                     - "sandbox" (i.e. fly_v26)
 
     Returns
     -------
@@ -772,11 +848,24 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                        timestamp=dt.datetime.utcnow(),
                        select_columns=columns)
     elif filtered:
-        func = partial(retry(client.materialize.join_query),
-                       tables=[[client.materialize.synapse_table, 'id'],
-                               ['valid_synapses_nt_v2', 'target_id']],
-                       materialization_version=mat,
-                       select_columns=columns)
+        has_view = 'valid_connection_v2' in client.materialize.get_views(mat)
+        no_np = isinstance(neuropils, type(None))
+        no_score_thresh = not min_score or min_score == 50
+        if has_view & no_np & no_score_thresh:
+            columns = ['pre_pt_root_id', 'post_pt_root_id', 'n_syn']
+            if transmitters:
+                columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
+            func = partial(retry(client.materialize.query_view),
+                           view_name='valid_connection_v2',
+                           select_columns=columns,
+                           materialization_version=mat)
+            filtered = False  # Set to false since we don't need the join
+        else:
+            func = partial(retry(client.materialize.join_query),
+                        tables=[[client.materialize.synapse_table, 'id'],
+                                ['valid_synapses_nt_v2', 'target_id']],
+                        materialization_version=mat,
+                        select_columns={client.materialize.synapse_table: columns})
     else:
         func = partial(retry(client.materialize.query_table),
                        table=client.materialize.synapse_table,
@@ -809,7 +898,10 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
     # Depending on how queries were batched, we need to drop duplicate synapses
-    syn.drop_duplicates('id', inplace=True)
+    if 'id' in syn.columns:
+        syn.drop_duplicates('id', inplace=True)
+    else:
+        syn.drop_duplicates(['pre_pt_root_id', 'post_pt_root_id', 'n_syn'], inplace=True)
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
@@ -828,21 +920,20 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                 syn = syn[~syn.neuropil.isin(filter_out)]
 
     # Rename some of those columns
-    syn.rename({'post_pt_root_id': 'post', 'pre_pt_root_id': 'pre'},
+    syn.rename({'post_pt_root_id': 'post',
+                'pre_pt_root_id': 'pre',
+                'ach': 'acetylcholine',
+                'glut': 'glutamate',
+                'oct': 'octopamine',
+                'ser': 'serotonin',
+                'da': 'dopamine',
+                'n_syn': 'weight'},
                axis=1, inplace=True)
-
-    if transmitters:
-        syn.rename({'ach': 'acetylcholine',
-                    'glut': 'glutamate',
-                    'oct': 'octopamine',
-                    'ser': 'serotonin',
-                    'da': 'dopamine'},
-                   axis=1, inplace=True)
 
     # Next we need to run some clean-up:
     # Drop below threshold connections
-    if min_score:
-        syn = syn[syn.cleft_score >= min_score]
+    if min_score and 'cleft_score' in syn.columns:
+            syn = syn[syn.cleft_score >= min_score]
 
     if clean:
         # Drop autapses
@@ -851,7 +942,10 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         syn = syn[(syn.pre != 0) & (syn.post != 0)]
 
     # Turn into connectivity table
-    cn_table = syn.groupby(['pre', 'post'], as_index=False).size().rename({'size': 'weight'}, axis=1)
+    if 'weight' not in syn.columns:
+        cn_table = syn.groupby(['pre', 'post'], as_index=False).size().rename({'size': 'weight'}, axis=1)
+    else:
+        cn_table = syn
 
     # Filter to proofread neurons only
     if proofread_only:

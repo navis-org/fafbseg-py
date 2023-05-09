@@ -1,4 +1,4 @@
-caveclient
+caveclient>=5.4.2
 cloud-volume>=3.1
 diskcache
 fastremap
