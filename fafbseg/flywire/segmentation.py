@@ -82,7 +82,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
     networkx.DiGraph
 
     """
-    x = np.uint64(x)
+    x = np.int64(x)
 
     client = get_cave_client(dataset=dataset)
     G = client.chunkedgraph.get_lineage_graph(x, as_nx_graph=True)
@@ -1090,7 +1090,7 @@ def update_ids(id,
         return res
 
     try:
-        id = np.uint64(id)
+        id = np.int64(id)
     except ValueError:
         raise ValueError(f'"{id} does not look like a valid root ID.')
 
@@ -1174,7 +1174,7 @@ def update_ids(id,
 
     return pd.DataFrame([[id, new_id, conf, id != new_id]],
                         columns=['old_id', 'new_id', 'confidence', 'changed']
-                        ).astype({'old_id': np.uint64, 'new_id': np.uint64})
+                        ).astype({'old_id': np.int64, 'new_id': np.int64})
 
 
 def snap_to_id(locs, id, snap_zero=False, dataset='production',

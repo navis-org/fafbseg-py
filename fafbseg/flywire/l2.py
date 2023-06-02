@@ -226,7 +226,7 @@ def find_anchor_loc(root_ids,
 
     """
     if navis.utils.is_iterable(root_ids):
-        root_ids = np.asarray(root_ids).astype(np.uint64)
+        root_ids = np.asarray(root_ids).astype(np.int64)
         root_ids_unique = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
@@ -263,7 +263,7 @@ def find_anchor_loc(root_ids,
                                              disable=not progress or len(df) == 1,
                                              leave=False):
                     if df.supervoxel.values[i]:
-                        sv = np.uint64(df.supervoxel.values[i])
+                        sv = np.int64(df.supervoxel.values[i])
                         r = client.chunkedgraph.get_root_id(sv, timestamp=ts[i])
                         df.loc[i, 'valid'] = r == df.root_id.values[i]
 
@@ -272,7 +272,7 @@ def find_anchor_loc(root_ids,
 
         return df
 
-    root_ids = np.uint64(root_ids)
+    root_ids = np.int64(root_ids)
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)

@@ -169,7 +169,7 @@ def is_materialized_root(id, materialization='latest'):
             for i, ts in zip(id[older][~il], ts_root_gen[older][~il]):
                 # Get the lineage graph from the root's creation right up to the
                 # materialization
-                G = client.chunkedgraph.get_lineage_graph(np.uint64(i),
+                G = client.chunkedgraph.get_lineage_graph(np.int64(i),
                                                           timestamp_past=ts,
                                                           timestamp_future=ts_mat, as_nx_graph=True)
                 try:
