@@ -352,7 +352,7 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
-        mat = find_mat_version(ids, dataset=dataset)
+        mat = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
@@ -602,7 +602,7 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
-        mat = find_mat_version(both, dataset=dataset)
+        mat = find_mat_version(both, dataset=dataset, verbose=progress)
     else:
         _check_ids(both, mat=mat, dataset=dataset)
 
@@ -831,7 +831,7 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         mat = client.materialize.most_recent_version()
 
     if mat == 'auto':
-        mat = find_mat_version(ids, dataset=dataset)
+        mat = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
