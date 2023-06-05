@@ -1127,7 +1127,8 @@ def update_ids(id,
     elif not is_latest:
         client = get_cave_client(dataset=dataset)
         get_latest_roots = retry(client.chunkedgraph.get_latest_roots)
-        pot_roots = get_latest_roots(id)
+        # This endpoint in caveclient seems to require uint64
+        pot_roots = get_latest_roots(np.uint64(id))
 
         # Note that we're checking whether the suggested new ID is not the same
         # as the old ID? That's because I came across a few example where the
