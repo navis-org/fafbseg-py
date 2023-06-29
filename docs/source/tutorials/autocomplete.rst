@@ -1,10 +1,10 @@
 .. _autocomplete:
 
-Autocomplete Neuron
-===================
+Autocomplete CATMAID Neurons
+============================
 
-This examples will illustrate how to use the ``autoseg`` to autocomplete
-a partially reconstructed neuron.
+This examples will illustrate how to use the Google ``autoseg`` to autocomplete
+a partially reconstructed CATMAID neuron.
 
 .. note::
 

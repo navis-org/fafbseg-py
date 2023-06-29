@@ -5,7 +5,7 @@ API Documentation
 
 FAFBseg is divided into separate modules to split functions by data source/type:
 
-  - ``fafbseg.flywire`` for FlyWire-related functions
+  - ``fafbseg.flywire`` for FlyWire functions
   - ``fafbseg.google`` for Google segmentation-related functions
   - ``fafbseg.xform`` for transforming spatial data between FAFB14 and FlyWire's FAFB14.1
   - ``fafbseg.move`` for moving/merging data between data sets
