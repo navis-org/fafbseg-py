@@ -1,6 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/fafbseg-py/badge/?version=latest)](https://fafbseg-py.readthedocs.io/en/latest/?badge=latest) [![DOI](https://zenodo.org/badge/197735091.svg)](https://zenodo.org/badge/latestdoi/197735091)
 
-# FAFBseg
+<img src="https://github.com/navis-org/fafbseg-py/blob/master/docs/_static/logo2.png?raw=true" height="60">
+
+
 Tools to work with manually generated and auto-segmented data in FAFB.
 
 ## Documentation
