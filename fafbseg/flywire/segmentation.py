@@ -711,15 +711,16 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
 
 def skid_to_id(x,
                sample=None,
-               dataset='production',
-               progress=True, **kwargs):
-    """Find the FlyWire root ID(s) corresponding to given CATMAID skeleton ID(s).
+               catmaid_instance=None,
+               progress=True,
+               dataset='production'):
+    """Find the FlyWire root ID for a given (FAFB) CATMAID neuron.
 
     This function works by:
-        1. Fetch supervoxels for all nodes in the CATMAID skeletons
-        2. Pick a random sample of ``sample`` of these supervoxels
-        3. Fetch the most recent root IDs for the sample supervoxels
-        4. Return the root ID that collectively cover 90% of the supervoxels
+        1. Fetch the skeleton for given CATMAID neuron.
+        2. Transform the skeleton to FlyWire space.
+        3. Map the x/y/z location of the skeleton nodes to root IDs.
+        4. Return the root ID that was seen the most often.
 
     Parameters
     ----------
@@ -727,28 +728,42 @@ def skid_to_id(x,
                     Anything that's not a TreeNeuron/List will be passed
                     directly to ``pymaid.get_neuron``.
     sample :        int | float, optional
-                    Number (>= 1) or fraction (< 1) of super nodes to sample
-                    to find FlyWire IDs. If ``None`` (default), will use all
-                    nodes.
+                    Number (>= 1) or fraction (< 1) of skeleton nodes to sample
+                    to find FlyWire root IDs. If ``None`` (default), will use
+                    all nodes.
     dataset :       str | CloudVolume
                     Against which FlyWire dataset to query::
                         - "production" (current production dataset, fly_v31)
                         - "sandbox" (i.e. fly_v26)
+    catmaid_instance : pymaid.CatmaidInstance, optional
+                    Connection to a CATMAID server. If ``None``, will use the
+                    current global connection. See pymaid docs for details.
     progress :      bool
                     If True, shows progress bar.
 
     Returns
     -------
     pandas.DataFrame
-                    Mapping of FlyWire root IDs to skeleton IDs with confidence::
+                    Mapping of skeleton IDs to FlyWire root IDs with. Confidence
+                    is the difference between the frequency of the root ID that
+                    was seen most often and the second most seen ID.
 
-                      skeleton_id   flywire_id   confidence
-                    0
-                    1
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> import pymaid
+    >>> # Connect to the VFB's CATMAID
+    >>> rm = pymaid.CatmaidInstance('https://fafb.catmaid.virtualflybrain.org/',
+    ...                             project_id=1, api_token=None)
+    >>> roots = flywire.skid_to_id([6762, 2379517])
+    >>> roots
+      skeleton_id          flywire_id  confidence
+    0        6762  720575940608544011        0.80
+    1     2379517  720575940617229632        0.42
 
     """
     if not isinstance(x, (navis.TreeNeuron, navis.NeuronList)):
-        x = pymaid.get_neuron(x)
+        x = pymaid.get_neuron(x, remote_instance=catmaid_instance)
 
     if isinstance(x, navis.NeuronList) and len(x) == 1:
         x = x[0]
@@ -759,7 +774,7 @@ def skid_to_id(x,
                                    disable=not progress,
                                    leave=False):
             res.append(skid_to_id(n, dataset=dataset))
-        return pd.concat(res, axis=0)
+        return pd.concat(res, axis=0).reset_index(drop=True)
     elif isinstance(x, navis.TreeNeuron):
         nodes = x.nodes[['x', 'y', 'z']]
         if sample:
