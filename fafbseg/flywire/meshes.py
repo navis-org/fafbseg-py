@@ -41,9 +41,10 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
                         Segment ID(s) to fetch meshes for.
     with_synapses :     bool
                         If True, will also load a connector table with
-                        synapse predicted by Buhmann et al. (2020).
-                        A "synapse score" (confidence) threshold of 30 is
-                        applied.
+                        synapse predicted by Buhmann et al. (2020). This uses
+                        the default parameters for ``flywire.fetch_synapses``.
+                        Use that function directly (with ``attach=True``) to
+                        have more control over which synapses get pulled.
     omit_failures :     bool, optional
                         Determine behaviour when mesh download fails
                         (e.g. if there is no mesh):
