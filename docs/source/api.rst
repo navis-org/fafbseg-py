@@ -42,6 +42,7 @@ Fetch neurons:
 
     fafbseg.flywire.get_mesh_neuron
     fafbseg.flywire.get_somas
+    fafbseg.flywire.get_skeletons
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
     fafbseg.flywire.merge_flywire_neuron
