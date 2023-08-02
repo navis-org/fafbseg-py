@@ -19,7 +19,6 @@ framework and the materialization engine."""
 import navis
 import requests
 import pytz
-import warnings
 
 import datetime as dt
 import numpy as np
@@ -35,7 +34,7 @@ from .segmentation import (locs_to_segments, supervoxels_to_roots, is_latest_roo
 
 
 __all__ = ['get_somas', 'get_materialization_versions',
-           'create_annotation_table', 'get_annotation_tables',
+           'create_annotation_table',
            'get_annotation_table_info', 'get_annotations',
            'delete_annotations', 'upload_annotations',
            'is_proofread', 'find_celltypes', 'list_annotation_tables']
@@ -342,32 +341,6 @@ def list_annotation_tables(*, dataset=None):
     df['materialized'] = df.index.isin(ma)
 
     return df
-
-
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
-def get_annotation_tables(*, dataset=None):
-    """Fetch available annotation tables.
-
-    Parameters
-    ----------
-    dataset :       "public" | "production" | "sandbox", optional
-                    Against which FlyWire dataset to query. If ``None`` will fall
-                    back to the default dataset (see
-                    :func:`~fafbseg.flywire.set_default_dataset`).
-
-    Returns
-    -------
-    list
-
-    """
-    warnings.warn(
-            "`get_annotation_tables` is deprecated and will be removed in a "
-            "future version of fafbseg, please use `list_annotation_tables`"
-            "instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-    return list_annotation_tables(dataset=dataset)
 
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
