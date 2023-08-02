@@ -33,6 +33,7 @@ Interact with the segmentation:
     fafbseg.flywire.is_proofread
     fafbseg.flywire.find_common_time
     fafbseg.flywire.find_anchor_loc
+    fafbseg.flywire.get_segmentation_cutout
 
 Fetch neurons:
 
@@ -45,7 +46,7 @@ Fetch neurons:
     fafbseg.flywire.skeletonize_neuron_parallel
     fafbseg.flywire.merge_flywire_neuron
 
-L2 data:
+L2-related functions:
 
 .. autosummary::
     :toctree: generated/
@@ -80,6 +81,14 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
     fafbseg.flywire.find_celltypes
+
+Utiliy functions:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.set_default_dataset
+
 
 Google segmentation
 -------------------
