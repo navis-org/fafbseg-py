@@ -139,7 +139,6 @@ def get_neuropil_volumes(neuropils):
 
     Examples
     --------
-
     Load a single volume:
 
     >>> from fafbseg import flywire
@@ -279,7 +278,7 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
 
 
 def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
-    """Get chunked graph secret.
+    """Get local FlyWire chunkedgraph/CAVE secret.
 
     Parameters
     ----------
@@ -295,7 +294,7 @@ def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
     if hasattr(cv.secrets, 'cave_credentials'):
         token = cv.secrets.cave_credentials(domain).get('token', None)
         if not token:
-            raise ValueError(f'No chunkedgraph secret for domain {domain} '
+            raise ValueError(f'No chunkedgraph/CAVE secret for domain {domain} '
                              'found. Please see '
                              'fafbseg.flywire.set_chunkedgraph_secret to set '
                              'your secret.')
@@ -303,47 +302,34 @@ def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
         try:
             token = cv.secrets.chunkedgraph_credentials['token']
         except BaseException:
-            raise ValueError('No chunkedgraph secret found. Please see '
-                             'fafbseg.flywire.set_chunkedgraph_secret to set your '
-                             'secret.')
+            raise ValueError('No chunkedgraph/CAVE secret found. Please see '
+                             '`fafbseg.flywire.set_chunkedgraph_secret` to set '
+                             'your secret.')
     return token
 
 
-def set_chunkedgraph_secret(token, filepath=None,
-                            domain='prod.flywire-daf.com'):
-    """Set chunked graph secret (called "cave credentials" now).
+def set_chunkedgraph_secret(token, overwrite=False, **kwargs):
+    """Set FlyWire chunkedgraph/CAVE secret.
+
+    This is just a thin wrapper around ``caveclient.CAVEclient.auth.save_token()``.
 
     Parameters
     ----------
     token :     str
                 Get your token from
-                https://globalv1.flywire-daf.com/auth/api/v1/refresh_token
-    filepath :  str filepath
-                Path to secret file. If not provided will store in default path:
-                ``~/.cloudvolume/secrets/{domain}-cave-secret.json``
-    domain :    str
-                The domain (incl subdomain) this secret is for.
+                https://globalv1.flywire-daf.com/auth/api/v1/user/token.
+    overwrite : bool
+                Whether to overwrite any existing secret.
+    **kwargs
+                Keyword arguments are passed through to
+                ``caveclient.CAVEclient.save_token()``.
 
     """
     assert isinstance(token, str), f'Token must be string, got "{type(token)}"'
 
-    if not filepath:
-        filepath = f'~/.cloudvolume/secrets/{domain}-cave-secret.json'
-    elif not filepath.endswith('/chunkedgraph-secret.json'):
-        filepath = os.path.join(filepath, f'{domain}-cave-secret.json')
-    elif not filepath.endswith('.json'):
-        filepath = f'{filepath}.json'
-
-    filepath = Path(filepath).expanduser()
-
-    # Make sure this file (and the path!) actually exist
-    if not filepath.exists():
-        if not filepath.parent.exists():
-            filepath.parent.mkdir(parents=True)
-        filepath.touch()
-
-    with open(filepath, 'w+') as f:
-        json.dump({'token': token}, f)
+    # I guess "public" should just work here
+    client = get_cave_client('public')
+    client.auth.save_token(token, overwrite=overwrite, **kwargs)
 
     # We need to reload cloudvolume for changes to take effect
     reload(cv.secrets)
@@ -353,7 +339,7 @@ def set_chunkedgraph_secret(token, filepath=None,
     global fw_vol
     fw_vol = None
 
-    print("Token succesfully stored in ", filepath)
+    print("Token succesfully stored.")
 
 
 def parse_root_ids(x):
@@ -584,19 +570,19 @@ def find_mat_version(ids, verbose=True, dataset='production'):
         is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
 
         if all(is_valid):
-            if verbose:
+            if verbose and not SILENCE_FIND_MAT_VERSION:
                 print(f'Using materialization version {version}')
             return version
 
     # If no version found, see if we can get by with the live version
     if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
-        if verbose:
+        if verbose and not SILENCE_FIND_MAT_VERSION:
             print(f'Using live materialization')
         return 'live'
 
-    raise ValueError('Given root IDs could not be mapped to a common '
-                     'materialization version (including live). Try updating '
-                     'roots to a single timestamp and rerun your query.')
+    raise ValueError('Given root ID(s) do not exists in any of the available '
+                     'materialization versions (including live). Try updating '
+                     'root IDs and rerun your query.')
 
 
 def package_timestamp(timestamp, name="timestamp"):
