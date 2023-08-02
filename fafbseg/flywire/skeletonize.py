@@ -37,9 +37,10 @@ from .annotations import get_somas, is_materialized_root
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
 
+@inject_dataset()
 def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
-                       assert_id_match=False, dataset='production', threads=2,
-                       save_to=None, progress=True, **kwargs):
+                       assert_id_match=False, threads=2, save_to=None,
+                       progress=True, *, dataset=None, **kwargs):
     """Skeletonize FlyWire neuron.
 
     Note that this is optimized to be primarily fast which comes at the cost
@@ -68,15 +69,6 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into
                          the segment. This is potentially very slow!
-    dataset :            str | CloudVolume
-                         Against which FlyWire dataset to query::
-                           - "production" (current production dataset, fly_v31)
-                           - "sandbox" (i.e. fly_v26)
-                           - "flat_630" or "flat_571" will use the flat
-                             segmentations matching the respective materialization
-                             versions. By default these use `lod=2`, you can
-                             change that behaviour by passing `lod` as keyword
-                             argument.
     threads :            int
                          Number of parallel threads to use for downloading the
                          meshes.
@@ -84,6 +76,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          If provided will save skeleton as SWC at `{save_to}/{id}.swc`.
     progress :           bool
                          Whether to show a progress bar or not.
+    dataset :            str | CloudVolume
+                         Against which FlyWire dataset to query::
+                           - "production" (current production dataset, fly_v31)
+                           - "sandbox" (i.e. fly_v26)
+                           - "public"
+                           - "flat_630" or "flat_571" will use the flat
+                             segmentations matching the respective materialization
+                             versions. By default these use `lod=2`, you can
+                             change that behaviour by passing `lod` as keyword
+                             argument.
 
     Return
     ------

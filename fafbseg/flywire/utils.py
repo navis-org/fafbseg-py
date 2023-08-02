@@ -10,7 +10,7 @@
 #
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #    GNU General Public License for more details.
 
 import functools
@@ -38,20 +38,24 @@ from .. import utils
 
 
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
-           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position']
+           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position',
+           'set_default_dataset']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
-                    'sandbox': 'fly_v26'}
+                    'sandbox': 'fly_v26',
+                    'public': 'flywire_public'}
 
 FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
                 'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
+                'public': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public',
                 'flat_630': 'precomputed://gs://flywire_v141_m630',
                 'flat_571': 'precomputed://gs://flywire_v141_m526'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
                  'flat_630': 'flywire_fafb_production',
                  'flat_571': 'flywire_fafb_production',
-                 'sandbox': 'flywire_fafb_sandbox'}
+                 'sandbox': 'flywire_fafb_sandbox',
+                 'public': 'flywire_fafb_public'}
 
 
 # Initialize without a volume
@@ -63,6 +67,57 @@ fp = Path(__file__).parent
 data_path = fp.parent / 'data'
 area_ids = None
 vol_names = None
+
+# The default dataset
+DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'production')
+
+
+def set_default_dataset(dataset):
+    """Set the default FlyWire dataset for this session.
+
+    Alternatively, you can also use a FLYWIRE_DEFAULT_DATASET environment
+    variable (must be set before starting Python).
+
+    Parameters
+    ----------
+    dataset :   "production" | "public" | "sandbox" | "flat_630"
+                Dataset to be used by default.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.set_default_dataset('public')
+
+    """
+    if dataset not in FLYWIRE_URLS:
+        raise ValueError(f'`dataset` must be one of: {", ".join(list(FLYWIRE_URLS))}')
+
+    global DEFAULT_DATASET
+    DEFAULT_DATASET = dataset
+    print(f'Default dataset set to "{dataset}"')
+
+
+def inject_dataset(allowed=None, disallowed=None):
+    """Inject current default dataset."""
+    if isinstance(allowed, str):
+        allowed = [allowed]
+    if isinstance(disallowed, str):
+        disallowed = [disallowed]
+    def outer(func):
+        @functools.wraps(func)
+        def inner(*args, **kwargs):
+            if kwargs.get('dataset', None) is None:
+                kwargs['dataset'] = DEFAULT_DATASET
+
+            ds = kwargs['dataset']
+            if allowed and ds not in allowed:
+                raise ValueError(f'Dataset "{ds}" not allowed for function {func}. '
+                                 f'Accepted datasets: {allowed}')
+            if disallowed and ds in disallowed:
+                raise ValueError(f'Dataset "{ds}" not allowed for function {func}.')
+            return func(*args, **kwargs)
+        return inner
+    return outer
 
 
 def get_neuropil_volumes(neuropils):
@@ -160,7 +215,8 @@ def get_synapse_areas(ind):
     return np.array([vol_names[i] for i in area_ids[ind]])
 
 
-def get_cave_client(dataset='production', token=None, check_stale=True,
+@inject_dataset()
+def get_cave_client(*, dataset=None, token=None, check_stale=True,
                     force_new=False):
     """Get CAVE client.
 

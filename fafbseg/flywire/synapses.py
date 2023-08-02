@@ -20,29 +20,44 @@ import numpy as np
 import pandas as pd
 
 from functools import partial
-from pathlib import Path
 from tqdm.auto import trange
 
-from .segmentation import (is_latest_root, fetch_edit_history,
-                           get_lineage_graph, roots_to_supervoxels)
-from .utils import (parse_root_ids, get_cave_client, retry, get_synapse_areas,
-                    find_mat_version)
-from .annotations import get_materialization_versions, is_proofread
+from .segmentation import get_lineage_graph, roots_to_supervoxels
+from .utils import (
+    parse_root_ids,
+    get_cave_client,
+    retry,
+    get_synapse_areas,
+    find_mat_version,
+    inject_dataset,
+)
+from .annotations import is_proofread
 
 from ..utils import make_iterable
 from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
 
-__all__ = ['fetch_synapses', 'fetch_connectivity', 'predict_transmitter',
-           'fetch_adjacency', 'synapse_counts']
+__all__ = [
+    "fetch_synapses",
+    "fetch_connectivity",
+    "predict_transmitter",
+    "fetch_adjacency",
+    "synapse_counts",
+]
 
 
-def split_axon_dendrite(x):
-    pass
-
-
-def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=False,
-                   batch_size=10, dataset='production', **kwargs):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def synapse_counts(
+    x,
+    by_neuropil=False,
+    min_score=30,
+    mat="auto",
+    filtered=False,
+    batch_size=10,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Fetch synapse counts for given root IDs.
 
     Parameters
@@ -76,10 +91,10 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=Fals
                     lead to truncated tables: currently individual queries can
                     not return more than 200_000 rows and you will see a warning
                     if that limit is exceeded.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
                     Keyword arguments are passed through to
                     :func:`fafbseg.flywire.fetch_synapses`.
@@ -96,50 +111,70 @@ def synapse_counts(x, by_neuropil=False, min_score=30, mat='auto', filtered=Fals
     ids = parse_root_ids(x).astype(np.int64)
 
     # First get the synapses
-    syn = fetch_synapses(ids, pre=True, post=True, attach=False,
-                         min_score=min_score,
-                         transmitters=True,
-                         mat=mat,
-                         neuropils=by_neuropil,
-                         filtered=filtered,
-                         batch_size=batch_size,
-                         dataset=dataset, **kwargs)
+    syn = fetch_synapses(
+        ids,
+        pre=True,
+        post=True,
+        attach=False,
+        min_score=min_score,
+        transmitters=True,
+        mat=mat,
+        neuropils=by_neuropil,
+        filtered=filtered,
+        batch_size=batch_size,
+        dataset=dataset,
+        **kwargs,
+    )
 
     pre = syn[syn.pre.isin(ids)]
     post = syn[syn.post.isin(ids)]
 
     if not by_neuropil:
         counts = pd.DataFrame()
-        counts['id'] = ids
-        counts['pre'] = pre.value_counts('pre').reindex(ids).fillna(0).values
-        counts['post'] = post.value_counts('post').reindex(ids).fillna(0).values
-        counts.set_index('id', inplace=True)
+        counts["id"] = ids
+        counts["pre"] = pre.value_counts("pre").reindex(ids).fillna(0).values
+        counts["post"] = post.value_counts("post").reindex(ids).fillna(0).values
+        counts.set_index("id", inplace=True)
     else:
-        pre_grp = pre.groupby(['pre', 'neuropil']).size()
+        pre_grp = pre.groupby(["pre", "neuropil"]).size()
         pre_grp = pre_grp[pre_grp > 0]
-        pre_grp.index.set_names(['id', 'neuropil'], inplace=True)
+        pre_grp.index.set_names(["id", "neuropil"], inplace=True)
 
-        post_grp = post.groupby(['post', 'neuropil']).size()
+        post_grp = post.groupby(["post", "neuropil"]).size()
         post_grp = post_grp[post_grp > 0]
-        post_grp.index.set_names(['id', 'neuropil'], inplace=True)
+        post_grp.index.set_names(["id", "neuropil"], inplace=True)
 
-        neuropils = np.unique(np.append(pre_grp.index.get_level_values(1),
-                                        post_grp.index.get_level_values(1)))
+        neuropils = np.unique(
+            np.append(
+                pre_grp.index.get_level_values(1), post_grp.index.get_level_values(1)
+            )
+        )
 
-        index = pd.MultiIndex.from_product([ids, neuropils],
-                                           names=['id', 'neuropil'])
+        index = pd.MultiIndex.from_product([ids, neuropils], names=["id", "neuropil"])
 
-        counts = pd.concat([pre_grp.reindex(index).fillna(0),
-                            post_grp.reindex(index).fillna(0)],
-                           axis=1)
-        counts.columns = ['pre', 'post']
+        counts = pd.concat(
+            [pre_grp.reindex(index).fillna(0), post_grp.reindex(index).fillna(0)],
+            axis=1,
+        )
+        counts.columns = ["pre", "post"]
         counts = counts[counts.max(axis=1) > 0]
 
     return counts
 
 
-def predict_transmitter(x, single_pred=False, weighted=True, mat='auto', filtered=False,
-                        neuropils=None, batch_size=10, dataset='production', **kwargs):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def predict_transmitter(
+    x,
+    single_pred=False,
+    weighted=True,
+    mat="auto",
+    filtered=False,
+    neuropils=None,
+    batch_size=10,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Fetch neurotransmitter predictions for neurons.
 
     Based on Eckstein et al. (2020). The per-synapse predictions are collapsed
@@ -183,10 +218,10 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto', filtere
                     lead to truncated tables: currently individual queries can
                     not return more than 200_000 rows and you will see a warning
                     if that limit is exceeded.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
                     Keyword arguments are passed through to
                     :func:`fafbseg.flywire.fetch_synapses`.
@@ -204,17 +239,25 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto', filtere
 
     """
     # First get the synapses
-    syn = fetch_synapses(x, pre=True, post=False, attach=False, min_score=None,
-                         transmitters=True, mat=mat,
-                         neuropils=neuropils is not None,
-                         filtered=filtered,
-                         batch_size=batch_size,
-                         dataset=dataset, **kwargs)
+    syn = fetch_synapses(
+        x,
+        pre=True,
+        post=False,
+        attach=False,
+        min_score=None,
+        transmitters=True,
+        mat=mat,
+        neuropils=neuropils is not None,
+        filtered=filtered,
+        batch_size=batch_size,
+        dataset=dataset,
+        **kwargs,
+    )
 
     if not isinstance(neuropils, type(None)):
         neuropils = make_iterable(neuropils)
-        filter_in = [n for n in neuropils if not n.startswith('~')]
-        filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+        filter_in = [n for n in neuropils if not n.startswith("~")]
+        filter_out = [n[1:] for n in neuropils if n.startswith("~")]
 
         if filter_in:
             syn = syn[syn.neuropil.isin(filter_in)]
@@ -226,15 +269,30 @@ def predict_transmitter(x, single_pred=False, weighted=True, mat='auto', filtere
             syn = syn.copy()
 
     # Process the predictions
-    pred = collapse_nt_predictions(syn, single_pred=single_pred,
-                                   weighted=weighted, id_col='pre')
+    pred = collapse_nt_predictions(
+        syn, single_pred=single_pred, weighted=weighted, id_col="pre"
+    )
 
     return pred.reindex(make_iterable(x).astype(np.int64), axis=1)
 
 
-def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True,
-                   transmitters=False, neuropils=False, mat='auto', filtered=False,
-                   batch_size=10, dataset='production', progress=True):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def fetch_synapses(
+    x,
+    pre=True,
+    post=True,
+    attach=True,
+    min_score=30,
+    clean=True,
+    transmitters=False,
+    neuropils=False,
+    mat="auto",
+    filtered=False,
+    batch_size=10,
+    *,
+    dataset=None,
+    progress=True,
+):
     """Fetch Buhmann et al. (2019) synapses for given neuron(s).
 
     Parameters
@@ -287,10 +345,10 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
                     filter removes falsely redundant and automatically
                     removes synapses with confidence <= 50. See also
                     https://tinyurl.com/4j9v7t86 (link to CAVE website).
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -331,15 +389,17 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
 
     """
     if not pre and not post:
-        raise ValueError('`pre` and `post` must not both be False')
+        raise ValueError("`pre` and `post` must not both be False")
 
     if isinstance(mat, str):
-        if mat not in ('latest', 'live', 'auto'):
-            raise ValueError('`mat` must be "auto", "latest", "live" or '
-                             f'integer, got "{mat}"')
+        if mat not in ("latest", "live", "auto"):
+            raise ValueError(
+                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
+            )
     elif not isinstance(mat, int):
-        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
-                         f'got "{type(mat)}"')
+        raise ValueError(
+            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+        )
 
     # Parse root IDs
     ids = parse_root_ids(x).astype(np.int64)
@@ -348,48 +408,65 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == 'latest':
+    if mat == "latest":
         mat = client.materialize.most_recent_version()
 
-    if mat == 'auto':
+    if mat == "auto":
         mat = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
-    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score',
-               'pre_pt_position', 'post_pt_position', 'id']
+    columns = [
+        "pre_pt_root_id",
+        "post_pt_root_id",
+        "cleft_score",
+        "pre_pt_position",
+        "post_pt_position",
+        "id",
+    ]
 
     if transmitters:
-        columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
+        columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
-    if mat == 'live' and filtered:
+    if mat == "live" and filtered:
         raise ValueError("Can't fetch filtered synapses for live query.")
-    elif mat == 'live':
-        func = partial(retry(client.materialize.live_query),
-                       table=client.materialize.synapse_table,
-                       timestamp=dt.datetime.utcnow(),
-                       split_positions=True,
-                       select_columns=columns)
+    elif mat == "live":
+        func = partial(
+            retry(client.materialize.live_query),
+            table=client.materialize.synapse_table,
+            timestamp=dt.datetime.utcnow(),
+            split_positions=True,
+            select_columns=columns,
+        )
     elif filtered:
-        func = partial(retry(client.materialize.join_query),
-                       tables=[[client.materialize.synapse_table, 'id'],
-                               ['valid_synapses_nt_v2', 'target_id']],
-                       materialization_version=mat,
-                       split_positions=True,
-                       select_columns={client.materialize.synapse_table: columns},
-                       )
+        func = partial(
+            retry(client.materialize.join_query),
+            tables=[
+                [client.materialize.synapse_table, "id"],
+                ["valid_synapses_nt_v2", "target_id"],
+            ],
+            materialization_version=mat,
+            split_positions=True,
+            select_columns={client.materialize.synapse_table: columns},
+        )
     else:
-        func = partial(retry(client.materialize.query_table),
-                       table=client.materialize.synapse_table,
-                       split_positions=True,
-                       materialization_version=mat,
-                       select_columns=columns)
+        func = partial(
+            retry(client.materialize.query_table),
+            table=client.materialize.synapse_table,
+            split_positions=True,
+            materialization_version=mat,
+            select_columns=columns,
+        )
 
     syn = []
-    for i in trange(0, len(ids), batch_size,
-                    desc='Fetching synapses',
-                    disable=not progress or len(ids) <= batch_size):
-        batch = ids[i:i+batch_size]
+    for i in trange(
+        0,
+        len(ids),
+        batch_size,
+        desc="Fetching synapses",
+        disable=not progress or len(ids) <= batch_size,
+    ):
+        batch = ids[i : i + batch_size]
         if post:
             if not filtered:
                 filter_in_dict = dict(post_pt_root_id=batch)
@@ -411,29 +488,38 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
     # Rename some of those columns
-    syn.rename({'post_pt_root_id': 'post',
-                'pre_pt_root_id': 'pre',
-                'post_pt_position_x': 'post_x',
-                'post_pt_position_y': 'post_y',
-                'post_pt_position_z': 'post_z',
-                'pre_pt_position_x': 'pre_x',
-                'pre_pt_position_y': 'pre_y',
-                'pre_pt_position_z': 'pre_z',
-                'idx': 'id',  # this may exists if we made a join query
-                'id_x': 'id',  # this may exists if we made a join query
-                },
-               axis=1, inplace=True)
+    syn.rename(
+        {
+            "post_pt_root_id": "post",
+            "pre_pt_root_id": "pre",
+            "post_pt_position_x": "post_x",
+            "post_pt_position_y": "post_y",
+            "post_pt_position_z": "post_z",
+            "pre_pt_position_x": "pre_x",
+            "pre_pt_position_y": "pre_y",
+            "pre_pt_position_z": "pre_z",
+            "idx": "id",  # this may exists if we made a join query
+            "id_x": "id",  # this may exists if we made a join query
+        },
+        axis=1,
+        inplace=True,
+    )
 
     # Depending on how queries were batched, we need to drop duplicate synapses
-    syn.drop_duplicates('id', inplace=True)
+    syn.drop_duplicates("id", inplace=True)
 
     if transmitters:
-        syn.rename({'ach': 'acetylcholine',
-                    'glut': 'glutamate',
-                    'oct': 'octopamine',
-                    'ser': 'serotonin',
-                    'da': 'dopamine'},
-                   axis=1, inplace=True)
+        syn.rename(
+            {
+                "ach": "acetylcholine",
+                "glut": "glutamate",
+                "oct": "octopamine",
+                "ser": "serotonin",
+                "da": "dopamine",
+            },
+            axis=1,
+            inplace=True,
+        )
 
     # Next we need to run some clean-up:
     # Drop below threshold connections
@@ -451,8 +537,8 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
         syn = syn.copy()
 
     if neuropils:
-        syn['neuropil'] = get_synapse_areas(syn['id'].values)
-        syn['neuropil'] = syn.neuropil.astype('category')
+        syn["neuropil"] = get_synapse_areas(syn["id"].values)
+        syn["neuropil"] = syn.neuropil.astype("category")
 
     # Drop ID column
     # syn.drop('id', axis=1, inplace=True)
@@ -463,58 +549,62 @@ def fetch_synapses(x, pre=True, post=True, attach=True, min_score=30, clean=True
     if attach and isinstance(x, navis.NeuronList):
         for n in x:
             presyn = postsyn = pd.DataFrame([])
-            add_cols = ['neuropil'] if neuropils else []
+            add_cols = ["neuropil"] if neuropils else []
             if pre:
-                cols = ['pre_x', 'pre_y', 'pre_z',
-                        'cleft_score', 'post'] + add_cols
-                presyn = syn.loc[syn.pre == np.int64(n.id), cols
-                                 ].rename({'pre_x': 'x',
-                                           'pre_y': 'y',
-                                           'pre_z': 'z',
-                                           'post': 'partner_id'},
-                                          axis=1)
-                presyn['type'] = 'pre'
+                cols = ["pre_x", "pre_y", "pre_z", "cleft_score", "post"] + add_cols
+                presyn = syn.loc[syn.pre == np.int64(n.id), cols].rename(
+                    {"pre_x": "x", "pre_y": "y", "pre_z": "z", "post": "partner_id"},
+                    axis=1,
+                )
+                presyn["type"] = "pre"
             if post:
-                cols = ['post_x', 'post_y', 'post_z',
-                        'cleft_score', 'pre'] + add_cols
-                postsyn = syn.loc[syn.post == np.int64(n.id), cols
-                                  ].rename({'post_x': 'x',
-                                            'post_y': 'y',
-                                            'post_z': 'z',
-                                            'pre': 'partner_id'},
-                                           axis=1)
-                postsyn['type'] = 'post'
+                cols = ["post_x", "post_y", "post_z", "cleft_score", "pre"] + add_cols
+                postsyn = syn.loc[syn.post == np.int64(n.id), cols].rename(
+                    {"post_x": "x", "post_y": "y", "post_z": "z", "pre": "partner_id"},
+                    axis=1,
+                )
+                postsyn["type"] = "post"
 
             connectors = pd.concat((presyn, postsyn), axis=0, ignore_index=True)
 
             # Turn type column into categorical to save memory
-            connectors['type'] = connectors['type'].astype('category')
+            connectors["type"] = connectors["type"].astype("category")
 
             # If TreeNeuron, map each synapse to a node
             if isinstance(n, navis.TreeNeuron):
-                tree = navis.neuron2KDTree(n, data='nodes')
-                dist, ix = tree.query(connectors[['x', 'y', 'z']].values)
+                tree = navis.neuron2KDTree(n, data="nodes")
+                dist, ix = tree.query(connectors[["x", "y", "z"]].values)
 
                 too_far = dist > 10_000
                 if any(too_far) and clean:
                     connectors = connectors[~too_far].copy()
                     ix = ix[~too_far]
 
-                connectors['node_id'] = n.nodes.node_id.values[ix]
+                connectors["node_id"] = n.nodes.node_id.values[ix]
 
                 # Add an ID column for navis' sake
-                connectors.insert(0, 'connector_id', np.arange(connectors.shape[0]))
+                connectors.insert(0, "connector_id", np.arange(connectors.shape[0]))
 
             n.connectors = connectors
 
-    syn.attrs['materialization'] = mat
+    syn.attrs["materialization"] = mat
 
     return syn
 
 
-def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
-                    neuropils=None, filtered=False, batch_size=1000,
-                    dataset='production', progress=True):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def fetch_adjacency(
+    sources,
+    targets=None,
+    min_score=30,
+    mat="auto",
+    neuropils=None,
+    filtered=False,
+    batch_size=1000,
+    *,
+    dataset=None,
+    progress=True,
+):
     """Fetch adjacency matrix.
 
     Notes
@@ -567,10 +657,10 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -583,12 +673,14 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
         targets = sources
 
     if isinstance(mat, str):
-        if mat not in ('latest', 'live', 'auto'):
-            raise ValueError('`mat` must be "auto", "latest", "live" or '
-                             f'integer, got "{mat}"')
+        if mat not in ("latest", "live", "auto"):
+            raise ValueError(
+                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
+            )
     elif not isinstance(mat, int):
-        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
-                         f'got "{type(mat)}"')
+        raise ValueError(
+            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+        )
 
     # Parse root IDs
     sources = parse_root_ids(sources).astype(np.int64)
@@ -598,58 +690,76 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == 'latest':
+    if mat == "latest":
         mat = client.materialize.most_recent_version()
 
-    if mat == 'auto':
+    if mat == "auto":
         mat = find_mat_version(both, dataset=dataset, verbose=progress)
     else:
         _check_ids(both, mat=mat, dataset=dataset)
 
-    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score', 'id']
+    columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"]
 
-    if mat == 'live':
-        func = partial(retry(client.materialize.live_query),
-                       table=client.materialize.synapse_table,
-                       timestamp=dt.datetime.utcnow(),
-                       select_columns=columns)
+    if mat == "live":
+        func = partial(
+            retry(client.materialize.live_query),
+            table=client.materialize.synapse_table,
+            timestamp=dt.datetime.utcnow(),
+            select_columns=columns,
+        )
     elif filtered:
-        has_view = 'valid_connection_v2' in client.materialize.get_views(mat)
+        has_view = "valid_connection_v2" in client.materialize.get_views(mat)
         no_np = isinstance(neuropils, type(None))
         no_score_thresh = not min_score or min_score == 50
         if has_view & no_np & no_score_thresh:
-            columns = ['pre_pt_root_id', 'post_pt_root_id', 'n_syn']
-            func = partial(retry(client.materialize.query_view),
-                           view_name='valid_connection_v2',
-                           select_columns=columns,
-                           materialization_version=mat)
+            columns = ["pre_pt_root_id", "post_pt_root_id", "n_syn"]
+            func = partial(
+                retry(client.materialize.query_view),
+                view_name="valid_connection_v2",
+                select_columns=columns,
+                materialization_version=mat,
+            )
             filtered = False  # Set to false since we don't need the join
         else:
-            func = partial(retry(client.materialize.join_query),
-                        tables=[[client.materialize.synapse_table, 'id'],
-                                ['valid_synapses_nt_v2', 'target_id']],
-                        materialization_version=mat,
-                        select_columns={client.materialize.synapse_table: columns})
+            func = partial(
+                retry(client.materialize.join_query),
+                tables=[
+                    [client.materialize.synapse_table, "id"],
+                    ["valid_synapses_nt_v2", "target_id"],
+                ],
+                materialization_version=mat,
+                select_columns={client.materialize.synapse_table: columns},
+            )
     else:
-        func = partial(retry(client.materialize.query_table),
-                       table=client.materialize.synapse_table,
-                       materialization_version=mat,
-                       select_columns=columns)
+        func = partial(
+            retry(client.materialize.query_table),
+            table=client.materialize.synapse_table,
+            materialization_version=mat,
+            select_columns=columns,
+        )
 
     syn = []
-    for i in trange(0, len(sources), batch_size,
-                    desc='Fetching adjacency',
-                    disable=not progress or len(sources) <= batch_size):
-        source_batch = sources[i:i+batch_size]
+    for i in trange(
+        0,
+        len(sources),
+        batch_size,
+        desc="Fetching adjacency",
+        disable=not progress or len(sources) <= batch_size,
+    ):
+        source_batch = sources[i : i + batch_size]
         for k in range(0, len(targets), batch_size):
-            target_batch = targets[k:k+batch_size]
+            target_batch = targets[k : k + batch_size]
 
             if not filtered:
-                filter_in_dict = dict(post_pt_root_id=target_batch,
-                                      pre_pt_root_id=source_batch)
+                filter_in_dict = dict(
+                    post_pt_root_id=target_batch, pre_pt_root_id=source_batch
+                )
             else:
-                filter_in_dict = dict(synapses_nt_v1=dict(post_pt_root_id=target_batch,
-                                                          pre_pt_root_id=source_batch))
+                filter_in_dict = dict(
+                    synapses_nt_v1=dict(
+                        post_pt_root_id=target_batch, pre_pt_root_id=source_batch
+                    )
+                )
 
             this = func(filter_in_dict=filter_in_dict)
 
@@ -664,28 +774,31 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
     if len(syn):
         syn = pd.concat(syn, axis=0, ignore_index=True)
     else:
-        adj = pd.DataFrame(np.zeros((len(sources), len(targets))),
-                           index=sources, columns=targets)
-        adj.index.name = 'source'
-        adj.columns.name = 'target'
+        adj = pd.DataFrame(
+            np.zeros((len(sources), len(targets))), index=sources, columns=targets
+        )
+        adj.index.name = "source"
+        adj.columns.name = "target"
         return adj
 
     # Depending on how queries were batched, we need to drop duplicate synapses
-    if 'id' in syn.columns:
-        syn.drop_duplicates('id', inplace=True)
+    if "id" in syn.columns:
+        syn.drop_duplicates("id", inplace=True)
     else:
-        syn.drop_duplicates(['pre_pt_root_id', 'post_pt_root_id', 'n_syn'], inplace=True)
+        syn.drop_duplicates(
+            ["pre_pt_root_id", "post_pt_root_id", "n_syn"], inplace=True
+        )
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
         neuropils = make_iterable(neuropils)
 
         if len(neuropils):
-            filter_in = [n for n in neuropils if not n.startswith('~')]
-            filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+            filter_in = [n for n in neuropils if not n.startswith("~")]
+            filter_out = [n[1:] for n in neuropils if n.startswith("~")]
 
-            syn['neuropil'] = get_synapse_areas(syn['id'].values)
-            syn['neuropil'] = syn.neuropil.astype('category')
+            syn["neuropil"] = get_synapse_areas(syn["id"].values)
+            syn["neuropil"] = syn.neuropil.astype("category")
 
             if filter_in:
                 syn = syn[syn.neuropil.isin(filter_in)]
@@ -696,25 +809,26 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
                 syn = syn.copy()
 
     # Rename some of those columns
-    syn.rename({'post_pt_root_id': 'post',
-                'pre_pt_root_id': 'pre',
-                'n_syn': 'weight'},
-               axis=1, inplace=True)
+    syn.rename(
+        {"post_pt_root_id": "post", "pre_pt_root_id": "pre", "n_syn": "weight"},
+        axis=1,
+        inplace=True,
+    )
 
     # Next we need to run some clean-up:
     # Drop below threshold connections
-    if min_score and 'cleft_score' in syn.columns:
+    if min_score and "cleft_score" in syn.columns:
         syn = syn[syn.cleft_score >= min_score]
 
     # Aggregate
-    if 'weight' not in syn.columns:
-        cn = syn.groupby(['pre', 'post'], as_index=False).size()
+    if "weight" not in syn.columns:
+        cn = syn.groupby(["pre", "post"], as_index=False).size()
     else:
         cn = syn
-    cn.columns = ['source', 'target', 'weight']
+    cn.columns = ["source", "target", "weight"]
 
     # Pivot
-    adj = cn.pivot(index='source', columns='target', values='weight').fillna(0)
+    adj = cn.pivot(index="source", columns="target", values="weight").fillna(0)
 
     # Index to match order and add any missing neurons
     adj = adj.reindex(index=sources, columns=targets).fillna(0)
@@ -722,11 +836,24 @@ def fetch_adjacency(sources, targets=None, min_score=30, mat='auto',
     return adj
 
 
-def fetch_connectivity(x, clean=True, style='simple', min_score=30,
-                       upstream=True, downstream=True, proofread_only=False,
-                       transmitters=False, neuropils=None, filtered=False,
-                       batch_size=30, mat='auto', dataset='production',
-                       progress=True):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def fetch_connectivity(
+    x,
+    clean=True,
+    style="simple",
+    min_score=30,
+    upstream=True,
+    downstream=True,
+    proofread_only=False,
+    transmitters=False,
+    neuropils=None,
+    filtered=False,
+    batch_size=30,
+    mat="auto",
+    *,
+    progress=True,
+    dataset=None
+):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
     Notes
@@ -796,10 +923,10 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                     - "production" (current production dataset, fly_v31)
-                     - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -808,18 +935,20 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
 
     """
     if not upstream and not downstream:
-        raise ValueError('`upstream` and `downstream` must not both be False')
+        raise ValueError("`upstream` and `downstream` must not both be False")
 
-    if transmitters and style == 'catmaid':
+    if transmitters and style == "catmaid":
         raise ValueError('`style` must be "simple" when asking for transmitters')
 
     if isinstance(mat, str):
-        if mat not in ('latest', 'live', 'auto'):
-            raise ValueError('`mat` must be "auto", "latest", "live" or '
-                             f'integer, got "{mat}"')
+        if mat not in ("latest", "live", "auto"):
+            raise ValueError(
+                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
+            )
     elif not isinstance(mat, int):
-        raise ValueError('`mat` must be "auto", "latest", "live" or integer, '
-                         f'got "{type(mat)}"')
+        raise ValueError(
+            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+        )
 
     # Parse root IDs
     ids = parse_root_ids(x)
@@ -827,56 +956,70 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == 'latest':
+    if mat == "latest":
         mat = client.materialize.most_recent_version()
 
-    if mat == 'auto':
+    if mat == "auto":
         mat = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
         _check_ids(ids, mat=mat, dataset=dataset)
 
-    columns = ['pre_pt_root_id', 'post_pt_root_id', 'cleft_score', 'id']
+    columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"]
 
     if transmitters:
-        columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
+        columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
-    if mat == 'live' and filtered:
+    if mat == "live" and filtered:
         raise ValueError("Can't fetch filtered synapses for live query.")
-    elif mat == 'live':
-        func = partial(retry(client.materialize.live_query),
-                       table=client.materialize.synapse_table,
-                       timestamp=dt.datetime.utcnow(),
-                       select_columns=columns)
+    elif mat == "live":
+        func = partial(
+            retry(client.materialize.live_query),
+            table=client.materialize.synapse_table,
+            timestamp=dt.datetime.utcnow(),
+            select_columns=columns,
+        )
     elif filtered:
-        has_view = 'valid_connection_v2' in client.materialize.get_views(mat)
+        has_view = "valid_connection_v2" in client.materialize.get_views(mat)
         no_np = isinstance(neuropils, type(None))
         no_score_thresh = not min_score or min_score == 50
         if has_view & no_np & no_score_thresh:
-            columns = ['pre_pt_root_id', 'post_pt_root_id', 'n_syn']
+            columns = ["pre_pt_root_id", "post_pt_root_id", "n_syn"]
             if transmitters:
-                columns += ['gaba', 'ach', 'glut', 'oct', 'ser', 'da']
-            func = partial(retry(client.materialize.query_view),
-                           view_name='valid_connection_v2',
-                           select_columns=columns,
-                           materialization_version=mat)
+                columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
+            func = partial(
+                retry(client.materialize.query_view),
+                view_name="valid_connection_v2",
+                select_columns=columns,
+                materialization_version=mat,
+            )
             filtered = False  # Set to false since we don't need the join
         else:
-            func = partial(retry(client.materialize.join_query),
-                        tables=[[client.materialize.synapse_table, 'id'],
-                                ['valid_synapses_nt_v2', 'target_id']],
-                        materialization_version=mat,
-                        select_columns={client.materialize.synapse_table: columns})
+            func = partial(
+                retry(client.materialize.join_query),
+                tables=[
+                    [client.materialize.synapse_table, "id"],
+                    ["valid_synapses_nt_v2", "target_id"],
+                ],
+                materialization_version=mat,
+                select_columns={client.materialize.synapse_table: columns},
+            )
     else:
-        func = partial(retry(client.materialize.query_table),
-                       table=client.materialize.synapse_table,
-                       materialization_version=mat,
-                       select_columns=columns)
+        func = partial(
+            retry(client.materialize.query_table),
+            table=client.materialize.synapse_table,
+            materialization_version=mat,
+            select_columns=columns,
+        )
 
     syn = []
-    for i in trange(0, len(ids), batch_size,
-                    desc='Fetching connectivity',
-                    disable=not progress or len(ids) <= batch_size):
-        batch = ids[i:i+batch_size]
+    for i in trange(
+        0,
+        len(ids),
+        batch_size,
+        desc="Fetching connectivity",
+        disable=not progress or len(ids) <= batch_size,
+    ):
+        batch = ids[i : i + batch_size]
         if upstream:
             if not filtered:
                 filter_in_dict = dict(post_pt_root_id=batch)
@@ -898,21 +1041,23 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
     # Depending on how queries were batched, we need to drop duplicate synapses
-    if 'id' in syn.columns:
-        syn.drop_duplicates('id', inplace=True)
+    if "id" in syn.columns:
+        syn.drop_duplicates("id", inplace=True)
     else:
-        syn.drop_duplicates(['pre_pt_root_id', 'post_pt_root_id', 'n_syn'], inplace=True)
+        syn.drop_duplicates(
+            ["pre_pt_root_id", "post_pt_root_id", "n_syn"], inplace=True
+        )
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
         neuropils = make_iterable(neuropils)
 
         if len(neuropils):
-            filter_in = [n for n in neuropils if not n.startswith('~')]
-            filter_out = [n[1:] for n in neuropils if n.startswith('~')]
+            filter_in = [n for n in neuropils if not n.startswith("~")]
+            filter_out = [n[1:] for n in neuropils if n.startswith("~")]
 
-            syn['neuropil'] = get_synapse_areas(syn['id'].values)
-            syn['neuropil'] = syn.neuropil.astype('category')
+            syn["neuropil"] = get_synapse_areas(syn["id"].values)
+            syn["neuropil"] = syn.neuropil.astype("category")
 
             if filter_in:
                 syn = syn[syn.neuropil.isin(filter_in)]
@@ -920,20 +1065,25 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
                 syn = syn[~syn.neuropil.isin(filter_out)]
 
     # Rename some of those columns
-    syn.rename({'post_pt_root_id': 'post',
-                'pre_pt_root_id': 'pre',
-                'ach': 'acetylcholine',
-                'glut': 'glutamate',
-                'oct': 'octopamine',
-                'ser': 'serotonin',
-                'da': 'dopamine',
-                'n_syn': 'weight'},
-               axis=1, inplace=True)
+    syn.rename(
+        {
+            "post_pt_root_id": "post",
+            "pre_pt_root_id": "pre",
+            "ach": "acetylcholine",
+            "glut": "glutamate",
+            "oct": "octopamine",
+            "ser": "serotonin",
+            "da": "dopamine",
+            "n_syn": "weight",
+        },
+        axis=1,
+        inplace=True,
+    )
 
     # Next we need to run some clean-up:
     # Drop below threshold connections
-    if min_score and 'cleft_score' in syn.columns:
-            syn = syn[syn.cleft_score >= min_score]
+    if min_score and "cleft_score" in syn.columns:
+        syn = syn[syn.cleft_score >= min_score]
 
     if clean:
         # Drop autapses
@@ -942,14 +1092,18 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         syn = syn[(syn.pre != 0) & (syn.post != 0)]
 
     # Turn into connectivity table
-    if 'weight' not in syn.columns:
-        cn_table = syn.groupby(['pre', 'post'], as_index=False).size().rename({'size': 'weight'}, axis=1)
+    if "weight" not in syn.columns:
+        cn_table = (
+            syn.groupby(["pre", "post"], as_index=False)
+            .size()
+            .rename({"size": "weight"}, axis=1)
+        )
     else:
         cn_table = syn
 
     # Filter to proofread neurons only
     if proofread_only:
-        all_ids = np.unique(cn_table[['pre', 'post']].values.flatten())
+        all_ids = np.unique(cn_table[["pre", "post"]].values.flatten())
         is_pr = all_ids[is_proofread(all_ids, materialization=mat)]
 
         # Make sure we don't drop our query neurons
@@ -958,25 +1112,207 @@ def fetch_connectivity(x, clean=True, style='simple', min_score=30,
         cn_table = cn_table[cn_table.pre.isin(keep) & cn_table.post.isin(keep)]
 
     # Style
-    if style == 'catmaid':
+    if style == "catmaid":
         cn_table = catmaid_table(cn_table, query_ids=ids)
     else:
-        cn_table.sort_values('weight', ascending=False, inplace=True)
+        cn_table = cn_table.copy()  # avoid setting on copy warning
+        cn_table.sort_values("weight", ascending=False, inplace=True)
         cn_table.reset_index(drop=True, inplace=True)
 
     if transmitters:
         # Generate per-neuron predictions
-        pred = collapse_nt_predictions(syn, single_pred=True, id_col='pre')
+        pred = collapse_nt_predictions(syn, single_pred=True, id_col="pre")
 
-        cn_table['pred_nt'] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
-        cn_table['pred_conf'] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
+        cn_table["pred_nt"] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
+        cn_table["pred_conf"] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
 
-    cn_table.attrs['materialization'] = mat
+    cn_table.attrs["materialization"] = mat
 
     return cn_table
 
 
-def _check_ids(ids, mat, dataset='production'):
+@inject_dataset()
+def fetch_supervoxel_synapses(
+    x, pre=True, post=True, batch_size=300, progress=True, *, dataset=None
+):
+    """Fetch Buhmann et al. (2019) synapses for given supervoxels.
+
+    Parameters
+    ----------
+    x :             int | list of int
+                    Supervoxel IDs.
+    pre :           bool
+                    Whether to fetch presynapses for the given neurons.
+    post :          bool
+                    Whether to fetch postsynapses for the given neurons.
+    transmitters :  bool
+                    Whether to also load per-synapse neurotransmitter predictions
+                    from Eckstein et al. (2020).
+    min_score :     int, optional
+                    Minimum "cleft score". The default of 30 is what Buhmann et al.
+                    used in the paper.
+    batch_size :    int
+                    Number of IDs to query per batch. Too large batches might
+                    lead to truncated tables: currently individual queries can
+                    not return more than 200_000 rows and you will see a warning
+                    if that limit is exceeded.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    if not pre and not post:
+        raise ValueError("`pre` and `post` must not both be False")
+
+    # Parse supervoxel IDs
+    ids = parse_root_ids(x)
+
+    client = get_cave_client(dataset=dataset)
+
+    columns = [
+        "pre_pt_supervoxel_id",
+        "post_pt_supervoxel_id",
+        "cleft_score",
+        "pre_pt_position",
+        "post_pt_position",
+        "id",
+    ]
+
+    func = partial(
+        retry(client.materialize.query_table),
+        table=client.materialize.synapse_table,
+        split_positions=True,
+        select_columns=columns,
+    )
+
+    syn = []
+    for i in trange(
+        0,
+        len(ids),
+        batch_size,
+        desc="Fetching synapses",
+        disable=not progress or len(ids) <= batch_size,
+    ):
+        batch = ids[i : i + batch_size]
+        if post:
+            syn.append(func(filter_in_dict=dict(post_pt_supervoxel_id=batch)))
+        if pre:
+            syn.append(func(filter_in_dict=dict(pre_pt_supervoxel_id=batch)))
+
+    # Drop attrs to avoid issues when concatenating
+    for df in syn:
+        df.attrs = {}
+
+    # Combine results from batches
+    syn = pd.concat(syn, axis=0, ignore_index=True)
+
+    # Depending on how queries were batched, we need to drop duplicate synapses
+    syn.drop_duplicates("id", inplace=True)
+
+    # Rename some of those columns
+    syn.rename(
+        {
+            "post_pt_position_x": "post_x",
+            "post_pt_position_y": "post_y",
+            "post_pt_position_z": "post_z",
+            "pre_pt_position_x": "pre_x",
+            "pre_pt_position_y": "pre_y",
+            "pre_pt_position_z": "pre_z",
+        },
+        axis=1,
+        inplace=True,
+    )
+
+    # Next we need to run some clean-up:
+    # Drop below threshold connections
+    # if min_score:
+    #    syn = syn[syn.cleft_score >= min_score]
+
+    # Avoid setting-on-copy warnings
+    if syn._is_view:
+        syn = syn.copy()
+
+    return syn
+
+
+@inject_dataset()
+def synapse_contributions(x, *, dataset=None):
+    """Return synapse contributions to given neuron."""
+
+    # Grab synapses for this neuron
+    syn = fetch_synapses(x)
+    pre = syn[syn.pre == x]
+    post = syn[syn.post == x]
+
+    print(f"Neuron has {len(pre)} pre- and {len(post)} postsynapses")
+
+    G = get_lineage_graph(x, user=True, size=True)
+
+    data = []
+    for n in navis.config.tqdm(G.nodes):
+        pred = list(G.predecessors(n))
+
+        # If this is from base segmentation
+        if not pred:
+            continue
+
+        # If only one predecessor this came out of a split
+        if len(pred) == 1:
+            sv_added = 0
+            sv_removed = G.nodes[n]["size"] - G.nodes[pred[0]]["size"]
+            pre_added = post_added = -1
+        # Two predecessors means this was the result of a merge
+        elif len(pred) == 2:
+            sizes = (G.nodes[pred[0]]["size"], G.nodes[pred[1]]["size"])
+            smaller = np.argmin(sizes)
+            sv_removed = 0
+            sv_added = sizes[smaller]
+            sv = roots_to_supervoxels(pred[smaller], dataset=dataset)[pred[smaller]]
+            pre_added = pre.pre_pt_supervoxel_id.isin(sv).sum()
+            post_added = post.post_pt_supervoxel_id.isin(sv).sum()
+        else:
+            raise ValueError(f"Unexpected number of predecessors for {n}: {len(pred)}")
+
+        data.append(
+            [
+                n,
+                G.nodes[n].get("user", "NA"),
+                sv_added,
+                sv_removed,
+                pre_added,
+                post_added,
+            ]
+        )
+
+    # TODO
+    # - for every merge operation, count only the number of supervoxels added that
+    #   actually made it into the current root ID
+    # - for every split operation, count only the supervoxels that weren't added
+    #   back later on
+    # - count every added/removed supervoxel only once
+
+    # IDEAS
+    # - use the largest original root ID as the point of reference
+
+    return pd.DataFrame(
+        data,
+        columns=[
+            "root_id",
+            "user",
+            "sv_added",
+            "sv_removed",
+            "pre_added",
+            "post_added",
+        ],
+    )
+
+
+def _check_ids(ids, mat, dataset="production"):
     """Check IDs whether they existed at given materialization.
 
     Parameters
@@ -998,13 +1334,15 @@ def _check_ids(ids, mat, dataset='production'):
     _get_root_timestamps = retry(client.chunkedgraph.get_root_timestamps)
 
     # Check if any of these root IDs are outdated
-    if mat == 'live':
+    if mat == "live":
         not_latest = ids[~_is_latest_roots(ids)]
         if any(not_latest):
-            print(f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
-                  'and live connectivity might be inaccurrate.')
+            print(
+                f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+                "and live connectivity might be inaccurrate."
+            )
     else:
-        if mat == 'latest':
+        if mat == "latest":
             mat = client.materialize.most_recent_version()
 
         # Is the root ID more recent than the materialization?
@@ -1012,11 +1350,13 @@ def _check_ids(ids, mat, dataset='production'):
         ts_r = _get_root_timestamps(ids)
         too_recent = ids[ts_r > ts_m]
         if any(too_recent):
-            print('Some root IDs are more recent than materialization '
-                  f'{mat} and synapse/connectivity data will be '
-                  f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
-                  'You can either try mapping these IDs back in time or use'
-                  '`mat="auto"`.')
+            print(
+                "Some root IDs are more recent than materialization "
+                f"{mat} and synapse/connectivity data will be "
+                f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
+                "You can either try mapping these IDs back in time or use"
+                '`mat="auto"`.'
+            )
 
         # Those that aren't too young might be too old
         ids = ids[ts_r <= ts_m]
@@ -1027,9 +1367,11 @@ def _check_ids(ids, mat, dataset='production'):
             # the roots flagged here are too old
             not_latest = ids[~_is_latest_roots(ids, timestamp=ts_m)]
             if any(not_latest):
-                print('Some root IDs were already outdated at materialization '
-                      f'{mat} and synapse/connectivity data will be '
-                      f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
-                      'Try updating the root IDs using `flywire.update_ids` '
-                      'or `flywire.supervoxels_to_roots` if you have supervoxel IDs,'
-                      ' or pick a different materialization version.')
+                print(
+                    "Some root IDs were already outdated at materialization "
+                    f"{mat} and synapse/connectivity data will be "
+                    f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
+                    "Try updating the root IDs using `flywire.update_ids` "
+                    "or `flywire.supervoxels_to_roots` if you have supervoxel IDs,"
+                    " or pick a different materialization version."
+                )

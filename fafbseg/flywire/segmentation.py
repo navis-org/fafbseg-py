@@ -30,14 +30,15 @@ from concurrent import futures
 from diskcache import Cache
 from requests_futures.sessions import FuturesSession
 from scipy import ndimage
-from tqdm.auto import trange, tqdm
+from tqdm.auto import tqdm
 
 from .. import spine
 from .. import xform
 
 from ..utils import make_iterable, GSPointLoader
 from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
-                    retry, get_cave_client, parse_bounds, package_timestamp)
+                    retry, get_cave_client, parse_bounds, package_timestamp,
+                    inject_dataset)
 
 
 __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
@@ -45,12 +46,13 @@ __all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
            'roots_to_supervoxels', 'supervoxels_to_roots',
            'neuron_to_segments', 'is_latest_root', 'is_valid_root',
            'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph',
-           'find_common_time']
+           'find_common_time', 'get_segmentation_cutout']
 
 
+@inject_dataset()
 def get_lineage_graph(x, size=False, user=False, synapses=False,
-                      proofreading_status=False, progress=True,
-                      dataset='production'):
+                      proofreading_status=False, progress=True, *,
+                      dataset=None):
     """Get lineage graph for given neuron.
 
     This piggy-backs on the CAVEclient but importantly we remap users and
@@ -225,8 +227,9 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     return df.loc[df.sum(axis=1).sort_values(ascending=False).index]
 
 
-def fetch_edit_history(x, dataset='production', progress=True, errors='raise',
-                       max_threads=4):
+@inject_dataset()
+def fetch_edit_history(x, progress=True, errors='raise',
+                       max_threads=4, *, dataset=None):
     """Fetch edit history for given neuron(s).
 
     Note that neurons that haven't seen any edits will simply not show up in
@@ -236,14 +239,14 @@ def fetch_edit_history(x, dataset='production', progress=True, errors='raise',
     ----------
     x :             int | list of int
                     Segmentation (root) ID(s).
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
     progress :      bool
                     If True, show progress bar.
     max_threads :   int
                     Max number of parallel requests to server.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -321,7 +324,8 @@ def fetch_edit_history(x, dataset='production', progress=True, errors='raise',
     return df
 
 
-def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     """Get supervoxels making up given neurons.
 
     Parameters
@@ -331,12 +335,12 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     use_cache :     bool
                     Whether to use disk cache to avoid repeated queries for the
                     same root. Cache is stored in `~/.fafbseg/`.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
     progress :      bool
                     If True, show progress bar.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -407,8 +411,9 @@ def roots_to_supervoxels(x, use_cache=True, dataset='production', progress=True)
     return svoxels
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
-                         retry=True, progress=True, dataset='production'):
+                         retry=True, progress=True, *, dataset=None):
     """Get root(s) for given supervoxel(s).
 
     Parameters
@@ -429,12 +434,12 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
                     Set e.g. to ``2`` to get L2 IDs instead of root IDs.
     retry :         bool
                     Whether to retry if a batched query fails.
-    dataset :       str | CloudVolume
-                    Against which dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
     progress :      bool
                     If True, show progress bar.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -574,25 +579,25 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
         return data
 
 
-def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'):
+@inject_dataset()
+def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
     """Get root IDs overlapping with a given neuron.
 
     Parameters
     ----------
-    x :                 Neuron/List
-                        Neurons for which to return root IDs. Neurons must be
-                        in FlyWire (FAFB14.1) space.
-    short :             bool
-                        If True will only return the top hit for each neuron
-                        (including a confidence score).
-    dataset :           str | CloudVolume
-                        Against which FlyWire dataset to query::
-                            - "production" (current production dataset, fly_v31)
-                            - "sandbox" (i.e. fly_v26)
-
-    coordinates :       "voxel" | "nm"
-                        Units the neuron(s) are in. "voxel" is assumed to be
-                        4x4x40 (x/y/z) nanometers.
+    x :             Neuron/List
+                    Neurons for which to return root IDs. Neurons must be
+                    in FlyWire (FAFB14.1) space.
+    short :         bool
+                    If True will only return the top hit for each neuron
+                    (including a confidence score).
+    coordinates :   "voxel" | "nm"
+                    Units the neuron(s) are in. "voxel" is assumed to be
+                    4x4x40 (x/y/z) nanometers.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -656,8 +661,9 @@ def neuron_to_segments(x, short=False, dataset='production', coordinates='voxel'
     return summary
 
 
-def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
-                     dataset='production', coordinates='voxel'):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def locs_to_segments(locs, timestamp=None, backend='spine',
+                     coordinates='voxel', *, dataset=None):
     """Retrieve FlyWire segment IDs (root IDs) at given location(s).
 
     Parameters
@@ -666,9 +672,6 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
                     Array of x/y/z coordinates. If DataFrame must contain
                     'x', 'y', 'z' or 'fw.x', 'fw.y', 'fw.z' columns. If both
                     present, 'fw.' columns take precedence)!
-    root_ids :      bool
-                    If True, will return root IDs. If False, will return supervoxel
-                    IDs.
     timestamp :     int | str | datetime | "mat", optional
                     Get roots at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
@@ -678,19 +681,19 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
     backend :       "spine" | "cloudvolume"
                     Which backend to use. Use "cloudvolume" only when spine
                     doesn't work because it's terribly slow.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
-                    Only relevant if ``root_ids=True``.
     coordinates :   "voxel" | "nm"
                     Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`). Only relevant
+                    if ``root_ids=True``.
 
     Returns
     -------
     numpy.array
-                List of segmentation IDs in the same order as ``locs``.
+                    List of segmentation IDs in the same order as ``locs``.
 
     Examples
     --------
@@ -703,17 +706,16 @@ def locs_to_segments(locs, root_ids=True, timestamp=None, backend='spine',
     """
     svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend)
 
-    if not root_ids:
-        return svoxels
-
     return supervoxels_to_roots(svoxels, timestamp=timestamp, dataset=dataset)
 
 
+@inject_dataset()
 def skid_to_id(x,
                sample=None,
                catmaid_instance=None,
                progress=True,
-               dataset='production'):
+               *,
+               dataset=None):
     """Find the FlyWire root ID for a given (FAFB) CATMAID neuron.
 
     This function works by:
@@ -731,15 +733,15 @@ def skid_to_id(x,
                     Number (>= 1) or fraction (< 1) of skeleton nodes to sample
                     to find FlyWire root IDs. If ``None`` (default), will use
                     all nodes.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
     catmaid_instance : pymaid.CatmaidInstance, optional
                     Connection to a CATMAID server. If ``None``, will use the
                     current global connection. See pymaid docs for details.
     progress :      bool
                     If True, shows progress bar.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -815,8 +817,9 @@ def skid_to_id(x,
                         columns=['skeleton_id', 'flywire_id', 'confidence'])
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 @retry
-def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
+def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs):
     """Check if root is the current one.
 
     Parameters
@@ -829,10 +832,12 @@ def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
                     "mat" will use the timestamp of the most recent
                     materialization. You can also use e.g. "mat_438" to get the
                     root ID at a specific materialization.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query:
-                      - "production" (current production dataset, fly_v31)
-                      - "sandbox" (i.e. fly_v26)
+    progress :      bool
+                    Whether to show progress bar.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -890,7 +895,7 @@ def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
     batch_size = 100_000
     with navis.config.tqdm(desc='Checking',
                            total=not_zero.sum(),
-                           disable=not_zero.sum() <= batch_size,
+                           disable=(not_zero.sum() <= batch_size) or not progress,
                            leave=False) as pbar:
         for i in range(0, not_zero.sum(), batch_size):
             batch = id[not_zero][i:i+batch_size]
@@ -908,9 +913,8 @@ def is_latest_root(id, timestamp=None, dataset='production', **kwargs):
     return is_latest
 
 
-def find_common_time(root_ids,
-                     progress=True,
-                     dataset='production'):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def find_common_time(root_ids, progress=True, *, dataset=None):
     """Find a time at which given root IDs co-existed.
 
     Parameters
@@ -919,10 +923,10 @@ def find_common_time(root_ids,
                     Root IDs to check.
     progress :      bool
                     If True, shows progress bar.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query:
-                      - "production" (current production dataset, fly_v31)
-                      - "sandbox" (i.e. fly_v26)
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -965,12 +969,15 @@ def find_common_time(root_ids,
     return latest_birth + (earliest_death - latest_birth) / 2
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def update_ids(id,
                stop_layer=2,
                supervoxels=None,
                timestamp=None,
-               dataset='production',
-               progress=True, **kwargs):
+               progress=True,
+               *,
+               dataset=None,
+               **kwargs):
     """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
@@ -1000,12 +1007,12 @@ def update_ids(id,
                     Find root ID(s) at given date (and time). Int must be unix
                     timestamp. String must be ISO 8601 - e.g. '2021-11-15'.
                     Asking for a specific time will slow things down considerably.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query:
-                      - "production" (current production dataset, fly_v31)
-                      - "sandbox" (i.e. fly_v26)
     progress :      bool
                     If True, shows progress bar.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1193,9 +1200,9 @@ def update_ids(id,
                         ).astype({'old_id': np.int64, 'new_id': np.int64})
 
 
-def snap_to_id(locs, id, snap_zero=False, dataset='production',
-               search_radius=160, coordinates='nm', max_workers=4,
-               verbose=True):
+@inject_dataset()
+def snap_to_id(locs, id, snap_zero=False, search_radius=160, coordinates='nm',
+               max_workers=4, verbose=True, *, dataset=None):
     """Snap locations to the correct segmentation ID.
 
     Works by:
@@ -1211,10 +1218,6 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
     snap_zero :     bool
                     If False (default), we will not snap locations that map to
                     segment ID 0 (i.e. no segmentation).
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
     search_radius : int
                     Radius [nm] around a location to search for a position with
                     the correct ID. Lower values will be faster.
@@ -1224,6 +1227,10 @@ def snap_to_id(locs, id, snap_zero=False, dataset='production',
     max_workers :   int
     verbose :       bool
                     If True will plot summary at then end.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1334,8 +1341,8 @@ def _process_cutout(loc, id, radius=160, dataset='production'):
     return snapped
 
 
-def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
-                            coordinates='voxel'):
+@inject_dataset()
+def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, dataset=None):
     """Fetch cutout of segmentation.
 
     Parameters
@@ -1347,14 +1354,14 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
 
     root_ids :      bool
                     If True, will return root IDs. If False, will return
-                    supervoxel IDs.
-    dataset :       str | CloudVolume
-                    Against which FlyWire dataset to query::
-                        - "production" (current production dataset, fly_v31)
-                        - "sandbox" (i.e. fly_v26)
+                    supervoxel IDs. Ignored if dataset is "flat_630".
     coordinates :   "voxel" | "nm"
                     Units in which your coordinates are in. "voxel" is assumed
                     to be 4x4x40 (x/y/z) nanometers.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1380,10 +1387,11 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
         raise ValueError(f'`bbox` must have shape (2, 3) or (3, 2), got {bbox.shape}')
 
     vol = parse_volume(dataset)
+    vol.mip = mip
 
     # First convert to nanometers
     if coordinates in ('voxel', 'voxels'):
-        bbox = bbox * [4, 4, 40]
+        bbox = bbox * np.array([4, 4, 40])
 
     # Now convert (back to) to [16, 16, 40] voxel
     bbox = (bbox / vol.scale['resolution']).round().astype(int)
@@ -1395,7 +1403,7 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
                  bbox[0][1]:bbox[1][1],
                  bbox[0][2]:bbox[1][2]]
 
-    if root_ids:
+    if root_ids and ("flat" not in dataset):
         svoxels = np.unique(cutout.flatten())
         roots = supervoxels_to_roots(svoxels, dataset=vol)
 
@@ -1407,7 +1415,8 @@ def get_segmentation_cutout(bbox, dataset='production', root_ids=True,
     return cutout[:, :, :, 0], np.asarray(vol.scale['resolution']), offset_nm
 
 
-def is_valid_root(x, raise_exc=False, dataset='production'):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def is_valid_root(x, raise_exc=False, *, dataset=None):
     """Check if ID is (potentially) valid root ID.
 
     Parameters
@@ -1417,6 +1426,10 @@ def is_valid_root(x, raise_exc=False, dataset='production'):
     raise_exc :     bool
                     If True and any IDs are invalid will raise an error.
                     Mostly for internal use.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1437,7 +1450,7 @@ def is_valid_root(x, raise_exc=False, dataset='production'):
 
     try:
         is_valid = vol.get_chunk_layer(x) == 10
-    except:
+    except ValueError:
         is_valid = False
 
     if raise_exc and not is_valid:
@@ -1446,7 +1459,8 @@ def is_valid_root(x, raise_exc=False, dataset='production'):
     return is_valid
 
 
-def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
     """Check if ID is (potentially) valid supervoxel ID.
 
     Parameters
@@ -1456,6 +1470,10 @@ def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
     raise_exc :     bool
                     If True and any IDs are invalid will raise an error.
                     Mostly for internal use.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1476,7 +1494,7 @@ def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
 
     try:
         is_valid = vol.get_chunk_layer(x) == 1
-    except:
+    except BaseException:
         is_valid = False
 
     if raise_exc and not is_valid:
@@ -1485,8 +1503,9 @@ def is_valid_supervoxel(x, raise_exc=False, dataset='production'):
     return is_valid
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
-               use_mirror=True, threads=4, dataset='production'):
+               use_mirror=True, threads=4, *, dataset=None):
     """Fetch voxels making a up given root ID.
 
     Parameters
@@ -1511,12 +1530,16 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     use_mirror :    bool
                     If True (default), will use an mirror of the base
                     segmentation for supervoxel look-up. Possibly slightly
-                    slower than the production data set but doesn't incur
+                    slower than the production dataset but doesn't incur
                     egress charges for Princeton.
     threads :       int
                     Number of parallel threads to use for fetching the data.
     progress :      bool
                     Whether to show a progress bar or not.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------

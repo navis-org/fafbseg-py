@@ -26,10 +26,10 @@ import numpy as np
 import pandas as pd
 
 from requests_futures.sessions import FuturesSession
-from tqdm.auto import tqdm
+from typing import Optional
 
 from ..utils import make_iterable
-from .utils import get_cave_client, retry, get_chunkedgraph_secret, find_mat_version
+from .utils import (get_cave_client, retry, get_chunkedgraph_secret, find_mat_version, inject_dataset)
 from .segmentation import (locs_to_segments, supervoxels_to_roots, is_latest_root,
                            update_ids)
 
@@ -46,7 +46,9 @@ ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_table = None
 
 
-def is_proofread(x, materialization='auto', cache=True, validate=True):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def is_proofread(x, materialization='auto', cache=True, validate=True, *,
+                 dataset=None):
     """Test if neuron has been set to `proofread`.
 
     Parameters
@@ -63,6 +65,10 @@ def is_proofread(x, materialization='auto', cache=True, validate=True):
                     table. Setting this to ``False`` will force fetching the
                     full table which is considerably slower. Does not apply
                     if `materialization='live'`.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -86,13 +92,13 @@ def is_proofread(x, materialization='auto', cache=True, validate=True):
                   f"not proofread: {x[~il]}")
 
     # Get available materialization versions
-    client = get_cave_client('production')
+    client = get_cave_client(dataset)
 
     if materialization == 'latest':
         mat_versions = client.materialize.get_versions()
         materialization = max(mat_versions)
     elif materialization == 'auto':
-        materialization = find_mat_version(x, dataset='production')
+        materialization = find_mat_version(x, dataset=dataset)
 
     if materialization == 'live':
         # For live materialization only do on-the-run queries
@@ -115,8 +121,9 @@ def is_proofread(x, materialization='auto', cache=True, validate=True):
     return np.isin(x, table.pt_root_id.values)
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 @retry
-def is_materialized_root(id, materialization='latest'):
+def is_materialized_root(id, materialization='latest', *, dataset=None):
     """Check if root existed at the time of materialization.
 
     Parameters
@@ -126,6 +133,10 @@ def is_materialized_root(id, materialization='latest'):
     materialization : "latest" | int
                     Which materialization to check. If "latest" will use the
                     latest available one in the cave client.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -145,7 +156,7 @@ def is_materialized_root(id, materialization='latest'):
     is_mat = np.zeros(len(id), dtype=bool)
 
     # Get timestamp at materalization
-    client = get_cave_client('production')
+    client = get_cave_client(dataset)
     ts_mat = client.materialize.get_timestamp(None if materialization == 'latest' else materialization)
 
     # Get root timestamps
@@ -185,8 +196,22 @@ def is_materialized_root(id, materialization='latest'):
     return is_mat
 
 
-def get_materialization_versions(dataset='production'):
-    """Fetch info on the available materializations."""
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def get_materialization_versions(*, dataset=None):
+    """Fetch info on the available materializations.
+
+    Parameters
+    ----------
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    DataFrame
+
+    """
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
@@ -204,11 +229,13 @@ def get_materialization_versions(dataset='production'):
     return meta.sort_values('version', ascending=False).reset_index(drop=True)
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def create_annotation_table(name: str,
                             schema: str,
                             description: str,
                             voxel_resolution=[1, 1, 1],
-                            dataset='production'):
+                            *,
+                            dataset=None):
     """Create annotation table.
 
     This is just a thin-wrapper around `CAVEclient.annotation.create_table`.
@@ -246,6 +273,10 @@ def create_annotation_table(name: str,
                         Voxel resolution points will be uploaded in. For example:
                          - [1,1,1] = coordinates are in nanometers
                          - [4,4,40] = coordinates are 4nm, 4nm, 40nm voxels
+    dataset :           "public" | "production" | "sandbox", optional
+                        Against which FlyWire dataset to query. If ``None`` will
+                        fall back to the default dataset (see
+                        :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -282,8 +313,22 @@ def create_annotation_table(name: str,
         return resp
 
 
-def list_annotation_tables(dataset='production'):
-    """Fetch available annotation tables."""
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def list_annotation_tables(*, dataset=None):
+    """Fetch available annotation tables.
+
+    Parameters
+    ----------
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    list
+
+    """
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset)
 
@@ -299,8 +344,22 @@ def list_annotation_tables(dataset='production'):
     return df
 
 
-def get_annotation_tables(dataset='production'):
-    """Fetch available annotation tables."""
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def get_annotation_tables(*, dataset=None):
+    """Fetch available annotation tables.
+
+    Parameters
+    ----------
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    list
+
+    """
     warnings.warn(
             "`get_annotation_tables` is deprecated and will be removed in a "
             "future version of fafbseg, please use `list_annotation_tables`"
@@ -311,14 +370,20 @@ def get_annotation_tables(dataset='production'):
     return list_annotation_tables(dataset=dataset)
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def get_annotation_table_info(table_name: str,
-                              dataset='production'):
+                              *,
+                              dataset=None):
     """Get info for given table.
 
     Parameters
     ----------
-    table_name :        str
-                        Name of the table.
+    table_name :    str
+                    Name of the table.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -331,11 +396,13 @@ def get_annotation_table_info(table_name: str,
     return client.annotation.get_table_metadata(table_name)
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def get_annotations(table_name: str,
                     materialization='latest',
                     split_positions: bool = False,
                     drop_invalid: bool = True,
-                    dataset: str = 'production',
+                    *,
+                    dataset: Optional[str] = None,
                     **filters):
     """Get annotations from given table.
 
@@ -353,6 +420,10 @@ def get_annotations(table_name: str,
     drop_invalid :      bool
                         Whether to drop invalidated (i.e. deleted or updated)
                         annotations.
+    dataset :           "public" | "production" | "sandbox" | "flat_630", optional
+                        Against which FlyWire dataset to query. If ``None`` will fall
+                        back to the default dataset (see
+                        :func:`~fafbseg.flywire.set_default_dataset`).
     **filters
                         Additional filter queries. See Examples. This works only
                         if ``materialization!=False``.
@@ -393,9 +464,11 @@ def get_annotations(table_name: str,
     return data
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def delete_annotations(table_name: str,
                        annotation_ids: list,
-                       dataset='production'):
+                       *,
+                       dataset=None):
     """Delete annotations from table.
 
     Parameters
@@ -405,6 +478,10 @@ def delete_annotations(table_name: str,
     annotation_ids :    int | list | np.ndarray | pandas.DataFrame
                         ID(s) of annotations to delete. If DataFrame must contain
                         an "id" column.
+    dataset :           "public" | "production" | "sandbox", optional
+                        Against which FlyWire dataset to query. If ``None`` will fall
+                        back to the default dataset (see
+                        :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -437,20 +514,26 @@ def delete_annotations(table_name: str,
     return resp
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def upload_annotations(table_name: str,
                        data: pd.DataFrame,
-                       dataset='production'):
+                       *,
+                       dataset=None):
     """Upload or update annotations to table.
 
     Parameters
     ----------
-    table_name :        str
-                        Name of the table.
-    data :              pandas.DataFrame
-                        Data to be uploaded. Must match the table's schema! If
-                        'id' column exists, we assume that you want to update
-                        existing annotations (i.e. rows in the table) with the
-                        given IDs. See Examples for details.
+    table_name :    str
+                    Name of the table.
+    data :          pandas.DataFrame
+                    Data to be uploaded. Must match the table's schema! If
+                    'id' column exists, we assume that you want to update
+                    existing annotations (i.e. rows in the table) with the
+                    given IDs. See Examples for details.
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -509,8 +592,12 @@ def upload_annotations(table_name: str,
     return resp
 
 
-def get_somas(x=None, materialization='auto',
-              split_positions=False, dataset='production'):
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
+def get_somas(x=None,
+              materialization='auto',
+              split_positions=False,
+              *,
+              dataset=None):
     """Fetch nuclei segmentation for given neuron(s).
 
     Parameters
@@ -528,6 +615,10 @@ def get_somas(x=None, materialization='auto',
                         False to fetch the non-materialized version.
     split_positions :   bool
                         Whether to have separate columns for x/y/z position.
+    dataset :           "public" | "production" | "sandbox", optional
+                        Against which FlyWire dataset to query. If ``None`` will fall
+                        back to the default dataset (see
+                        :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -616,7 +707,8 @@ def submit_cell_identification(x, split_tags=False, validate=True,
                                progress=True):
     """Submit a identification for given cells.
 
-    Use this bulk submission of cell identification with great care!
+    Requires access to production dataset. Use this bulk submission of cell
+    identification with great care!
 
     Parameters
     ----------
@@ -694,7 +786,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     session.headers['Authorization'] = f"Bearer {token}"
 
     if skip_existing:
-        existing = _get_cell_type_table(update_ids=True)
+        existing = _get_cell_type_table(update_ids=True, dataset='production')
 
     futures = {}
     skipped = []
@@ -742,7 +834,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
             submitted[-1] += [False, str(e)]
             continue
 
-        if not 'Success' in r.text:
+        if 'Success' not in r.text:
             submitted[-1] += [False, r.text]
             continue
 
@@ -765,12 +857,15 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     return submitted
 
 
+@inject_dataset(disallowed=['flat_630', 'flat_571'])
 def find_celltypes(x,
                    user=None,
                    exact=False,
                    case=False,
                    regex=True,
-                   update_roots=True):
+                   update_roots=True,
+                   *,
+                   dataset=None):
     """Search cell identification annotations for given term/root IDs.
 
     Parameter
@@ -791,6 +886,10 @@ def find_celltypes(x,
                 Whether to interpret term as regex.
     update_roots : bool
                 Whether to update root IDs for matches.
+    dataset :   "public" | "production" | "sandbox", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -823,7 +922,7 @@ def find_celltypes(x,
 
     # We only need to update root IDs if we're
     # looking for annotations for given cells
-    ct = _get_cell_type_table(update_ids=not isinstance(x, str))
+    ct = _get_cell_type_table(update_ids=not isinstance(x, str), dataset=dataset)
 
     # If requested, restrict to given user
     if not isinstance(user, type(None)):
@@ -866,11 +965,11 @@ def find_celltypes(x,
     return ct
 
 
-def _get_cell_type_table(force_new=False, update_ids=False):
+def _get_cell_type_table(dataset, force_new=False, update_ids=False):
     """Fetch (and cache) annotation table."""
     global _annotation_table
 
-    client = get_cave_client()
+    client = get_cave_client(dataset=dataset)
 
     # Check what the latest materialization version is
     mds = client.materialize.get_versions_metadata()
@@ -908,7 +1007,8 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
                          max_threads=4, progress=True):
     """Submit proofread status for given cell.
 
-    Use this bulk submission of proofreading status with great care!
+    Use this bulk submission of proofreading status with great care! Requires
+    access to the production dataset.
 
     Parameters
     ----------
@@ -1021,11 +1121,11 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
         try:
             r.raise_for_status()
         except BaseException as e:
-            sucess.append(False)
+            success.append(False)
             errors.append(str(e))
             continue
 
-        if not 'Success' in r.text:
+        if 'Success' not in r.text:
             success.append(False)
             errors.append(r.text)
             continue

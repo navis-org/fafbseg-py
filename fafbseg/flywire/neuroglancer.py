@@ -13,7 +13,6 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 import copy
-import itertools
 import json
 import navis
 import pymaid
@@ -33,55 +32,98 @@ from . import utils
 from .segmentation import neuron_to_segments
 from ..utils import make_iterable
 
-__all__ = ['decode_url', 'encode_url']
+__all__ = ["decode_url", "encode_url"]
 
-NGL_URL = 'https://ngl.flywire.ai'
-MINIMAL_SCENE = {'layers': [{'source': 'precomputed://gs://microns-seunglab/drosophila_v0/alignment/image_rechunked',
-                             'type': 'image',
-                             'blend': 'default',
-                             'shaderControls': {},
-                             'name': 'Production-image'
-                             },
-                            {'source': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/{dataset}',
-                             'type': 'segmentation_with_graph',
-                             'selectedAlpha': 0.14,
-                             'segments': [],
-                             'skeletonRendering': {'mode2d': 'lines_and_points', 'mode3d': 'lines'},
-                             'graphOperationMarker': [{'annotations': [], 'tags': []},
-                                                      {'annotations': [], 'tags': []}],
-                             'pathFinder': {'color': '#ffff00',
-                                            'pathObject': {'annotationPath': {'annotations': [], 'tags': []},
-                                                           'hasPath': False}
-                                            },
-                             'name': 'Production-segmentation_with_graph'},
-                              {"source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
-                               "type": "segmentation",
-                               "objectAlpha": 0.2,
-                               "ignoreSegmentInteractions": True,
-                               "segmentColors": { "1": "#808080"},
-                               "segments": ["1"],
-                                "skeletonRendering": {"mode2d": "lines_and_points",
-                                                      "mode3d": "lines"},
-                               "name": "brain_mesh_v141.surf",
-                               "visible": True
-                                }],
-                 'navigation': {'pose': {'position': {'voxelSize': [4, 4, 40],
-                                                      'voxelCoordinates': [118073, 57192, 4070]}},  # default
-                                'zoomFactor': 2.8},  # Zoom in 2d
-                 'perspectiveOrientation': [0, 0, 0, 1],  # This is a frontal perspective in 3d
-                 'perspectiveZoom': 21000,  # Zoom in 3d
-                 'jsonStateServer': 'https://globalv1.flywire-daf.com/nglstate/post',
-                 'selectedLayer': {'layer': 'Production-segmentation_with_graph',
-                                   'visible': True},
-                 'layout': 'xy-3d'}
+NGL_URL = "https://ngl.flywire.ai"
+MINIMAL_SCENE = {
+    "layers": [
+        {
+            "source": "precomputed://gs://microns-seunglab/drosophila_v0/alignment/image_rechunked",
+            "type": "image",
+            "blend": "default",
+            "shaderControls": {},
+            "name": "Production-image",
+        },
+        {
+            "source": "graphene://https://prod.flywire-daf.com/segmentation/1.0/{dataset}",
+            "type": "segmentation_with_graph",
+            "selectedAlpha": 0.14,
+            "segments": [],
+            "skeletonRendering": {"mode2d": "lines_and_points", "mode3d": "lines"},
+            "graphOperationMarker": [
+                {"annotations": [], "tags": []},
+                {"annotations": [], "tags": []},
+            ],
+            "pathFinder": {
+                "color": "#ffff00",
+                "pathObject": {
+                    "annotationPath": {"annotations": [], "tags": []},
+                    "hasPath": False,
+                },
+            },
+            "name": "Production-segmentation_with_graph",
+        },
+        {
+            "source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
+            "type": "segmentation",
+            "objectAlpha": 0.2,
+            "ignoreSegmentInteractions": True,
+            "segmentColors": {"1": "#808080"},
+            "segments": ["1"],
+            "skeletonRendering": {"mode2d": "lines_and_points", "mode3d": "lines"},
+            "name": "brain_mesh_v141.surf",
+            "visible": True,
+        },
+    ],
+    "navigation": {
+        "pose": {
+            "position": {
+                "voxelSize": [4, 4, 40],
+                "voxelCoordinates": [118073, 57192, 4070],
+            }
+        },  # default
+        "zoomFactor": 2.8,
+    },  # Zoom in 2d
+    "perspectiveOrientation": [0, 0, 0, 1],  # This is a frontal perspective in 3d
+    "perspectiveZoom": 21000,  # Zoom in 3d
+    "jsonStateServer": "https://globalv1.flywire-daf.com/nglstate/post",
+    "selectedLayer": {"layer": "Production-segmentation_with_graph", "visible": True},
+    "layout": "xy-3d",
+}
+FLAT_SEG_LAYER = {
+    "type": "segmentation",
+    "source": {
+        "url": "precomputed://gs://flywire_v141_m630",
+        "subsources": {"default": True, "bounds": True, "mesh": True},
+        "enableDefaultSubsources": False,
+    },
+    "tab": "segments",
+    "meshRenderScale": 315182315218263.7,
+    "colorSeed": 963379830,
+    "name": "flywire_v141_m630",
+}
 STATE_URL = "https://globalv1.flywire-daf.com/nglstate"
 session = None
 
 
-def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
-               seg_colors=None, seg_groups=None, invis_segs=None,
-               dataset='production', scene=None, ngl_url=None,
-               open_browser=False, to_clipboard=False, short=True):
+@utils.inject_dataset()
+def encode_url(
+    segments=None,
+    annotations=None,
+    coords=None,
+    skeletons=None,
+    seg_colors=None,
+    seg_groups=None,
+    invis_segs=None,
+    scene=None,
+    ngl_url=None,
+    use_flat=False,
+    open_browser=False,
+    to_clipboard=False,
+    short=True,
+    *,
+    dataset=None
+):
     """Encode data as FlyWire neuroglancer scene.
 
     Parameters
@@ -105,8 +147,6 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     will get its own annotation layer.
     invis_segs :    int | list, optional
                     Selected but invisible segments.
-    dataset :       'production' | 'sandbox'
-                    Segmentation dataset to use.
     scene :         dict | str, optional
                     If you want to edit an existing scene, provide it either
                     as already decoded dictionary or as string that can be
@@ -119,18 +159,19 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
                     If True, will copy URL to clipboard.
     short :         bool
                     If True, will make a shortened URL.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
     url :           str
 
     """
-    # Translate "production"/"sandbox" into the corresponding dataset
-    dataset = utils.FLYWIRE_DATASETS.get(dataset, dataset)
-
     # If scene provided as str, decode into dictionary
     if isinstance(scene, str):
-        scene = decode_url(scene, ret='full')
+        scene = decode_url(scene, ret="full")
     elif isinstance(scene, dict):
         # Do not modify original scene! We need to deepcopy here!
         scene = copy.deepcopy(scene)
@@ -139,26 +180,45 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
     if not scene:
         # Do not modify original scene! We need to deepcopy here!
         scene = copy.deepcopy(MINIMAL_SCENE)
-        scene['layers'][1]['source'] = scene['layers'][1]['source'].format(dataset=dataset)
+        scene["layers"][1]["source"] = utils.FLYWIRE_URLS.get(dataset, dataset)
 
-        if dataset == utils.FLYWIRE_DATASETS['sandbox']:
-            scene['layers'][1]['name'] = 'sandbox-segmentation-FOR PRACTICE ONLY'
-            scene['selectedLayer']['layer'] = 'sandbox-segmentation-FOR PRACTICE ONLY'
+        if dataset == "sandbox":
+            scene["layers"][1]["name"] = "sandbox-segmentation-FOR PRACTICE ONLY"
+            scene["selectedLayer"]["layer"] = "sandbox-segmentation-FOR PRACTICE ONLY"
+        elif dataset == "public":
+            scene["layers"][1]["name"] = "Public Release-segmentation_with_graph"
+            scene["selectedLayer"]["layer"] = "Public Release-segmentation_with_graph"
+        elif dataset == "flat_630":
+            scene["layers"][1] = copy.deepcopy(FLAT_SEG_LAYER)
 
     # At this point scene HAS to be a dictionary
     if not isinstance(scene, dict):
         raise TypeError(f'Expected `scene` as dict or str, got "{type(scene)}"')
 
     # First add selected segments
-    seg_layer_ix = [i for i, l in enumerate(scene['layers']) if (l['type'] == 'segmentation_with_graph' or l['name'] == 'flywire_v141_m526')]
+    seg_layer_ix = [
+        i
+        for i, l in enumerate(scene["layers"])
+        if (
+            l["type"] == "segmentation_with_graph"
+            or l["name"] in ("flywire_v141_m526", "flywire_v141_m630")
+        )
+    ]
 
     if not seg_layer_ix:
-        scene['layers'].append(MINIMAL_SCENE['layers'][1].copy())
-        scene['layers'][-1]['source'] = scene['layers'][-1]['source'].format(dataset=dataset)
+        if dataset != 'flat_630':
+            scene["layers"].append(copy.deepcopy(MINIMAL_SCENE["layers"][1]))
+            scene["layers"][-1]["source"] = scene["layers"][-1]["source"].format(
+                dataset=dataset
+            )
+        else:
+            scene["layers"].append(copy.deepcopy(FLAT_SEG_LAYER))
         seg_layer_ix = -1
 
-        if dataset == utils.FLYWIRE_DATASETS['sandbox']:
-            scene['layers'][-1]['name'] = 'sandbox-segmentation-FOR PRACTICE ONLY'
+        if dataset == "sandbox":
+            scene["layers"][-1]["name"] = "sandbox-segmentation-FOR PRACTICE ONLY"
+        elif dataset == "public":
+            scene["layers"][-1]["name"] = "Public Release-segmentation_with_graph"
     else:
         seg_layer_ix = seg_layer_ix[0]
 
@@ -169,56 +229,63 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
         # Add to, not replace already selected segments
         if isinstance(seg_groups, type(None)):
-            present = scene['layers'][seg_layer_ix].get('segments', [])
-            scene['layers'][seg_layer_ix]['segments'] = present + segments
-
+            present = scene["layers"][seg_layer_ix].get("segments", [])
+            scene["layers"][seg_layer_ix]["segments"] = present + segments
 
     if not isinstance(seg_groups, type(None)):
         if not isinstance(seg_groups, dict):
             if not navis.utils.is_iterable(seg_groups):
-                raise TypeError(f'`seg_groups` must be dict or iterable, got "{type(seg_groups)}"')
+                raise TypeError(
+                    f'`seg_groups` must be dict or iterable, got "{type(seg_groups)}"'
+                )
             if len(seg_groups) != len(segments):
-                raise ValueError(f'Got {len(seg_groups)} groups for {len(segments)} segments.')
+                raise ValueError(
+                    f"Got {len(seg_groups)} groups for {len(segments)} segments."
+                )
 
             seg_groups = np.asarray(seg_groups)
 
             if seg_groups.dtype != object:
-                seg_groups = [f'group_{i}' for i in seg_groups]
+                seg_groups = [f"group_{i}" for i in seg_groups]
 
             # Turn into dictionary
             seg_groups = dict(zip(segments, seg_groups))
 
         # Check if dict is {id: group} or {group: [id1, id2, id3]}
-        is_list = [isinstance(v, (list, tuple, set, np.ndarray)) for v in seg_groups.values()]
+        is_list = [
+            isinstance(v, (list, tuple, set, np.ndarray)) for v in seg_groups.values()
+        ]
         if not any(is_list):
             groups = {}
             for s, g in seg_groups.items():
                 if not isinstance(g, str):
-                    raise TypeError(f'Expected seg groups to be strings, got {type(g)}')
+                    raise TypeError(f"Expected seg groups to be strings, got {type(g)}")
                 groups[g] = groups.get(g, []) + [s]
         elif all(is_list):
             groups = seg_groups
         else:
-            raise ValueError('`seg_groups` appears to be a mix of {id: group} '
-                             'and {group: [id1, id2, id3]}.')
+            raise ValueError(
+                "`seg_groups` appears to be a mix of {id: group} "
+                "and {group: [id1, id2, id3]}."
+            )
 
         for g in groups:
-            scene['layers'].append(copy.deepcopy(scene['layers'][seg_layer_ix]))
-            scene['layers'][-1]['name'] = f'{g}'
-            scene['layers'][-1]['segments'] = [str(s) for s in groups[g]]
-            scene['layers'][-1]['visible'] = False
+            scene["layers"].append(copy.deepcopy(scene["layers"][seg_layer_ix]))
+            scene["layers"][-1]["name"] = f"{g}"
+            scene["layers"][-1]["segments"] = [str(s) for s in groups[g]]
+            scene["layers"][-1]["visible"] = False
 
     if not isinstance(invis_segs, type(None)):
         # Force to list and make strings
         invis_segs = make_iterable(invis_segs, force_type=str).tolist()
 
         # Add to, not replace already selected segments
-        present = scene['layers'][seg_layer_ix].get('hiddenSegments', [])
-        scene['layers'][seg_layer_ix]['hiddenSegments'] = present + invis_segs
+        present = scene["layers"][seg_layer_ix].get("hiddenSegments", [])
+        scene["layers"][seg_layer_ix]["hiddenSegments"] = present + invis_segs
 
     # All present segments
-    seg_layer = scene['layers'][seg_layer_ix]
-    #all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
+    seg_layer = scene["layers"][seg_layer_ix]
+    # all_segs = seg_layer.get('segments', []) + seg_layer.get('hiddenSegments', [])
     all_segs = segments
 
     # See if we need to assign colors
@@ -227,29 +294,38 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
             seg_colors = {s: seg_colors for s in all_segs}
         elif isinstance(seg_colors, tuple) and len(seg_colors) == 3:
             seg_colors = {s: seg_colors for s in all_segs}
-        elif isinstance(seg_colors, (np.ndarray, pd.Series, pd.Categorical)) and seg_colors.ndim == 1:
+        elif (
+            isinstance(seg_colors, (np.ndarray, pd.Series, pd.Categorical))
+            and seg_colors.ndim == 1
+        ):
             if len(seg_colors) != len(all_segs):
-                raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
+                raise ValueError(
+                    f"Got {len(seg_colors)} colors for {len(all_segs)} segments."
+                )
 
             uni_ = np.unique(seg_colors)
             if len(uni_) > 20:
                 # Note the +1 to avoid starting and ending on the same color
-                pal = sns.color_palette('hls', len(uni_) + 1)
+                pal = sns.color_palette("hls", len(uni_) + 1)
                 # Shuffle to avoid having two neighbouring clusters with
                 # similar colours
                 rng = np.random.default_rng(1985)
                 rng.shuffle(pal)
             elif len(uni_) > 10:
-                pal = sns.color_palette('tab20', len(uni_))
+                pal = sns.color_palette("tab20", len(uni_))
             else:
-                pal = sns.color_palette('tab10', len(uni_))
+                pal = sns.color_palette("tab10", len(uni_))
             _colors = dict(zip(uni_, pal))
             seg_colors = {s: _colors[l] for s, l in zip(all_segs, seg_colors)}
         elif not isinstance(seg_colors, dict):
             if not navis.utils.is_iterable(seg_colors):
-                raise TypeError(f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"')
+                raise TypeError(
+                    f'`seg_colors` must be dict or iterable, got "{type(seg_colors)}"'
+                )
             if len(seg_colors) < len(all_segs):
-                raise ValueError(f'Got {len(seg_colors)} colors for {len(all_segs)} segments.')
+                raise ValueError(
+                    f"Got {len(seg_colors)} colors for {len(all_segs)} segments."
+                )
 
             # Turn into dictionary
             seg_colors = dict(zip(all_segs, seg_colors))
@@ -261,21 +337,25 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
         seg_colors = {str(s): mcl.to_hex(c) for s, c in seg_colors.items()}
 
         # Assign colors
-        scene['layers'][seg_layer_ix]['segmentColors'] = seg_colors
+        scene["layers"][seg_layer_ix]["segmentColors"] = seg_colors
 
         # Also color each groups
         if not isinstance(seg_groups, type(None)):
-            for l in scene['layers']:
-                if l['name'] in groups:
-                    l['segmentColors'] = {s: seg_colors[s] for s in l['segments']}
+            for l in scene["layers"]:
+                if l["name"] in groups:
+                    l["segmentColors"] = {s: seg_colors[s] for s in l["segments"]}
 
     # Set coordinates if provided
     if not isinstance(coords, type(None)):
         coords = np.asarray(coords)
         if not coords.ndim == 1 and coords.shape[0] == 3:
-            raise ValueError('Expected coords to be an (3, ) array of x/y/z '
-                             f'coordinates, got {coords.shape}')
-        scene['navigation']['pose']['position']['voxelCoordinates'] = coords.round().astype(int).tolist()
+            raise ValueError(
+                "Expected coords to be an (3, ) array of x/y/z "
+                f"coordinates, got {coords.shape}"
+            )
+        scene["navigation"]["pose"]["position"]["voxelCoordinates"] = (
+            coords.round().astype(int).tolist()
+        )
 
     if not isinstance(annotations, type(None)):
         if isinstance(annotations, np.ndarray):
@@ -292,20 +372,22 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
             scene = add_skeleton_layer(skeletons, scene)
 
     if short:
-        url = shorten_url(scene)
+        url = shorten_url(scene, ngl_url=ngl_url)
     else:
-        scene_str = json.dumps(scene).replace("'",
-                                              '"').replace("True",
-                                                           "true").replace("False",
-                                                                           "false")
+        scene_str = (
+            json.dumps(scene)
+            .replace("'", '"')
+            .replace("True", "true")
+            .replace("False", "false")
+        )
         if not ngl_url:
             ngl_url = NGL_URL
 
-        url = f'{ngl_url}/#!{quote(scene_str)}'
+        url = f"{ngl_url}/#!{quote(scene_str)}"
 
     if open_browser:
         try:
-            wb = webbrowser.get('chrome')
+            wb = webbrowser.get("chrome")
         except BaseException:
             wb = webbrowser
 
@@ -313,7 +395,7 @@ def encode_url(segments=None, annotations=None, coords=None, skeletons=None,
 
     if to_clipboard:
         pyperclip.copy(url)
-        print('URL copied to clipboard.')
+        print("URL copied to clipboard.")
 
     return url
 
@@ -345,13 +427,13 @@ def add_skeleton_layer(x, scene):
 
     if isinstance(x, navis.NeuronList):
         if len(x) > 1:
-            raise ValueError(f'Expected a single neuron, got {len(x)}')
+            raise ValueError(f"Expected a single neuron, got {len(x)}")
 
-    #if isinstance(x, pymaid.CatmaidNeuron):
+    # if isinstance(x, pymaid.CatmaidNeuron):
     #    x = xform.fafb14_to_flywire(x, coordinates='nm')
 
     if not isinstance(x, (navis.TreeNeuron, pd.DataFrame)):
-        raise TypeError(f'Expected skeleton, got {type(x)}')
+        raise TypeError(f"Expected skeleton, got {type(x)}")
 
     if isinstance(x, navis.TreeNeuron):
         nodes = x.nodes
@@ -360,9 +442,12 @@ def add_skeleton_layer(x, scene):
 
     # Generate list of segments
     not_root = nodes[nodes.parent_id >= 0]
-    loc1 = not_root[['x', 'y', 'z']].values
-    loc2 = nodes.set_index('node_id').loc[not_root.parent_id.values,
-                                          ['x', 'y', 'z']].values
+    loc1 = not_root[["x", "y", "z"]].values
+    loc2 = (
+        nodes.set_index("node_id")
+        .loc[not_root.parent_id.values, ["x", "y", "z"]]
+        .values
+    )
     stack = np.dstack((loc1, loc2))
     stack = np.transpose(stack, (0, 2, 1))
 
@@ -407,43 +492,52 @@ def add_annotation_layer(annotations, scene, name=None, connected=False):
     records = []
     if annotations.ndim == 2 and annotations.shape[1] == 3:
         for co in annotations.round().astype(int).tolist():
-            records.append({'point': co,
-                            'type': 'point',
-                            'tagIds': [],
-                            'id': str(uuid.uuid4())})
+            records.append(
+                {"point": co, "type": "point", "tagIds": [], "id": str(uuid.uuid4())}
+            )
     elif annotations.ndim == 2 and annotations.shape[1] == 3:
         for co in annotations.round().astype(int).tolist():
-            records.append({'center': co,
-                            'type': 'ellipsoid',
-                            'id': str(uuid.uuid4())})
-    elif annotations.ndim == 3 and annotations.shape[1] == 2 and annotations.shape[2] == 3:
+            records.append({"center": co, "type": "ellipsoid", "id": str(uuid.uuid4())})
+    elif (
+        annotations.ndim == 3
+        and annotations.shape[1] == 2
+        and annotations.shape[2] == 3
+    ):
         for co in annotations.round().astype(int).tolist():
             start, end = co[0], co[1]
-            records.append({'pointA': start,
-                            'pointB': end,
-                            'type': 'line',
-                            'id': str(uuid.uuid4())})
+            records.append(
+                {
+                    "pointA": start,
+                    "pointB": end,
+                    "type": "line",
+                    "id": str(uuid.uuid4()),
+                }
+            )
     else:
-        raise ValueError('Expected annotations to be x/y/z coordinates of either'
-                         '(N, 3), (N, 4) or (N, 2, 3) shape for points, '
-                         f'ellipsoids or lines, respectively. Got {annotations.shape}')
+        raise ValueError(
+            "Expected annotations to be x/y/z coordinates of either"
+            "(N, 3), (N, 4) or (N, 2, 3) shape for points, "
+            f"ellipsoids or lines, respectively. Got {annotations.shape}"
+        )
 
     if not name:
-        existing_an_layers = [l for l in scene['layers'] if l['type'] == 'annotation']
-        name = f'annotation{len(existing_an_layers)}'
+        existing_an_layers = [l for l in scene["layers"] if l["type"] == "annotation"]
+        name = f"annotation{len(existing_an_layers)}"
 
-    an_layer = {"type": "annotation",
-                "annotations": records,
-                "annotationTags": [],
-                "voxelSize": [4, 4, 40],
-                "name": name}
+    an_layer = {
+        "type": "annotation",
+        "annotations": records,
+        "annotationTags": [],
+        "voxelSize": [4, 4, 40],
+        "name": name,
+    }
 
-    scene['layers'].append(an_layer)
+    scene["layers"].append(an_layer)
 
     return scene
 
 
-def decode_url(url, format='brief'):
+def decode_url(url, format="brief"):
     """Decode neuroglancer URL.
 
     Parameters
@@ -481,38 +575,53 @@ def decode_url(url, format='brief'):
 
     """
     if isinstance(url, list):
-        if format != 'dataframe':
+        if format != "dataframe":
             raise ValueError('Can only parse multiple URLs if format="dataframe"')
         return pd.concat([decode_url(u, format=format) for u in url], axis=0)
 
     assert isinstance(url, (str, dict))
-    assert format in ('brief', 'full', 'dataframe', 'segments', 'visible', "annotations")
+    assert format in (
+        "brief",
+        "full",
+        "dataframe",
+        "segments",
+        "visible",
+        "annotations",
+    )
 
     query = parse_qs(urlparse(url).query, keep_blank_values=True)
 
-    if 'json_url' in query:
+    if "json_url" in query:
         # Fetch state
         token = utils.get_chunkedgraph_secret()
-        r = requests.get(query['json_url'][0], headers={'Authorization': f"Bearer {token}"})
+        r = requests.get(
+            query["json_url"][0], headers={"Authorization": f"Bearer {token}"}
+        )
         r.raise_for_status()
 
         scene = r.json()
     else:
         scene = query
 
-    if format == 'brief':
-        seg_layers = [l for l in scene['layers'] if 'segmentation_with_graph' in l.get('type')]
-        an_layers = [l for l in scene['layers'] if l.get('type') == 'annotation']
-        return {'position': scene['navigation']['pose']['position'].get('voxelCoordinates', None),
-                'annotations': [a for l in an_layers for a in l.get('annotations', [])],
-                'selected': [s for l in seg_layers for s in l.get('segments', [])]}
-    elif format == 'dataframe':
+    if format == "brief":
+        seg_layers = [
+            l for l in scene["layers"] if "segmentation_with_graph" in l.get("type")
+        ]
+        an_layers = [l for l in scene["layers"] if l.get("type") == "annotation"]
+        return {
+            "position": scene["navigation"]["pose"]["position"].get(
+                "voxelCoordinates", None
+            ),
+            "annotations": [a for l in an_layers for a in l.get("annotations", [])],
+            "selected": [s for l in seg_layers for s in l.get("segments", [])],
+        }
+    elif format == "dataframe":
         segs = []
-        seg_layers = [l for l in scene['layers'] if 'segmentation' in l.get('type')]
+        seg_layers = [l for l in scene["layers"] if "segmentation" in l.get("type")]
         for l in seg_layers:
-            for s in l.get('segments', []):
-                segs.append([int(s), l['name']])
-        return pd.DataFrame(segs, columns=['segment', 'layer'])
+            for s in l.get("segments", []):
+                segs.append([int(s), l["name"]])
+        return pd.DataFrame(segs, columns=["segment", "layer"])
 
     return scene
 
@@ -560,19 +669,20 @@ def shorten_url(scene, ngl_url=None, state_url=None, refresh_session=False):
         # Generate header and cookie
         auth_header = {"Authorization": f"Bearer {token}"}
         session.headers.update(auth_header)
-        cookie_obj = requests.cookies.create_cookie(name='middle_auth_token',
-                                                    value=token)
+        cookie_obj = requests.cookies.create_cookie(
+            name="middle_auth_token", value=token
+        )
         session.cookies.set_cookie(cookie_obj)
 
     # Upload state
-    url = f'{state_url}/post'
+    url = f"{state_url}/post"
     resp = session.post(url, data=json.dumps(scene))
     resp.raise_for_status()
 
-    return f'{ngl_url}/?json_url={resp.json()}'
+    return f"{ngl_url}/?json_url={resp.json()}"
 
 
-def neurons_to_url(x, top_N=1, downsample=False, coordinates='nm'):
+def neurons_to_url(x, top_N=1, downsample=False, coordinates="nm"):
     """Find FlyWire segments overlapping with given neuron(s) and create URLs.
 
     Parameters
@@ -599,10 +709,12 @@ def neurons_to_url(x, top_N=1, downsample=False, coordinates='nm'):
     ol = neuron_to_segments(x, coordinates=coordinates)
 
     data = []
-    for n in navis.config.tqdm(x, desc='Creating URLs'):
+    for n in navis.config.tqdm(x, desc="Creating URLs"):
         if n.id not in ol.columns:
-            print(f'No overlapping fragments found for neuron {n.label}. Check '
-                  '`coordinates` parameter?')
+            print(
+                f"No overlapping fragments found for neuron {n.label}. Check "
+                "`coordinates` parameter?"
+            )
 
         this = ol[n.id].sort_values(ascending=False)
         pct = this / this.sum()
@@ -627,23 +739,11 @@ def neurons_to_url(x, top_N=1, downsample=False, coordinates='nm'):
 
         data.append(row)
 
-    cols = ['id', 'name', 'url']
+    cols = ["id", "name", "url"]
     if top_N >= 1:
         for i in range(top_N):
-            cols += [f'seg_{i + 1}', f'conf_{i + 1}']
+            cols += [f"seg_{i + 1}", f"conf_{i + 1}"]
     else:
-        cols.append('n_segs')
+        cols.append("n_segs")
 
     return pd.DataFrame(data, columns=cols)
-
-
-def generate_open_ends_url(x):
-    """Generate a FlyWire URL with potential open ends for given neuron.
-
-    Parameters
-    ----------
-    x :     root ID | navis.TreeNeuron | mesh
-            ID of neuron to generate open ends for.
-
-    """
-    pass

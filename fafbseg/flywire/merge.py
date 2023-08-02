@@ -15,6 +15,8 @@
 import navis
 import trimesh as tm
 
+import numpy as np
+
 from .. import xform
 from ..move import merge_into_catmaid
 
