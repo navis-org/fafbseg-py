@@ -57,6 +57,7 @@ CAVE_DATASETS = {'production': 'flywire_fafb_production',
                  'sandbox': 'flywire_fafb_sandbox',
                  'public': 'flywire_fafb_public'}
 
+SILENCE_FIND_MAT_VERSION = False
 
 # Initialize without a volume
 fw_vol = None
@@ -597,3 +598,13 @@ def package_timestamp(timestamp, name="timestamp"):
 
         query_d = {name: timestamp.timestamp()}
     return query_d
+
+
+class silence_find_mat_version:
+    def __enter__(self):
+        global SILENCE_FIND_MAT_VERSION
+        SILENCE_FIND_MAT_VERSION = True
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        global SILENCE_FIND_MAT_VERSION
+        SILENCE_FIND_MAT_VERSION = False

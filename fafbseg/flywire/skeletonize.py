@@ -28,11 +28,14 @@ import numpy as np
 import skeletor as sk
 import trimesh as tm
 
-from .segmentation import snap_to_id, is_latest_root
-from .utils import parse_volume
-from .meshes import detect_soma
-from .annotations import get_somas, is_materialized_root
+from scipy.spatial import cKDTree
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 
+from .segmentation import snap_to_id, is_latest_root, supervoxels_to_roots, locs_to_supervoxels
+from .utils import parse_volume, silence_find_mat_version, inject_dataset
+from .l2 import l2_graph
+from .annotations import get_somas
 
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
 
@@ -133,7 +136,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # roots that actually existed at the time)
         # For neurons without a soma we'll be doing more sophisticated checks
         # when we skeletonize
-        kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
+        with silence_find_mat_version():
+            kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
 
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
@@ -172,8 +176,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                     except BaseException:
                         raise
                 if lod_ < 0:
-                    raise ValueError(f'Root ID {id} does not appear to exist for'
-                                     f'"{dataset}"')
+                    raise ValueError(f'Root ID {id} does not appear to exist '
+                                     f'in "{dataset}"')
         except BaseException:
             raise
         finally:
@@ -259,7 +263,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     if soma.empty:
         # See if we can find a soma based on the nucleus segmentation
         try:
-            soma = get_somas(id, dataset=dataset, materialization='auto')
+            with silence_find_mat_version():
+                soma = get_somas(id, dataset=dataset, materialization='auto')
         except KeyboardInterrupt:
             raise
         except requests.HTTPError:
