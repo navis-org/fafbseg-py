@@ -1,0 +1,149 @@
+{
+    "NGL_URL_FLYWIRE": "https://ngl.flywire.ai",
+    "NGL_URL_BASIC": "https://neuroglancer-demo.appspot.com/",
+    "MINIMAL_SCENE": {
+        "layers": [],
+        "showAxisLines": false,
+        "navigation": {
+            "pose": {
+                "position": {
+                    "voxelSize": [
+                        4,
+                        4,
+                        40
+                    ],
+                    "voxelCoordinates": [
+                        135923.046875,
+                        58580.8984375,
+                        4070
+                    ]
+                }
+            },
+            "zoomFactor": 2.8
+        },
+        "perspectiveOrientation": [
+            0,
+            0,
+            0,
+            1
+        ],
+        "perspectiveZoom": 4800,
+        "jsonStateServer": "https://globalv1.flywire-daf.com/nglstate/post",
+        "selectedLayer": {
+            "layer": "Production-segmentation_with_graph",
+            "visible": true
+        },
+        "layout": "xy-3d"
+    },
+    "FLYWIRE_IMAGE_LAYER": {
+        "source": "precomputed://gs://microns-seunglab/drosophila_v0/alignment/image_rechunked",
+        "type": "image",
+        "blend": "default",
+        "shaderControls": {},
+        "name": "Production-image"
+    },
+    "FLYWIRE_SEG_LAYER": {
+        "source": "graphene://https://prod.flywire-daf.com/segmentation/1.0/{dataset}",
+        "type": "segmentation_with_graph",
+        "selectedAlpha": 0.14,
+        "segments": [],
+        "skeletonRendering": {
+            "mode2d": "lines_and_points",
+            "mode3d": "lines"
+        },
+        "name": "Production-segmentation_with_graph"
+    },
+    "FLYWIRE_SEG_LAYER_BASIC_NGL": {
+        "type": "segmentation",
+        "source": [
+            {
+                "url": "graphene://middleauth+https://prod.flywire-daf.com/segmentation/1.0/{dataset}",
+                "subsources": {
+                    "default": true,
+                    "graph": true,
+                    "mesh": true
+                },
+                "enableDefaultSubsources": false
+            },
+            "precomputed://https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/ann/flytable-info"
+        ],
+        "tab": "segments",
+        "segments": [],
+        "colorSeed": 45225755,
+        "name": "fly_v31"
+    },
+    "FLYWIRE_SEG_LAYER_FLAT": {
+        "type": "segmentation",
+        "source": {
+            "url": "precomputed://gs://flywire_v141_m630",
+            "subsources": {
+                "default": true,
+                "bounds": true,
+                "mesh": true
+            },
+            "enableDefaultSubsources": false
+        },
+        "tab": "segments",
+        "meshRenderScale": 315182315218263.7,
+        "colorSeed": 963379830,
+        "name": "flywire_v141_m630"
+    },
+    "FLYWIRE_BRAIN_LAYER": {
+        "source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
+        "type": "segmentation",
+        "objectAlpha": 0.2,
+        "ignoreSegmentInteractions": true,
+        "segmentColors": {
+            "1": "#808080"
+        },
+        "segments": [
+            "1"
+        ],
+        "skeletonRendering": {
+            "mode2d": "lines_and_points",
+            "mode3d": "lines"
+        },
+        "name": "brain_mesh_v141.surf",
+        "visible": true
+    },
+    "FLYWIRE_NEUROPILS_LAYER": {
+        "type": "segmentation",
+        "source": "precomputed://gs://neuroglancer-fafb-data/elmr-data/FAFBNP.surf/mesh#type=mesh",
+        "tab": "source",
+        "objectAlpha": 0.2,
+        "colorSeed": 990918271,
+        "name": "neuropil-regions-surface"
+    },
+    "HEMIBRAIN_MESH_LAYER": {
+        "type": "segmentation",
+        "source": "precomputed://https://spine.itanna.io/files/data/hemibrain2flywire/precomputed/neuronmeshes/mesh#type=mesh",
+        "tab": "source",
+        "segments": [],
+        "colorSeed": 3429908875,
+        "name": "hemibrain_meshes"
+    },
+    "HEMIBRAIN_MESH_LAYER_MIRRORED": {
+        "type": "segmentation",
+        "source": "precomputed://https://spine.itanna.io/files/data/hemibrain2flywire_mirror/precomputed/neuronmeshes/mesh#type=mesh",
+        "tab": "source",
+        "segments": [],
+        "colorSeed": 3429908875,
+        "name": "hemibrain_meshes_mirrored"
+    },
+    "HEMIBRAIN_NEUROPILS_LAYER": {
+        "type": "segmentation",
+        "source": "precomputed://https://spine.itanna.io/files/data/hemibrain2flywire/precomputed/neuropils/mesh#type=mesh",
+        "tab": "source",
+        "objectAlpha": 0.16,
+        "segments": [
+            "200"
+        ],
+        "colorSeed": 422627114,
+        "segmentColors": {
+            "200": "#e0e0e0"
+        },
+        "name": "hemibrain_neuropils",
+        "visible": false
+    },
+    "FLYWIRE_STATE_URL": "https://globalv1.flywire-daf.com/nglstate"
+}
