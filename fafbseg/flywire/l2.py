@@ -91,7 +91,7 @@ def l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
         return pd.concat(info, axis=0).reset_index(drop=True)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
@@ -165,7 +165,7 @@ def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Get the L2 representative coordinates, vectors and (if required) volume
     attributes = ['rep_coord_nm', 'pca', 'size_nm3']
@@ -268,7 +268,7 @@ def find_anchor_loc(root_ids,
                 df.loc[has_loc, 'supervoxel'] = sv.astype(str)  # do not change str
 
                 # Get/Initialize the CAVE client
-                client = get_cave_client(dataset)
+                client = get_cave_client(dataset=dataset)
 
                 # Get root timestamps
                 ts = client.chunkedgraph.get_root_timestamps(df.root_id.values.tolist())
@@ -291,7 +291,7 @@ def find_anchor_loc(root_ids,
     root_ids = np.int64(root_ids)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
@@ -360,7 +360,7 @@ def l2_graph(root_ids, progress=True, *, dataset=None):
         return graphs
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 graph for given root ID
     # This is a (N,2) array of edges
@@ -487,7 +487,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     vol = parse_volume(dataset)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 graph for given root ID (this is a (N, 2) array of edges)
     get_l2_edges = retry(client.chunkedgraph.level2_chunk_graph)
@@ -675,7 +675,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
         raise ValueError('Unable to produce dotprops for root ID 0.')
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 IDs
     with ThreadPoolExecutor(max_workers=max_threads) as pool:
@@ -794,7 +794,7 @@ def l2_meshes(x, threads=10, progress=True, *, dataset=None):
         raise ValueError(f'Unable to convert root ID {x} to integer')
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Get the cloudvolume
     vol = parse_volume(dataset)
@@ -880,7 +880,7 @@ def l2_soma(x, progress=True, *, dataset=None):
     vol = parse_volume(dataset)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     if not isinstance(x, nx.Graph):
         # Load the L2 graph for given root ID
