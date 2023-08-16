@@ -91,7 +91,7 @@ def is_proofread(x, materialization='auto', cache=True, validate=True, *,
                   f"not proofread: {x[~il]}")
 
     # Get available materialization versions
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     if materialization == 'latest':
         mat_versions = client.materialize.get_versions()
@@ -155,7 +155,7 @@ def is_materialized_root(id, materialization='latest', *, dataset=None):
     is_mat = np.zeros(len(id), dtype=bool)
 
     # Get timestamp at materalization
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
     ts_mat = client.materialize.get_timestamp(None if materialization == 'latest' else materialization)
 
     # Get root timestamps
@@ -212,7 +212,7 @@ def get_materialization_versions(*, dataset=None):
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Get currently existing versions
     get_versions = retry(client.materialize.get_versions)
@@ -284,7 +284,7 @@ def create_annotation_table(name: str,
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     navis.utils.eval_param(name, name='name', allowed_types=(str, ))
     navis.utils.eval_param(schema, name='schema', allowed_types=(str, ))
@@ -329,7 +329,7 @@ def list_annotation_tables(*, dataset=None):
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     an = client.annotation.get_tables()
     ma = client.materialize.get_tables()
@@ -364,7 +364,7 @@ def get_annotation_table_info(table_name: str,
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     return client.annotation.get_table_metadata(table_name)
 
@@ -407,7 +407,7 @@ def get_annotations(table_name: str,
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
 
@@ -463,7 +463,7 @@ def delete_annotations(table_name: str,
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
     navis.utils.eval_param(annotation_ids, name='annotation_ids',
@@ -548,7 +548,7 @@ def upload_annotations(table_name: str,
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
     navis.utils.eval_param(data, name='data', allowed_types=(pd.DataFrame, ))
