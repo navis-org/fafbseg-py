@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .l2 import l2_graph
 from .synapses import fetch_synapses
-from .utils import parse_volume, inject_dataset
+from .utils import get_cloudvolume, inject_dataset
 
 __all__ = ['get_mesh_neuron']
 
@@ -92,7 +92,7 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
 
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(id):
         id = np.asarray(id, dtype=np.int64)
@@ -330,7 +330,7 @@ def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, *, dataset=Non
     # Get voxels for this neuron
     vxl = get_voxels(x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset)
 
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
     spacing = vol.scales[mip]['resolution']
 
     mesh = sc.marching_cubes(vxl, spacing=spacing)

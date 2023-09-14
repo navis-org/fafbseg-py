@@ -33,7 +33,7 @@ from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 
 from .segmentation import snap_to_id, is_latest_root, supervoxels_to_roots, locs_to_supervoxels
-from .utils import parse_volume, silence_find_mat_version, inject_dataset
+from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
 from .l2 import l2_graph
 from .annotations import get_somas
 
@@ -157,7 +157,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                                                             leave=False)])
 
     if not navis.utils.is_mesh(x):
-        vol = parse_volume(dataset)
+        vol = get_cloudvolume(dataset)
 
         # Make sure this is a valid integer
         id = np.int64(x)

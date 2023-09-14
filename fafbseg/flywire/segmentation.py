@@ -36,7 +36,7 @@ from .. import spine
 from .. import xform
 
 from ..utils import make_iterable, GSPointLoader
-from .utils import (parse_volume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
+from .utils import (get_cloudvolume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
                     retry, get_cave_client, parse_bounds, package_timestamp,
                     inject_dataset)
 
@@ -366,7 +366,7 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
         progress = False
 
     # Get the volume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     svoxels = {}
     # See what we can get from cache
@@ -459,7 +459,7 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     # is_valid_supervoxel(x[(x != 0) & (x != '0')], raise_exc=True)
 
     # Parse the volume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
@@ -561,7 +561,7 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
         return spine.transform.get_segids(locs, segmentation='flywire_190410',
                                           coordinates=coordinates, mip=mip)
     else:
-        vol = copy.deepcopy(parse_volume('production'))
+        vol = copy.deepcopy(get_cloudvolume('production'))
         # Lower mips appear to cause inconsistencies despite spine also only
         # using mip 2 (IIRC?)
         # vol.mip = 2
@@ -1041,7 +1041,7 @@ def update_ids(id,
     # See if we already check if this was the latest root
     is_latest = kwargs.pop('is_latest', None)
 
-    vol = parse_volume(dataset, **kwargs)
+    vol = get_cloudvolume(dataset, **kwargs)
 
     if isinstance(id, pd.DataFrame):
         if isinstance(supervoxels, type(None)):
@@ -1386,7 +1386,7 @@ def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, 
     else:
         raise ValueError(f'`bbox` must have shape (2, 3) or (3, 2), got {bbox.shape}')
 
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
     vol.mip = mip
 
     # First convert to nanometers
@@ -1439,7 +1439,7 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
             If ``x`` is iterable.
 
     """
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(x):
         is_valid =  np.array([is_valid_root(r, dataset=vol) for r in x])
@@ -1483,7 +1483,7 @@ def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
             If ``x`` is iterable.
 
     """
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(x):
         is_valid =  np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
@@ -1557,7 +1557,7 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     from .l2 import chunks_to_nm
 
     # This is a mirror for base segmentation
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
     client = get_cave_client()
 
     if use_mirror:

@@ -45,8 +45,8 @@ FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26',
                     'public': 'flywire_public'}
 
-FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
-                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
+FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v31',
+                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v26',
                 'public': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public',
                 'flat_630': 'precomputed://gs://flywire_v141_m630',
                 'flat_571': 'precomputed://gs://flywire_v141_m526'}
@@ -60,7 +60,7 @@ CAVE_DATASETS = {'production': 'flywire_fafb_production',
 SILENCE_FIND_MAT_VERSION = False
 
 # Initialize without a volume
-fw_vol = None
+cloud_volumes = {}
 cave_clients = {}
 
 # Data stuff
@@ -90,8 +90,9 @@ def set_default_dataset(dataset):
     >>> flywire.set_default_dataset('public')
 
     """
-    if dataset not in FLYWIRE_URLS:
-        raise ValueError(f'`dataset` must be one of: {", ".join(list(FLYWIRE_URLS))}')
+    if dataset not in FLYWIRE_URLS and dataset not in get_cave_datastacks():
+        datasets = np.unique(list(FLYWIRE_URLS) + get_cave_datastacks())
+        raise ValueError(f'`dataset` must be one of: {", ".join(datasets)}')
 
     global DEFAULT_DATASET
     DEFAULT_DATASET = dataset
@@ -215,6 +216,18 @@ def get_synapse_areas(ind):
     return np.array([vol_names[i] for i in area_ids[ind]])
 
 
+@functools.lru_cache
+def get_cave_datastacks():
+    """Get available CAVE datastacks."""
+    return CAVEclient().info.get_datastacks()
+
+
+@functools.lru_cache
+def get_datastack_segmentation_source(datastack):
+    """Get segmentation source for given CAVE datastack."""
+    return CAVEclient().info.get_datastack_info(datastack_name=datastack)['segmentation_source']
+
+
 @inject_dataset()
 def get_cave_client(*, dataset=None, token=None, check_stale=True,
                     force_new=False):
@@ -268,12 +281,12 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
         # expire on Monday. Therefore, on Mondays only, we will also
         # force an update if the client is older than 30 minutes
         if now.weekday() in (0, ) and not force_new:
-            if (dt.datetime.now() - client.birth_day) > dt.timedelta(minutes=30):
+            if (dt.datetime.now() - client._created_at) > dt.timedelta(minutes=30):
                 force_new = True
 
     if datastack not in cave_clients or force_new:
         cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
-        cave_clients[datastack].birth_day = dt.datetime.now()
+        cave_clients[datastack]._created_at = dt.datetime.now()
 
     return cave_clients[datastack]
 
@@ -366,29 +379,27 @@ def parse_root_ids(x):
         raise
 
 
-def parse_volume(vol, **kwargs):
-    """Parse CloudVolume."""
-    global fw_vol
-    if 'CloudVolume' not in str(type(vol)):
-        if not isinstance(vol, str):
-            raise ValueError(f'Unable to initialize CloudVolume from "{type(vol)}"')
+def get_cloudvolume(dataset, **kwargs):
+    """Get CloudVolume for given dataset."""
+    # If this already is a CloudVolume just pass it through
+    if "CloudVolume" in  str(type(dataset)):
+        return dataset
+    else:
+        if not isinstance(dataset, str):
+            raise ValueError(f'Unable to initialize CloudVolume from "{type(dataset)}"')
 
-        if not utils.is_url(vol):
-            # We are assuming this is the dataset
-            # Map "production" and "sandbox" with to their correct designations
-            vol = FLYWIRE_URLS.get(vol, vol)
+        # Translate into a URL
+        if not utils.is_url(dataset):
+            # Map "production" and "sandbox" to their URLs
+            if dataset in FLYWIRE_URLS:
+                dataset = FLYWIRE_URLS[dataset]
+            # Failing that, see if CAVE knows about them
+            elif dataset in get_cave_datastacks():
+                dataset = get_datastack_segmentation_source(dataset)
+            # Otherwise we will assume that this already is a segmentation URL
 
-            # Below is supposedly the "old" api (/1.0/)
-            # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
-
-            # This is the new url
-            # vol = f'graphene://https://prod.flywire-daf.com/segmentation/table/{vol}'
-
-            # This might eventually become the new url
-            # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation_proc/table/{vol}'
-
-        #  Change default volume if necessary
-        if not fw_vol or getattr(fw_vol, 'path', None) != vol:
+        # Add this volume if it does not already exists
+        if dataset not in cloud_volumes:
             # Set and update defaults from kwargs
             defaults = dict(mip=0,
                             fill_missing=True,
@@ -405,11 +416,10 @@ def parse_volume(vol, **kwargs):
             #    if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
             #        defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
 
-            fw_vol = cv.CloudVolume(vol, **defaults)
-            fw_vol.path = vol
-    else:
-        fw_vol = vol
-    return fw_vol
+            cloud_volumes[dataset] = cv.CloudVolume(dataset, **defaults)
+            cloud_volumes[dataset].path = dataset
+
+        return cloud_volumes[dataset]
 
 
 def retry(func, retries=5, cooldown=2):
@@ -581,7 +591,7 @@ def find_mat_version(ids, verbose=True, dataset='production'):
             print(f'Using live materialization')
         return 'live'
 
-    raise ValueError('Given root ID(s) do not exists in any of the available '
+    raise ValueError('Given root IDs do not co-exist in any of the available '
                      'materialization versions (including live). Try updating '
                      'root IDs and rerun your query.')
 

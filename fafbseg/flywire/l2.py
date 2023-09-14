@@ -32,7 +32,7 @@ import trimesh as tm
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
-from .utils import parse_volume, get_cave_client, retry, inject_dataset
+from .utils import get_cloudvolume, get_cave_client, retry, inject_dataset
 
 __all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info',
            'find_anchor_loc']
@@ -484,7 +484,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     root_id = np.int64(root_id)
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset=dataset)
@@ -497,7 +497,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     if not len(l2_eg):
         msg = (f'Unable to create L2 skeleton: root ID {root_id} '
                'consists of only a single L2 chunk.')
-        if omit_failures == None:
+        if omit_failures is None:
             raise ValueError(msg)
 
         navis.config.logger.warning(msg)
@@ -797,7 +797,7 @@ def l2_meshes(x, threads=10, progress=True, *, dataset=None):
     client = get_cave_client(dataset=dataset)
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Load the L2 IDs
     l2_ids = client.chunkedgraph.get_leaves(x, stop_layer=2)
@@ -877,7 +877,7 @@ def l2_soma(x, progress=True, *, dataset=None):
         return res
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset=dataset)
