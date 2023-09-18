@@ -561,8 +561,44 @@ def get_lr_position(x, coordinates='nm'):
     return (m[:, 0] - x[:, 0]) / 2
 
 
-def find_mat_version(ids, verbose=True, dataset='production'):
-    """Find a materialization version (or live) for given IDs."""
+def find_mat_version(ids,
+                     verbose=True,
+                     allow_multiple=False,
+                     raise_missing=True,
+                     dataset='production'):
+    """Find a materialization version (or live) for given IDs.
+
+    Parameters
+    ----------
+    ids :           iterable
+                    Root IDs to check.
+    verbose :       bool
+                    Whether to print results of search. See also the
+                    `flywire.utils.silence_find_mat_version` context manager to
+                    silence output.
+    allow_multiple : bool
+                    If True, will track if IDs can be found spread across multiple
+                    materialization versions if there is no single one containing
+                    all.
+    raise_missing : bool
+                    Only relevant if `allow_multiple=True`. If False, will return
+                    versions even if some IDs could not be found.
+
+    Returns
+    -------
+    version :       int | "live"
+                    A single version (including "live") that contains all given
+                    root IDs.
+    versions :      np.ndarray
+                    If no single version was found and `allow_multiple=True` will
+                    return a vector of `len(ids)` with the latest version at which
+                    the respective ID can be found.
+                    Important: "live" version will be return as -1!
+                    If `raise_missing=False` and one or more root IDs could not
+                    be found in any of the available materialization versions
+                    these IDs will be return as version 0.
+
+    """
     # If dataset is the flat segmentation we can take a shortcut
     if dataset == 'flat_630':
         return 630
@@ -573,6 +609,9 @@ def find_mat_version(ids, verbose=True, dataset='production'):
 
     client = get_cave_client(dataset=dataset)
 
+    # For each ID track the most recent valid version
+    latest_valid = np.zeros(len(ids), dtype=np.int32)
+
     # Go over each version (start with the most recent)
     for i, version in enumerate(sorted(client.materialize.get_versions(), reverse=True)):
         ts_m = client.materialize.get_timestamp(version)
@@ -580,16 +619,40 @@ def find_mat_version(ids, verbose=True, dataset='production'):
         # Check which root IDs were valid at the time
         is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
 
+        # Update latest valid versions
+        latest_valid[(latest_valid == 0) & is_valid] = version
+
         if all(is_valid):
             if verbose and not SILENCE_FIND_MAT_VERSION:
                 print(f'Using materialization version {version}')
             return version
 
-    # If no version found, see if we can get by with the live version
-    if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
+    # If no single materialized version can be found, see if we can get
+    # by with the live materialization
+    is_latest = client.chunkedgraph.is_latest_roots(ids, timestamp=None)
+    latest_valid[(latest_valid == 0) & is_latest] = -1  # track "live" as -1
+    if all(is_latest):
         if verbose and not SILENCE_FIND_MAT_VERSION:
-            print(f'Using live materialization')
+            print('Using live materialization')
         return 'live'
+
+    if allow_multiple:
+        if all(latest_valid != 0):
+            if verbose and not SILENCE_FIND_MAT_VERSION:
+                print(f"Found root IDs spread across {len(np.unique(latest_valid))} "
+                    "materialization versions.")
+            return latest_valid
+
+        msg = (f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
+               f"materialization versions but {(latest_valid == 0).sum()} IDs "
+               "do not exist in any of the materialized tables.")
+
+        if not raise_missing:
+            if verbose and not SILENCE_FIND_MAT_VERSION:
+                print(msg)
+            return latest_valid
+        else:
+            raise ValueError(msg)
 
     raise ValueError('Given root IDs do not co-exist in any of the available '
                      'materialization versions (including live). Try updating '
