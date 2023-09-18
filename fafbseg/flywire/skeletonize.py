@@ -140,7 +140,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # For neurons without a soma we'll be doing more sophisticated checks
         # when we skeletonize
         with silence_find_mat_version():
-            kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
+            kwargs['_nuclei'] = get_somas(x, raise_missing=False, dataset=dataset, materialization='latest')
 
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
@@ -267,7 +267,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # See if we can find a soma based on the nucleus segmentation
         try:
             with silence_find_mat_version():
-                soma = get_somas(id, dataset=dataset, materialization='auto')
+                soma = get_somas(id, raise_missing=False, dataset=dataset, materialization='auto')
         except KeyboardInterrupt:
             raise
         except requests.HTTPError:
@@ -499,7 +499,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, progress=True,
     # Prepare the calls and parameters
     kwargs['progress'] = False
     kwargs['threads'] = 1
-    kwargs['_nuclei'] = get_somas(ids, dataset=kwargs.get('dataset', 'production'))
+    kwargs['_nuclei'] = get_somas(ids, raise_missing=False, dataset=kwargs.get('dataset', 'production'))
     funcs = [skeletonize_neuron] * len(ids)
     parsed_kwargs = [kwargs] * len(ids)
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
