@@ -383,11 +383,14 @@ def get_annotations(table_name: str,
     ----------
     table_name :        str
                         Name of the table.
-    materialization :   "live" | "latest" | int | bool
+    materialization :   "live" | "latest" | int | bool | iterable
                         Which materialization version to fetch. You can also
                         provide an ID (int) for a specific materialization
-                        version (see ``get_materialization_versions``). Set to
-                        False to fetch the non-materialized version.
+                        version (see ``get_materialization_versions``).
+                        If you provide a container of materialization versions
+                        this function will search all of them and concatenate
+                        the results (no deduplication).
+                        Set to ``False`` to fetch the non-materialized version.
     split_positions :   bool
                         Whether to split x/y/z positions into separate columns.
     drop_invalid :      bool
@@ -406,12 +409,21 @@ def get_annotations(table_name: str,
     table :             pandas.DataFrame
 
     """
+    if isinstance(materialization, (np.ndarray, tuple, list)):
+        return pd.concat([get_annotations(table_name,
+                                          materialization=v,
+                                          split_positions=split_positions,
+                                          drop_invalid=drop_invalid,
+                                          dataset=dataset,
+                                          **filters) for v in materialization],
+                         axis=0)
+
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset=dataset)
 
     navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
 
-    if materialization == 'live':
+    if materialization in ('live', -1):  # internally we're treating -1 as live
         live_query = retry(client.materialize.live_query)
         data = live_query(table=table_name,
                           timestamp=dt.datetime.utcnow(),
