@@ -140,7 +140,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # For neurons without a soma we'll be doing more sophisticated checks
         # when we skeletonize
         with silence_find_mat_version():
-            kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
+            kwargs['_nuclei'] = get_somas(x, raise_missing=False, dataset=dataset, materialization='latest')
 
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
