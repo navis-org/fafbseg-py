@@ -580,6 +580,7 @@ def upload_annotations(table_name: str,
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
 def get_somas(x=None,
               materialization='auto',
+              raise_missing=True,
               split_positions=False,
               *,
               dataset=None):
@@ -593,11 +594,15 @@ def get_somas(x=None,
                         nuclei. If neurons, will set their soma and soma radius
                         if one is found. Importantly, we assume that the neurons
                         are in nanometer space.
-    materialization :   "auto" |"live" | "latest" | int | bool
+    materialization :   "auto" | "live" | "latest" | int | bool
                         Which materialization version to fetch. You can also
                         provide an ID (int) for a specific materialization
                         version (see ``get_materialization_versions``). Set to
                         False to fetch the non-materialized version.
+    raise_missing :     bool
+                        Only relevant if `materialization="auto"`: if True
+                        (default) will complain if any of the query IDs can not
+                        be found among the available materialization versions.
     split_positions :   bool
                         Whether to have separate columns for x/y/z position.
     dataset :           "public" | "production" | "sandbox", optional
@@ -633,14 +638,20 @@ def get_somas(x=None,
         else:
             root_ids = make_iterable(x, force_type=np.int64)
         if materialization == 'auto':
-            materialization = find_mat_version(root_ids, dataset=dataset)
+            materialization = find_mat_version(root_ids,
+                                               allow_multiple=True,
+                                               raise_missing=raise_missing,
+                                               dataset=dataset)
+            if isinstance(materialization, np.ndarray):
+                materialization = tuple(np.unique(materialization[materialization != 0]).tolist())
         filter_in_dict = {'pt_root_id': root_ids}
 
     nuc = get_annotations('nuclei_v1',
-                          materialization=materialization,
-                          split_positions=split_positions,
-                          dataset=dataset,
-                          filter_in_dict=filter_in_dict)
+                        materialization=materialization,
+                        split_positions=split_positions,
+                        dataset=dataset,
+                        filter_in_dict=filter_in_dict)
+    nuc = nuc.drop_duplicates(['id', 'pt_root_id']).copy()
 
     # Add estimated radius based on nucleus
     if not nuc.empty:
