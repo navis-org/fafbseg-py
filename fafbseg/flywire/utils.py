@@ -39,7 +39,7 @@ from .. import utils
 
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
            'get_cave_client', 'get_neuropil_volumes', 'get_lr_position',
-           'set_default_dataset']
+           'set_default_dataset', 'find_mat_version']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
                     'sandbox': 'fly_v26',
@@ -654,9 +654,14 @@ def find_mat_version(ids,
         else:
             raise ValueError(msg)
 
-    raise ValueError('Given root IDs do not co-exist in any of the available '
-                     'materialization versions (including live). Try updating '
-                     'root IDs and rerun your query.')
+    if dataset not in ('public, '):
+        raise ValueError('Given root IDs do not co-exist in any of the available '
+                        'materialization versions (including live). Try updating '
+                        'root IDs and rerun your query.')
+    else:
+        raise ValueError('Given root IDs do not co-exist in any of the available '
+                        'public materialization versions. Please make sure that '
+                        'the root IDs do exist and rerun your query.')
 
 
 def package_timestamp(timestamp, name="timestamp"):
