@@ -518,38 +518,34 @@ def add_annotation_layer(annotations, scene, name=None, connected=False):
     return scene
 
 
-def decode_url(url, format="brief"):
+def decode_url(url, format="json"):
     """Decode neuroglancer URL.
 
     Parameters
     ----------
     url :       str | list of str
                 URL(s) to decode. Can be shortened URL. Note that not all
-                `format` work with multiple URLs.
-    format :    "segments" | "visible" | "annotations" | "brief" | "dataframe" | "full"
+                `formats` work with multiple URLs.
+    format :    "json" | "brief" | "dataframe"
                 What to return:
-                 - "segments" returns only segments (visible and invisible)
-                 - "visible" returns only visible segments
-                 - "annotations" returns only annotations
-                 - "brief" only returns position (in voxels),  selected
-                   segment IDs and annotations
+                 - "json" (default) returns the full JSON
+                 - "brief" only returns position (in voxels), selected segments
+                   and annotations
                  - "dataframe" returns a frame with segment IDs and which
                    layers they came from
-                 - "full" returns entire scene
 
     Returns
     -------
-    list
-                If format is "segments", "visible" or "annotations".
     dict
-                If format is "full" or "brief".
+                If format is "json" or "brief".
     DataFrame
                 If format='dataframe'.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> flywire.decode_url('https://ngl.flywire.ai/?json_url=https://globalv1.flywire-daf.com/nglstate/6267328375291904')
+    >>> flywire.decode_url('https://ngl.flywire.ai/?json_url=https://globalv1.flywire-daf.com/nglstate/6267328375291904',
+    ...                    format='brief')
     {'position': [132715.625, 55805.6796875, 3289.61181640625],
      'annotations': [],
      'selected': ['720575940621039145']}
@@ -560,16 +556,10 @@ def decode_url(url, format="brief"):
             raise ValueError('Can only parse multiple URLs if format="dataframe"')
         return pd.concat([decode_url(u, format=format) for u in url], axis=0)
 
-    assert isinstance(url, (str, dict))
-    assert format in (
-        "brief",
-        "full",
-        "dataframe",
-        "segments",
-        "visible",
-        "annotations",
-    )
+    if not isinstance(url, (str, dict)):
+        raise TypeError(f'`url` must be string, got "{type(url)}"')
 
+    # Parse FlyWire URL
     if "json_url" in url:
         # Fetch state
         token = utils.get_chunkedgraph_secret()
@@ -628,8 +618,11 @@ def decode_url(url, format="brief"):
         ]
         for layer in seg_layers:
             for s in layer.get("segments", []):
-                segs.append([int(s), layer["name"]])
-        return pd.DataFrame(segs, columns=["segment", "layer"])
+                segs.append([int(s.replace('!', '')), layer["name"], not s.startswith('!')])
+
+        return pd.DataFrame(segs, columns=["segment", "layer", "visible"])
+    else:
+        raise ValueError(f'Unexpected format: "{format}')
 
     return scene
 
