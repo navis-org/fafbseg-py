@@ -596,10 +596,10 @@ def fetch_synapses(
 def fetch_adjacency(
     sources,
     targets=None,
-    min_score=30,
+    filtered=True,
     mat="auto",
     neuropils=None,
-    filtered=False,
+    min_score=None,
     batch_size=1000,
     *,
     dataset=None,
@@ -611,10 +611,9 @@ def fetch_adjacency(
     -----
     As of May 2023, CAVE provides "views" of materialized tables. This includes
     a view with neuron edges (as opposed to individual synaptic connections)
-    which can be much faster to query. We will automatically use use the
-    view _if_:
-     1. `filtered=True` (default is `False`)
-     2. `min_score=None` or `min_score=50` (default is 30)
+    which can be much faster to query. We will automatically use this view _if_:
+     1. `filtered=True` (default is `True`)
+     2. `min_score=None` or `min_score=50` (default is None)
      3. `neuropils=None` (default is `None`)
      4. `mat!='live'` (default is "auto" which can end up as "live")
 
@@ -671,6 +670,10 @@ def fetch_adjacency(
     """
     if isinstance(targets, type(None)):
         targets = sources
+
+    if dataset in ('public', ) and not filtered:
+        raise ValueError('Unable to query unfiltered synapses for the public '
+                         'release data.')
 
     if isinstance(mat, str):
         if mat not in ("latest", "live", "auto"):
@@ -919,7 +922,7 @@ def fetch_connectivity(
     mat :           int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
-                       materialization version at which all the query IDs existed
+                       materialization version at which the query IDs co-exist
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
