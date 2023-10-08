@@ -282,12 +282,12 @@ def fetch_synapses(
     pre=True,
     post=True,
     attach=True,
-    min_score=30,
-    clean=True,
+    filtered=True,
+    min_score=None,
     transmitters=False,
     neuropils=False,
+    clean=True,
     mat="auto",
-    filtered=False,
     batch_size=10,
     *,
     dataset=None,
@@ -318,9 +318,14 @@ def fetch_synapses(
                     as ``.connectors`` table. For TreeNeurons (skeletons), the
                     synapses will be mapped to the closest node. Note that the
                     function will still return the full synapse table.
+    filtered :      bool
+                    Whether to use the filtered synapse table. Briefly, this
+                    filter removes falsely redundant and automatically
+                    removes synapses with confidence <= 50. See also
+                    https://tinyurl.com/4j9v7t86 (link to CAVE website).
     min_score :     int, optional
-                    Minimum "cleft score". The default of 30 is what Buhmann et al.
-                    used in the paper.
+                    Minimum "cleft score". The default `filtered=True` (see above)
+                    already removes connections with score of <= 50.
     clean :         bool
                     If True, we will perform some clean up of the connectivity
                     compared with the raw synapse information. Currently, we::
@@ -331,7 +336,7 @@ def fetch_synapses(
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
-                    not return more than 200_000 rows and you will see a warning
+                    not return more than 500_000 rows and you will see a warning
                     if that limit is exceeded.
     mat :           int | str, optional
                     Which materialization to query:
@@ -340,11 +345,6 @@ def fetch_synapses(
                      - 'latest' uses the latest materialized table
                      - 'live' queries against the live data - this will be much slower!
                      - pass an integer (e.g. `447`) to use a specific materialization version
-    filtered :      bool
-                    Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (link to CAVE website).
     dataset :       "public" | "production" | "sandbox", optional
                     Against which FlyWire dataset to query. If ``None`` will fall
                     back to the default dataset (see
@@ -391,6 +391,10 @@ def fetch_synapses(
     if not pre and not post:
         raise ValueError("`pre` and `post` must not both be False")
 
+    if dataset in ('public', ) and not filtered:
+        raise ValueError('Unable to query unfiltered synapses for the public '
+                         'release data.')
+
     if isinstance(mat, str):
         if mat not in ("latest", "live", "auto"):
             raise ValueError(
@@ -400,6 +404,13 @@ def fetch_synapses(
         raise ValueError(
             '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
         )
+
+    if (min_score is not None) and (min_score < 50) and filtered:
+        msg = ("Querying synapse table with `filtered=True` already removes "
+               "synaptic connections with cleft_score <= 50. If you want less "
+               "confident connections set `filtered=False`. Note that this will "
+               "also drop the de-duplication (see docstring).")
+        navis.config.logger.warning(msg)
 
     # Parse root IDs
     ids = parse_root_ids(x).astype(np.int64)
@@ -440,14 +451,11 @@ def fetch_synapses(
         )
     elif filtered:
         func = partial(
-            retry(client.materialize.join_query),
-            tables=[
-                [client.materialize.synapse_table, "id"],
-                ["valid_synapses_nt_v2", "target_id"],
-            ],
+            retry(client.materialize.query_view),
+            view_name='valid_synapses_nt_v2_view',
             materialization_version=mat,
             split_positions=True,
-            select_columns={client.materialize.synapse_table: columns},
+            select_columns=columns,
         )
     else:
         func = partial(
@@ -468,17 +476,9 @@ def fetch_synapses(
     ):
         batch = ids[i : i + batch_size]
         if post:
-            if not filtered:
-                filter_in_dict = dict(post_pt_root_id=batch)
-            else:
-                filter_in_dict = dict(synapses_nt_v1=dict(post_pt_root_id=batch))
-            syn.append(func(filter_in_dict=filter_in_dict))
+            syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
         if pre:
-            if not filtered:
-                filter_in_dict = dict(pre_pt_root_id=batch)
-            else:
-                filter_in_dict = dict(synapses_nt_v1=dict(pre_pt_root_id=batch))
-            syn.append(func(filter_in_dict=filter_in_dict))
+            syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
 
     # Drop attrs to avoid issues when concatenating
     for df in syn:
