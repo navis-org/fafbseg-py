@@ -146,6 +146,8 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
                     lod_ -= 1
                 except BaseException:
                     raise
+            if lod_ < 0:
+                raise ValueError(f'No mesh for id {id} found')
     except KeyboardInterrupt:
         raise
     except BaseException:
