@@ -580,25 +580,42 @@ def decode_url(url, format="brief"):
         r.raise_for_status()
 
         scene = r.json()
-    else:
+    # Parse URLs with a link to Google buckets
+    elif '!gs://' in url:
+        path = urlparse(url).fragment.replace('!gs://', '')
+        r = requests.get(f'https://storage.googleapis.com/{path}')
+        r.raise_for_status()
+
+        scene = r.json()
+    elif isinstance(url, str):
         query = unquote(urlparse(url).fragment)[1:]
         scene = json.loads(query)
+    else:
+        scene = url
 
-    if format == "brief":
+    # "full" is for legacy purposes
+    if format in ('json', 'full'):
+        return scene
+    elif format == "brief":
         seg_layers = [
             layer
             for layer in scene.get("layers", [])
-            if "segmentation_with_graph" in layer.get("type")
+            if "segmentation" in layer.get("type")
         ]
         an_layers = [
             layer
             for layer in scene.get("layers", [])
             if layer.get("type") == "annotation"
         ]
-        return {
-            "position": scene["navigation"]["pose"]["position"].get(
+        try:
+            position = scene["navigation"]["pose"]["position"].get(
                 "voxelCoordinates", None
-            ),
+            )
+        except KeyError:
+            position = None
+
+        return {
+            "position": position,
             "annotations": [
                 a for layer in an_layers for a in layer.get("annotations", [])
             ],
