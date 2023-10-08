@@ -25,8 +25,11 @@ from tqdm.auto import tqdm
 from functools import wraps
 from urllib.parse import urlparse, urlencode
 from collections.abc import Iterable
+from pathlib import Path
 
 use_pbars = True
+
+CACHE_DIR = "~/.fafbseg/cache/"
 
 
 def never_cache(function):
@@ -240,3 +243,54 @@ class GSPointLoader(object):
             data = np.concatenate([result[1] for result in results])
 
         return points, data.flatten()
+
+
+def download_cache_file(url, filename=None, force_reload=False, verbose=True):
+    """Load file from URL and cache locally.
+
+    Parameters
+    ----------
+    url :           str
+                    URL to file.
+    filename :      str, optional
+                    Filename to save to. If not explicitly provided will guess
+                    filename from url.
+    force_reload :  bool
+                    If True, will force downloading file - even if it already
+                    exists in the local cache.
+    verbose :       bool
+
+    Returns
+    -------
+    path :          pathlib.Path
+                    Path to the locally cached file.
+
+    """
+    if not isinstance(url, str):
+        raise TypeError(f"Expected `url` of type str, got {type(url)}")
+
+    # Make sure the cache dir exists
+    cache_dir = Path(CACHE_DIR).expanduser().absolute()
+    if not cache_dir.exists():
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+    if filename:
+        fp = cache_dir / filename
+    else:
+        fp = cache_dir / Path(url).name
+
+    if not fp.exists() or force_reload:
+        if verbose:
+            print(
+                f"Caching {fp.name} from {urlparse(url).netloc}... ", end="", flush=True
+            )
+        r = requests.get(url, allow_redirects=True)
+        r.raise_for_status()
+        content_type = r.headers.get("content-type", "").lower()
+        is_text = "text" in content_type or "html" in content_type
+        with open(fp, mode="w" if is_text else "w") as f:
+            f.write(r.content.decode())
+        if verbose:
+            print("Done.")
+
+    return fp
