@@ -102,4 +102,4 @@ IDs for the respective data set. That said, at this point the Google segmentatio
 has effectively been superseded by the FlyWire and has therefore seen less
 attention.
 
-Please check out the `tutorials <tutorials>` for details!
+Please check out the :ref:`tutorials<tutorials>` for details!

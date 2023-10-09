@@ -54,7 +54,7 @@ FlyWire actually has three different datasets/versions:
 
 1. The "Public release" is the static snapshot made available alongside the preprints
    and corresponds to materialization version ``630`` (see below for an explanation
-   of materializations). Anyone has access to this dataset.
+   of materializations). Anyone has access to this dataset after signing up.
 2. The "Sandbox" is a training ground that has seen minimal proofreading (i.e.
    is close to the bsae segmentation). Anyone has access to this dataset.
 3. The "Production" dataset is where people do the actual proofreading/annotation.
@@ -113,7 +113,7 @@ and invalidate its current root ID. Merging two neurons, on the other hand, will
 invalidate the two old root IDs and generate one new root ID representing the
 combination of their supervoxels.
 
-Importantly, "outdated" root IDs are not deleted and you can still e.g. pull up
+Importantly, "outdated" root IDs are not deleted and you can still pull up e.g.
 their meshes in the FlyWire neuroglancer. This is super convenient but it comes
 with a caveat: you can find yourself with a list of root IDs that never
 co-existed which can be problematic when querying associated meta data (see
@@ -130,20 +130,42 @@ Here are a couple ``fabseg`` functions that will help you tracking root IDs:
     fafbseg.flywire.is_latest_root
     fafbseg.flywire.update_ids
     fafbseg.flywire.find_common_time
+    fafbseg.flywire.find_mat_version
 
-Understanding materializations
-------------------------------
+Materializations and the CAVE
+-----------------------------
 
 As established above, root IDs can change over time. So how do we maintain the
 link between a neuron and its meta data (e.g. its annotations, synapses, etc)
 as it evolves? Principally this is done by associating each annotation with an
-x/y/z coordinate. That coordinate maps to a supervoxel and we can then ask
-which root ID it belongs to - or belonged to if we want to go back in time.
+x/y/z coordinate. That coordinate in turn maps to a supervoxel and we can then ask
+which root ID it currently belongs to - or belonged to if we want to go back in time.
 
 This kind of location to root ID look-up becomes rather expensive when working
 with large tables: the (filtered) synapse table, for example, has 130M rows each
 with a pre- and a postsynaptic x/y/z coordinate that needs to be mapped to a
 root ID.
 
-So
+Fortunately, all of this is done for you by CAVE, the *c*onnectome *a*nnotation
+*v*ersioning *e*ngine. The gist is this: (almost) every night CAVE looks up
+the current root IDs for the synaptic connections, the community annotations and
+the various other tables it stores. These snapshots are called "materializations".
+
+If we make sure that our query neurons were current at one of the available
+materialization versions, we can query those tables with very little overhead on
+our end. Things get tricky if:
+
+- the root IDs are more recent than the latest materialization
+- the root IDs did only exist briefly _in between_ materializations
+- the root IDs never co-existed at any of the materializations
+
+``fafbseg`` tries to abstract away a lot of the complications - in fact the
+relevant functions such as :func:`~fafbseg.flywire.fetch_synapses` accept a
+``materialization`` or ``mat`` that defaults to "auto" which will try to find
+a matching materialization version and complain if that isn't possible.
+
+The safe bet is to "pin" the neurons you work with to one of the long-term
+materialization versions and stick to those - see
+:func:`~fafbseg.flywire.get_materialization_versions` for a list of available
+versions.
 
