@@ -32,10 +32,10 @@ Using materialization version 630
 3457  720575940622670174  720575940538297971       1
 ```
 
-The default for `dataset` is still "production" but this can be by either
+The default for `dataset` is still "production" but this can be changed by either
 calling `flywire.set_default_dataset` at the beginning of a session...
 
-```
+```python
 >>> flywire.set_default_dataset('public')
 ```
 
@@ -46,14 +46,16 @@ away. Some, however, remain: for example synapse/connectivity queries are
 more limited against the public data stack (see below).
 
 ### Synapse/connectivity queries
-Prior to `v2.0.0` synapses and/or connectivity was fetched by querying the full
+Prior to `v2.0.0` synapses and connectivity were fetched by querying the full
 CAVE synapse table. For connectivity analyses in the FlyWire papers,
 Sven Dorkenwald generated a synapse table (technically a "view") where he
 deduplicated synapses and applied a higher confidence (cleft) score threshold of 50.
+See [here](https://prod.flywire-daf.com/annotation/views/aligned_volume/fafb_seung_alignment_v0/table/valid_synapses_nt_v2)
+for a full explanation (requires login with FlyWire account).
 
-Functions in `fafbseg` have had their defaults changed to `filtered=True`
-and `min_score=None` which makes it so that this filtered synapse table is
-queried by default. We recommend sticking to these defaults.
+Corresponding functions such as `flywire.fetch_synapses` have had their defaults
+changed to `filtered=True` and `min_score=None` which makes it so that this
+filtered synapse table is queried by default. We recommend sticking to these defaults.
 
 Importantly, querying the originally full synapse table requires access to the
 production dataset and will not work with the "public" release version.
