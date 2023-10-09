@@ -664,6 +664,20 @@ def find_mat_version(ids,
                         'the root IDs do exist and rerun your query.')
 
 
+def _is_valid_version(ids, version, dataset):
+    """Test if materialization version is valid for givenroot IDs."""
+    client = get_cave_client(dataset=dataset)
+    ts_m = client.materialize.get_timestamp(version)
+
+    # Check which root IDs were valid at the time
+    is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
+
+    if all(is_valid):
+        return True
+
+    return False
+
+
 def package_timestamp(timestamp, name="timestamp"):
     # Copied from caveclient
     if timestamp is None:
