@@ -341,9 +341,8 @@ def set_chunkedgraph_secret(token, overwrite=False, **kwargs):
     """
     assert isinstance(token, str), f'Token must be string, got "{type(token)}"'
 
-    # I guess "public" should just work here
-    client = get_cave_client(dataset='public')
-    client.auth.save_token(token, overwrite=overwrite, **kwargs)
+    # Save token
+    CAVEclient().auth.save_token(token, overwrite=overwrite, **kwargs)
 
     # We need to reload cloudvolume for changes to take effect
     reload(cv.secrets)
