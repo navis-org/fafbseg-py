@@ -15,11 +15,11 @@ Features
 --------
 Here are just some of the things you can do with ``fafbseg``:
 
-* :func:`map locations to neuron IDs <fafbseg.flywire.locs_to_supervoxels>`
+* map locations or supervoxels to segmentation IDs
 * load neuron meshes and skeletons
 * generate high quality neuron meshes and skeletons from scratch
 * query connectivity and annotations
-* parse and generate FlyWire URLs
+* parse and generate FlyWire neuroglancer URLs
 * transform neurons from FAFB/FlyWire space to other brains spaces (e.g. hemibrain)
 
 For a full list of features please see the :ref:`API documentation <api>`.
@@ -43,9 +43,16 @@ enables you among other things to:
 Please See `navis` `tutorials <https://navis.readthedocs.io/en/latest/source/gallery.html>`_
 for examples.
 
+How to cite
+-----------
+If you use ``fafbseg`` for your publication, please cite the two FlyWire papers:
+
+1. "_Whole-brain annotation and multi-connectome cell typing quantifies circuit stereotypy in Drosophila_" Schlegel _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546055
+2. "_Neuronal wiring diagram of an adult brain_" Dorkenwald _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546656
+
 Questions/Issues?
 -----------------
-Open an `issue <https://github.com/navis-org/fafbseg-py/issues>`_ in `fafbseg`'s
+Open an `issue <https://github.com/navis-org/fafbseg-py/issues>`_ in ``fafbseg``'s
 Github repository.
 
 
