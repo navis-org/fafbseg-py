@@ -28,18 +28,25 @@ import numpy as np
 import skeletor as sk
 import trimesh as tm
 
-from .segmentation import snap_to_id, is_latest_root
-from .utils import parse_volume
-from .meshes import detect_soma
-from .annotations import get_somas, is_materialized_root
+from scipy.spatial import cKDTree
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+
+from .segmentation import snap_to_id, is_latest_root, supervoxels_to_roots, locs_to_supervoxels
+from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
+from .l2 import l2_graph
+from .annotations import get_somas
+
+SKELETON_BASE_URL = "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons"
 
 
-__all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel']
+__all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel', 'get_skeletons']
 
 
+@inject_dataset()
 def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
-                       assert_id_match=False, dataset='production', threads=2,
-                       save_to=None, progress=True, **kwargs):
+                       assert_id_match=False, threads=2, save_to=None,
+                       progress=True, *, dataset=None, **kwargs):
     """Skeletonize FlyWire neuron.
 
     Note that this is optimized to be primarily fast which comes at the cost
@@ -68,15 +75,6 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          If True, will check if skeleton nodes map to the
                          correct segment ID and if not will move them back into
                          the segment. This is potentially very slow!
-    dataset :            str | CloudVolume
-                         Against which FlyWire dataset to query::
-                           - "production" (current production dataset, fly_v31)
-                           - "sandbox" (i.e. fly_v26)
-                           - "flat_630" or "flat_571" will use the flat
-                             segmentations matching the respective materialization
-                             versions. By default these use `lod=2`, you can
-                             change that behaviour by passing `lod` as keyword
-                             argument.
     threads :            int
                          Number of parallel threads to use for downloading the
                          meshes.
@@ -84,6 +82,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                          If provided will save skeleton as SWC at `{save_to}/{id}.swc`.
     progress :           bool
                          Whether to show a progress bar or not.
+    dataset :            str | CloudVolume
+                         Against which FlyWire dataset to query::
+                           - "production" (current production dataset, fly_v31)
+                           - "sandbox" (i.e. fly_v26)
+                           - "public"
+                           - "flat_630" or "flat_571" will use the flat
+                             segmentations matching the respective materialization
+                             versions. By default these use `lod=2`, you can
+                             change that behaviour by passing `lod` as keyword
+                             argument.
 
     Return
     ------
@@ -131,7 +139,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # roots that actually existed at the time)
         # For neurons without a soma we'll be doing more sophisticated checks
         # when we skeletonize
-        kwargs['_nuclei'] = get_somas(x, dataset=dataset, materialization='latest')
+        with silence_find_mat_version():
+            kwargs['_nuclei'] = get_somas(x, raise_missing=False, dataset=dataset, materialization='latest')
 
         return navis.NeuronList([skeletonize_neuron(n,
                                                     progress=False,
@@ -148,7 +157,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                                                             leave=False)])
 
     if not navis.utils.is_mesh(x):
-        vol = parse_volume(dataset)
+        vol = get_cloudvolume(dataset)
 
         # Make sure this is a valid integer
         id = np.int64(x)
@@ -170,8 +179,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                     except BaseException:
                         raise
                 if lod_ < 0:
-                    raise ValueError(f'Root ID {id} does not appear to exist for'
-                                     f'"{dataset}"')
+                    raise ValueError(f'Root ID {id} does not appear to exist '
+                                     f'in "{dataset}"')
         except BaseException:
             raise
         finally:
@@ -257,7 +266,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     if soma.empty:
         # See if we can find a soma based on the nucleus segmentation
         try:
-            soma = get_somas(id, dataset=dataset, materialization='auto')
+            with silence_find_mat_version():
+                soma = get_somas(id, raise_missing=False, dataset=dataset, materialization='auto')
         except KeyboardInterrupt:
             raise
         except requests.HTTPError:
@@ -448,7 +458,7 @@ def divide_local_neighbourhood(mesh, radius):
         not_seen -= nodes
 
 
-def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
+def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, progress=True, **kwargs):
     """Skeletonization on parallel cores.
 
     Parameters
@@ -489,7 +499,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
     # Prepare the calls and parameters
     kwargs['progress'] = False
     kwargs['threads'] = 1
-    kwargs['_nuclei'] = get_somas(ids, dataset=kwargs.get('dataset', 'production'))
+    kwargs['_nuclei'] = get_somas(ids, raise_missing=False, dataset=kwargs.get('dataset', 'production'))
     funcs = [skeletonize_neuron] * len(ids)
     parsed_kwargs = [kwargs] * len(ids)
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
@@ -502,7 +512,7 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, **kwargs):
                                                chunksize=chunksize),
                                      total=len(combinations),
                                      desc='Skeletonizing',
-                                     disable=False,
+                                     disable=not progress,
                                      leave=True))
 
     # Check if any skeletonizations failed
@@ -530,3 +540,96 @@ def _worker_wrapper(x):
     except BaseException:
         # In case of failure return the root ID
         return args[0]
+
+
+def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
+                  progress=True):
+    """Fetch precomputed skeletons.
+
+    Currently this only works for 630 roots (i.e. the first public release
+    of FlyWire).
+
+    Parameters
+    ----------
+    root_id  :          int | list of ints
+                        Root ID(s) of the FlyWire neuron(s) you want to
+                        skeletonize. Must be root IDs that existed at
+                        materialization 630.
+    omit_failures :     bool, optional
+                        Determine behaviour when skeleton generation fails
+                        (e.g. if the neuron has only a single chunk):
+                         - ``None`` (default) will raise an exception
+                         - ``True`` will skip the offending neuron (might result
+                           in an empty ``NeuronList``)
+                         - ``False`` will return an empty ``TreeNeuron``
+    progress :          bool
+                        Whether to show a progress bar.
+    max_threads :       int
+                        Number of parallel requests to make when fetching the
+                        skeletons.
+
+    Returns
+    -------
+    skeletons :         navis.NeuronList of navis.TreeNeurons
+
+    >>> from fafbseg import flywire
+    >>> n = flywire.fetch_skeleton(720575940614131061)
+
+    """
+    if omit_failures not in (None, True, False):
+        raise ValueError('`omit_failures` must be either None, True or False. '
+                         f'Got "{omit_failures}".')
+
+    if navis.utils.is_iterable(root_id):
+        root_id = np.asarray(root_id, dtype=np.int64)
+
+        il = is_latest_root(root_id, timestamp='mat_630')
+        if np.any(~il):
+            msg = (f'{(~il).sum()} root ID(s) did not exists at materialization 630')
+            if omit_failures is None:
+                raise ValueError(msg)
+            navis.config.logger.warning(msg)
+
+        get_skels = partial(get_skeletons, omit_failures=omit_failures)
+        if (max_threads > 1) and (len(root_id) > 1):
+            with ThreadPoolExecutor(max_workers=max_threads) as pool:
+                futures = pool.map(get_skels, root_id)
+                nl = [f for f in navis.config.tqdm(futures,
+                                                   desc='Fetching skeletons',
+                                                   total=len(root_id),
+                                                   disable=not progress or len(root_id) == 1,
+                                                   leave=False)]
+        else:
+            nl = [get_skels(r) for r in navis.config.tqdm(root_id,
+                                               desc='Fetching skeletons',
+                                               total=len(root_id),
+                                               disable=not progress or len(root_id) == 1,
+                                               leave=False)]
+
+        # Turn into neuron list
+        nl = navis.NeuronList(nl)
+
+        # Bring in original order
+        if len(nl):
+            root_id = root_id[np.isin(root_id, nl.id)]
+            nl = nl.idx[root_id]
+
+        return nl
+
+    # Turn into integer
+    root_id = np.int64(root_id)
+
+    try:
+        tn = navis.read_precomputed(f'{SKELETON_BASE_URL}/{root_id}',
+                                    datatype='skeleton')
+        # Force integer (navis.read_precomputed will turn Id into string)
+        tn.id = root_id
+        tn.units = '1nm'
+        return tn
+    except BaseException:
+        if omit_failures is None:
+            raise
+        elif omit_failures:
+            return navis.NeuronList([])
+        else:
+            return navis.TreeNeuron(None, id=root_id, units='1 nm')

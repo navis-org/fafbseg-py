@@ -10,7 +10,7 @@
 #
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #    GNU General Public License for more details.
 
 """Functions to extract skeletons from L2 graphs.
@@ -22,7 +22,6 @@ Heavily borrows from code from Casey Schneider-Mizell's "pcg_skel"
 
 import navis
 import fastremap
-import time
 
 import networkx as nx
 import numpy as np
@@ -33,30 +32,37 @@ import trimesh as tm
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
-from .utils import parse_volume, get_cave_client, retry
+from .utils import get_cloudvolume, get_cave_client, retry, inject_dataset
 
 __all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info',
            'find_anchor_loc']
 
 
-def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
+@inject_dataset()
+def l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     """Fetch basic info for given neuron(s) using the L2 cache.
 
     Parameters
     ----------
-    root_ids  :         int | list of ints
-                        FlyWire root ID(s) for which to fetch L2 infos.
-    progress :          bool
-                        Whether to show a progress bar.
-    max_threads :       int
-                        Number of parallel requests to make.
+    root_ids  :     int | list of ints
+                    FlyWire root ID(s) for which to fetch L2 infos.
+    progress :      bool
+                    Whether to show a progress bar.
+    max_threads :   int
+                    Number of parallel requests to make.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
     pandas.DataFrame
                         DataFrame with basic info (also see Examples):
                           - `length_um` is the sum of the max diameter across
-                            all L2 chunks
+                            all L2 chunks; note that this severely
+                            underestimates the actual length (factor >10) but is
+                            still useful for relative comparisons
                           - `bounds_nm` is a very rough bounding box based on the
                             representative coordinates of the L2 chunks
                           - `chunks_missing` is the number of L2 chunks not
@@ -85,7 +91,7 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
         return pd.concat(info, axis=0).reset_index(drop=True)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
@@ -136,17 +142,22 @@ def l2_info(root_ids, progress=True, max_threads=4, dataset='production'):
     return info_df
 
 
-def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, dataset='production'):
+@inject_dataset()
+def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     """Fetch info for given L2 chunks.
 
     Parameters
     ----------
-    l2_ids  :           int | list of ints
-                        FlyWire root ID(s) for which to fetch L2 infos.
-    progress :          bool
-                        Whether to show a progress bar.
-    chunksize :         int
-                        Number of L2 IDs per query.
+    l2_ids  :   int | list of ints
+                FlyWire root ID(s) for which to fetch L2 infos.
+    progress :  bool
+                Whether to show a progress bar.
+    chunksize : int
+                Number of L2 IDs per query.
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -154,7 +165,7 @@ def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, dataset='production'):
 
     """
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Get the L2 representative coordinates, vectors and (if required) volume
     attributes = ['rep_coord_nm', 'pca', 'size_nm3']
@@ -178,7 +189,6 @@ def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, dataset='production'):
         pts = np.vstack([i['rep_coord_nm'] for i in l2_info.values()])
         vec = np.vstack([i.get('pca', [[None, None, None]])[0] for i in l2_info.values()])
         sizes = np.array([i['size_nm3'] for i in l2_info.values()])
-        coo = np.array([i['rep_coord_nm'] for i in l2_info.values()])
 
         info_df = pd.DataFrame()
         info_df['id'] = list(l2_info.keys())
@@ -198,11 +208,13 @@ def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, dataset='production'):
     return info_df
 
 
+@inject_dataset()
 def find_anchor_loc(root_ids,
                     validate=False,
                     max_threads=4,
                     progress=True,
-                    dataset='production'):
+                    *,
+                    dataset=None):
     """Find a representative coordinate.
 
     This works by querying the L2 cache and using the representative coordinate
@@ -219,6 +231,10 @@ def find_anchor_loc(root_ids,
                     by default.
     max_threads :   int
                     Number of parallel threads to use.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -252,7 +268,7 @@ def find_anchor_loc(root_ids,
                 df.loc[has_loc, 'supervoxel'] = sv.astype(str)  # do not change str
 
                 # Get/Initialize the CAVE client
-                client = get_cave_client(dataset)
+                client = get_cave_client(dataset=dataset)
 
                 # Get root timestamps
                 ts = client.chunkedgraph.get_root_timestamps(df.root_id.values.tolist())
@@ -275,7 +291,7 @@ def find_anchor_loc(root_ids,
     root_ids = np.int64(root_ids)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
@@ -308,25 +324,30 @@ def find_anchor_loc(root_ids,
     return df
 
 
-def l2_graph(root_ids, progress=True, dataset='production'):
+@inject_dataset()
+def l2_graph(root_ids, progress=True, *, dataset=None):
     """Fetch L2 graph(s).
 
     Parameters
     ----------
-    root_ids  :         int | list of ints
-                        FlyWire root ID(s) for which to fetch the L2 graphs.
-    progress :          bool
-                        Whether to show a progress bar.
+    root_ids  : int | list of ints
+                FlyWire root ID(s) for which to fetch the L2 graphs.
+    progress :  bool
+                Whether to show a progress bar.
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
     networkx.Graph
-                        The L2 graph.
+                        The L2 graph or list thereof.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> n = flywire.l2_graph(720575940614131061)
+    >>> G = flywire.l2_graph(720575940614131061)
 
     """
     if navis.utils.is_iterable(root_ids):
@@ -339,7 +360,7 @@ def l2_graph(root_ids, progress=True, dataset='production'):
         return graphs
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 graph for given root ID
     # This is a (N,2) array of edges
@@ -362,44 +383,49 @@ def l2_graph(root_ids, progress=True, dataset='production'):
     return G
 
 
+@inject_dataset()
 def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                 omit_failures=None, progress=True, max_threads=4,
-                dataset='production', **kwargs):
+                *, dataset=None, **kwargs):
     """Generate skeleton from L2 graph.
 
     Parameters
     ----------
-    root_id  :          int | list of ints
-                        Root ID(s) of the FlyWire neuron(s) you want to
-                        skeletonize.
-    refine :            bool
-                        If True, will refine skeleton nodes by moving them in
-                        the center of their corresponding chunk meshes. This
-                        uses the L2 cache (see :func:`fafbseg.flywire.l2_info`).
-    drop_missing :      bool
-                        Only relevant if ``refine=True``: If True, will drop
-                        chunks that don't exist in the L2 cache. These are
-                        typically chunks that are either very small or new.
-                        If False, chunks missing from L2 cache will be kept but
-                        with their unrefined, approximate position.
-    l2_node_ids :       bool
-                        If True, will use the L2 IDs as node IDs (instead of
-                        just enumerating the nodes).
-    omit_failures :     bool, optional
-                        Determine behaviour when skeleton generation fails
-                        (e.g. if the neuron has only a single chunk):
-                         - ``None`` (default) will raise an exception
-                         - ``True`` will skip the offending neuron (might result
-                           in an empty ``NeuronList``)
-                         - ``False`` will return an empty ``TreeNeuron``
-    progress :          bool
-                        Whether to show a progress bar.
-    max_threads :       int
-                        Number of parallel requests to make when fetching the
-                        L2 skeletons.
+    root_id  :      int | list of ints
+                    Root ID(s) of the FlyWire neuron(s) you want to
+                    skeletonize.
+    refine :        bool
+                    If True, will refine skeleton nodes by moving them in
+                    the center of their corresponding chunk meshes. This
+                    uses the L2 cache (see :func:`fafbseg.flywire.l2_info`).
+    drop_missing :  bool
+                    Only relevant if ``refine=True``: If True, will drop
+                    chunks that don't exist in the L2 cache. These are
+                    typically chunks that are either very small or new.
+                    If False, chunks missing from L2 cache will be kept but
+                    with their unrefined, approximate position.
+    l2_node_ids :   bool
+                    If True, will use the L2 IDs as node IDs (instead of
+                    just enumerating the nodes).
+    omit_failures : bool, optional
+                    Determine behaviour when skeleton generation fails
+                    (e.g. if the neuron has only a single chunk):
+                        - ``None`` (default) will raise an exception
+                        - ``True`` will skip the offending neuron (might result
+                        in an empty ``NeuronList``)
+                        - ``False`` will return an empty ``TreeNeuron``
+    progress :      bool
+                    Whether to show a progress bar.
+    max_threads :   int
+                    Number of parallel requests to make when fetching the
+                    L2 skeletons.
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
-                        Keyword arguments are passed through to the `TreeNeuron`
-                        initialization. Use to e.g. set extra properties.
+                    Keyword arguments are passed through to the `TreeNeuron`
+                    initialization. Use to e.g. set extra properties.
 
     Returns
     -------
@@ -458,10 +484,10 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     root_id = np.int64(root_id)
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 graph for given root ID (this is a (N, 2) array of edges)
     get_l2_edges = retry(client.chunkedgraph.level2_chunk_graph)
@@ -471,7 +497,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     if not len(l2_eg):
         msg = (f'Unable to create L2 skeleton: root ID {root_id} '
                'consists of only a single L2 chunk.')
-        if omit_failures == None:
+        if omit_failures is None:
             raise ValueError(msg)
 
         navis.config.logger.warning(msg)
@@ -548,7 +574,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                 msg = (f'Unable to refine: no L2 info for root ID {root_id} '
                        'available. Set `drop_missing=False` to use unrefined '
                        'positions.')
-                if omit_failures == None:
+                if omit_failures is None:
                     raise ValueError(msg)
                 elif omit_failures:
                     return navis.NeuronList([])
@@ -574,8 +600,9 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     return tn
 
 
+@inject_dataset()
 def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
-                progress=True, max_threads=10, dataset='production', **kwargs):
+                progress=True, max_threads=10, *, dataset=None, **kwargs):
     """Generate dotprops from L2 chunks.
 
     L2 chunks not present in the L2 cache or without a `pca` attribute
@@ -583,47 +610,51 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
     Parameters
     ----------
-    root_ids  :         int | list of ints
-                        Root ID(s) of the FlyWire neuron(s) you want to
-                        dotprops for.
-    min_size :          int, optional
-                        Minimum size (in nm^3) for the L2 chunks. Smaller chunks
-                        will be ignored. This is useful to de-emphasise the
-                        finer terminal neurites which typically break into more,
-                        smaller chunks and are hence overrepresented. A good
-                        value appears to be around 1_000_000.
-    sample :            float [0 > 1], optional
-                        If float, will create Dotprops based on a fractional
-                        sample of the L2 chunks. The sampling is random but
-                        deterministic.
-    omit_failures :     bool, optional
-                        Determine behaviour when dotprops generation fails
-                        (i.e. if the neuron has no L2 info):
-                         - ``None`` (default) will raise an exception
-                         - ``True`` will skip the offending neuron (might result
-                           in an empty ``NeuronList``)
-                         - ``False`` will return an empty ``Dotprops``
-    progress :          bool
-                        Whether to show a progress bar.
-    max_threads :       int
-                        Number of parallel requests to make when fetching the
-                        L2 IDs (but not the L2 info).
+    root_ids  :     int | list of ints
+                    Root ID(s) of the FlyWire neuron(s) you want to
+                    dotprops for.
+    min_size :      int, optional
+                    Minimum size (in nm^3) for the L2 chunks. Smaller chunks
+                    will be ignored. This is useful to de-emphasise the
+                    finer terminal neurites which typically break into more,
+                    smaller chunks and are hence overrepresented. A good
+                    value appears to be around 1_000_000.
+    sample :        float [0 > 1], optional
+                    If float, will create Dotprops based on a fractional
+                    sample of the L2 chunks. The sampling is random but
+                    deterministic.
+    omit_failures : bool, optional
+                    Determine behaviour when dotprops generation fails
+                    (i.e. if the neuron has no L2 info):
+                        - ``None`` (default) will raise an exception
+                        - ``True`` will skip the offending neuron (might result
+                        in an empty ``NeuronList``)
+                        - ``False`` will return an empty ``Dotprops``
+    progress :      bool
+                    Whether to show a progress bar.
+    max_threads :   int
+                    Number of parallel requests to make when fetching the
+                    L2 IDs (but not the L2 info).
+    dataset :       "public" | "production" | "sandbox" | "flat_630", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
-                        Keyword arguments are passed through to the `Dotprops`
-                        initialization. Use to e.g. set extra properties.
+                    Keyword arguments are passed through to the `Dotprops`
+                    initialization. Use to e.g. set extra properties.
 
     Returns
     -------
-    dps :               navis.NeuronList
-                        List of Dotprops.
+    dps :           navis.NeuronList
+                    List of Dotprops.
 
     See Also
     --------
     :func:`fafbseg.flywire.l2_skeleton`
-                        Create skeletons instead of dotprops using the L2
-                        edges to infer connectivity.
+                    Create skeletons instead of dotprops using the L2
+                    edges to infer connectivity.
     :func:`fafbseg.flywire.skeletonize_neuron`
-                        Skeletonize the full resolution mesh.
+                    Skeletonize the full resolution mesh.
 
     Examples
     --------
@@ -644,7 +675,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
         raise ValueError('Unable to produce dotprops for root ID 0.')
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Load the L2 IDs
     with ThreadPoolExecutor(max_workers=max_threads) as pool:
@@ -737,7 +768,8 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
     return navis.NeuronList(dps)
 
 
-def l2_meshes(x, threads=10, dataset='production', progress=True):
+@inject_dataset()
+def l2_meshes(x, threads=10, progress=True, *, dataset=None):
     """Fetch L2 meshes for a given neuron.
 
     Parameters
@@ -746,6 +778,10 @@ def l2_meshes(x, threads=10, dataset='production', progress=True):
                 Root ID.
     threads :   int
     progress :  bool
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -754,20 +790,21 @@ def l2_meshes(x, threads=10, dataset='production', progress=True):
     """
     try:
         x = np.int64(x)
-    except:
+    except ValueError:
         raise ValueError(f'Unable to convert root ID {x} to integer')
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Load the L2 IDs
     l2_ids = client.chunkedgraph.get_leaves(x, stop_layer=2)
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = [pool.submit(vol.mesh.get, i,
+        mesh_get = retry(vol.mesh.get)
+        futures = [pool.submit(mesh_get, i,
                                allow_missing=True,
                                deduplicate_chunk_boundaries=False) for i in l2_ids]
 
@@ -782,7 +819,7 @@ def l2_meshes(x, threads=10, dataset='production', progress=True):
     return navis.NeuronList([navis.MeshNeuron(v, id=k) for k, v in meshes.items()])
 
 
-def get_L2_centroids(l2_ids, vol, threads=10, progress=True):
+def _get_l2_centroids(l2_ids, vol, threads=10, progress=True):
     """Fetch L2 meshes and compute centroid."""
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = [pool.submit(vol.mesh.get, i,
@@ -807,7 +844,8 @@ def get_L2_centroids(l2_ids, vol, threads=10, progress=True):
     return centroids
 
 
-def l2_soma(x, dataset='production', progress=True):
+@inject_dataset()
+def l2_soma(x, progress=True, *, dataset=None):
     """DOES NOT WORK. Use the L2 graph to guess the soma location.
 
     In a nutshell: we use the connectedness (i.e. the degree) of L2 chunks to
@@ -839,10 +877,10 @@ def l2_soma(x, dataset='production', progress=True):
         return res
 
     # Get the cloudvolume
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     # Get/Initialize the CAVE client
-    client = get_cave_client(dataset)
+    client = get_cave_client(dataset=dataset)
 
     if not isinstance(x, nx.Graph):
         # Load the L2 graph for given root ID
@@ -866,7 +904,7 @@ def l2_soma(x, dataset='production', progress=True):
     mx_deg = l2_ids[np.argmax(l2_degrees)]
 
     # Get it's centroid
-    centroid = get_L2_centroids([mx_deg], vol, threads=1, progress=False)
+    centroid = _get_l2_centroids([mx_deg], vol, threads=1, progress=False)
 
     return centroid.get(mx_deg, 'NA')
 

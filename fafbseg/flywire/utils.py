@@ -10,7 +10,7 @@
 #
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #    GNU General Public License for more details.
 
 import functools
@@ -38,24 +38,29 @@ from .. import utils
 
 
 __all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
-           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position']
+           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position',
+           'set_default_dataset', 'find_mat_version']
 
 FLYWIRE_DATASETS = {'production': 'fly_v31',
-                    'sandbox': 'fly_v26'}
+                    'sandbox': 'fly_v26',
+                    'public': 'flywire_public'}
 
-FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v31',
-                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/table/fly_v26',
+FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v31',
+                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v26',
+                'public': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public',
                 'flat_630': 'precomputed://gs://flywire_v141_m630',
                 'flat_571': 'precomputed://gs://flywire_v141_m526'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
                  'flat_630': 'flywire_fafb_production',
                  'flat_571': 'flywire_fafb_production',
-                 'sandbox': 'flywire_fafb_sandbox'}
+                 'sandbox': 'flywire_fafb_sandbox',
+                 'public': 'flywire_fafb_public'}
 
+SILENCE_FIND_MAT_VERSION = False
 
 # Initialize without a volume
-fw_vol = None
+cloud_volumes = {}
 cave_clients = {}
 
 # Data stuff
@@ -63,6 +68,58 @@ fp = Path(__file__).parent
 data_path = fp.parent / 'data'
 area_ids = None
 vol_names = None
+
+# The default dataset
+DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'production')
+
+
+def set_default_dataset(dataset):
+    """Set the default FlyWire dataset for this session.
+
+    Alternatively, you can also use a FLYWIRE_DEFAULT_DATASET environment
+    variable (must be set before starting Python).
+
+    Parameters
+    ----------
+    dataset :   "production" | "public" | "sandbox" | "flat_630"
+                Dataset to be used by default.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.set_default_dataset('public')
+
+    """
+    if dataset not in FLYWIRE_URLS and dataset not in get_cave_datastacks():
+        datasets = np.unique(list(FLYWIRE_URLS) + get_cave_datastacks())
+        raise ValueError(f'`dataset` must be one of: {", ".join(datasets)}')
+
+    global DEFAULT_DATASET
+    DEFAULT_DATASET = dataset
+    print(f'Default dataset set to "{dataset}"')
+
+
+def inject_dataset(allowed=None, disallowed=None):
+    """Inject current default dataset."""
+    if isinstance(allowed, str):
+        allowed = [allowed]
+    if isinstance(disallowed, str):
+        disallowed = [disallowed]
+    def outer(func):
+        @functools.wraps(func)
+        def inner(*args, **kwargs):
+            if kwargs.get('dataset', None) is None:
+                kwargs['dataset'] = DEFAULT_DATASET
+
+            ds = kwargs['dataset']
+            if allowed and ds not in allowed:
+                raise ValueError(f'Dataset "{ds}" not allowed for function {func}. '
+                                 f'Accepted datasets: {allowed}')
+            if disallowed and ds in disallowed:
+                raise ValueError(f'Dataset "{ds}" not allowed for function {func}.')
+            return func(*args, **kwargs)
+        return inner
+    return outer
 
 
 def get_neuropil_volumes(neuropils):
@@ -84,7 +141,6 @@ def get_neuropil_volumes(neuropils):
 
     Examples
     --------
-
     Load a single volume:
 
     >>> from fafbseg import flywire
@@ -160,7 +216,20 @@ def get_synapse_areas(ind):
     return np.array([vol_names[i] for i in area_ids[ind]])
 
 
-def get_cave_client(dataset='production', token=None, check_stale=True,
+@functools.lru_cache
+def get_cave_datastacks():
+    """Get available CAVE datastacks."""
+    return CAVEclient().info.get_datastacks()
+
+
+@functools.lru_cache
+def get_datastack_segmentation_source(datastack):
+    """Get segmentation source for given CAVE datastack."""
+    return CAVEclient().info.get_datastack_info(datastack_name=datastack)['segmentation_source']
+
+
+@inject_dataset()
+def get_cave_client(*, dataset=None, token=None, check_stale=True,
                     force_new=False):
     """Get CAVE client.
 
@@ -212,18 +281,18 @@ def get_cave_client(dataset='production', token=None, check_stale=True,
         # expire on Monday. Therefore, on Mondays only, we will also
         # force an update if the client is older than 30 minutes
         if now.weekday() in (0, ) and not force_new:
-            if (dt.datetime.now() - client.birth_day) > dt.timedelta(minutes=30):
+            if (dt.datetime.now() - client._created_at) > dt.timedelta(minutes=30):
                 force_new = True
 
     if datastack not in cave_clients or force_new:
         cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
-        cave_clients[datastack].birth_day = dt.datetime.now()
+        cave_clients[datastack]._created_at = dt.datetime.now()
 
     return cave_clients[datastack]
 
 
 def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
-    """Get chunked graph secret.
+    """Get local FlyWire chunkedgraph/CAVE secret.
 
     Parameters
     ----------
@@ -239,7 +308,7 @@ def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
     if hasattr(cv.secrets, 'cave_credentials'):
         token = cv.secrets.cave_credentials(domain).get('token', None)
         if not token:
-            raise ValueError(f'No chunkedgraph secret for domain {domain} '
+            raise ValueError(f'No chunkedgraph/CAVE secret for domain {domain} '
                              'found. Please see '
                              'fafbseg.flywire.set_chunkedgraph_secret to set '
                              'your secret.')
@@ -247,47 +316,34 @@ def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
         try:
             token = cv.secrets.chunkedgraph_credentials['token']
         except BaseException:
-            raise ValueError('No chunkedgraph secret found. Please see '
-                             'fafbseg.flywire.set_chunkedgraph_secret to set your '
-                             'secret.')
+            raise ValueError('No chunkedgraph/CAVE secret found. Please see '
+                             '`fafbseg.flywire.set_chunkedgraph_secret` to set '
+                             'your secret.')
     return token
 
 
-def set_chunkedgraph_secret(token, filepath=None,
-                            domain='prod.flywire-daf.com'):
-    """Set chunked graph secret (called "cave credentials" now).
+def set_chunkedgraph_secret(token, overwrite=False, **kwargs):
+    """Set FlyWire chunkedgraph/CAVE secret.
+
+    This is just a thin wrapper around ``caveclient.CAVEclient.auth.save_token()``.
 
     Parameters
     ----------
     token :     str
                 Get your token from
-                https://globalv1.flywire-daf.com/auth/api/v1/refresh_token
-    filepath :  str filepath
-                Path to secret file. If not provided will store in default path:
-                ``~/.cloudvolume/secrets/{domain}-cave-secret.json``
-    domain :    str
-                The domain (incl subdomain) this secret is for.
+                https://globalv1.flywire-daf.com/auth/api/v1/user/token.
+    overwrite : bool
+                Whether to overwrite any existing secret.
+    **kwargs
+                Keyword arguments are passed through to
+                ``caveclient.CAVEclient.save_token()``.
 
     """
     assert isinstance(token, str), f'Token must be string, got "{type(token)}"'
 
-    if not filepath:
-        filepath = f'~/.cloudvolume/secrets/{domain}-cave-secret.json'
-    elif not filepath.endswith('/chunkedgraph-secret.json'):
-        filepath = os.path.join(filepath, f'{domain}-cave-secret.json')
-    elif not filepath.endswith('.json'):
-        filepath = f'{filepath}.json'
-
-    filepath = Path(filepath).expanduser()
-
-    # Make sure this file (and the path!) actually exist
-    if not filepath.exists():
-        if not filepath.parent.exists():
-            filepath.parent.mkdir(parents=True)
-        filepath.touch()
-
-    with open(filepath, 'w+') as f:
-        json.dump({'token': token}, f)
+    # I guess "public" should just work here
+    client = get_cave_client(dataset='public')
+    client.auth.save_token(token, overwrite=overwrite, **kwargs)
 
     # We need to reload cloudvolume for changes to take effect
     reload(cv.secrets)
@@ -297,7 +353,7 @@ def set_chunkedgraph_secret(token, filepath=None,
     global fw_vol
     fw_vol = None
 
-    print("Token succesfully stored in ", filepath)
+    print("Token succesfully stored.")
 
 
 def parse_root_ids(x):
@@ -323,29 +379,27 @@ def parse_root_ids(x):
         raise
 
 
-def parse_volume(vol, **kwargs):
-    """Parse CloudVolume."""
-    global fw_vol
-    if 'CloudVolume' not in str(type(vol)):
-        if not isinstance(vol, str):
-            raise ValueError(f'Unable to initialize CloudVolume from "{type(vol)}"')
+def get_cloudvolume(dataset, **kwargs):
+    """Get CloudVolume for given dataset."""
+    # If this already is a CloudVolume just pass it through
+    if "CloudVolume" in  str(type(dataset)):
+        return dataset
+    else:
+        if not isinstance(dataset, str):
+            raise ValueError(f'Unable to initialize CloudVolume from "{type(dataset)}"')
 
-        if not utils.is_url(vol):
-            # We are assuming this is the dataset
-            # Map "production" and "sandbox" with to their correct designations
-            vol = FLYWIRE_URLS.get(vol, vol)
+        # Translate into a URL
+        if not utils.is_url(dataset):
+            # Map "production" and "sandbox" to their URLs
+            if dataset in FLYWIRE_URLS:
+                dataset = FLYWIRE_URLS[dataset]
+            # Failing that, see if CAVE knows about them
+            elif dataset in get_cave_datastacks():
+                dataset = get_datastack_segmentation_source(dataset)
+            # Otherwise we will assume that this already is a segmentation URL
 
-            # Below is supposedly the "old" api (/1.0/)
-            # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/{vol}'
-
-            # This is the new url
-            # vol = f'graphene://https://prod.flywire-daf.com/segmentation/table/{vol}'
-
-            # This might eventually become the new url
-            # vol = f'graphene://https://prodv1.flywire-daf.com/segmentation_proc/table/{vol}'
-
-        #  Change default volume if necessary
-        if not fw_vol or getattr(fw_vol, 'path', None) != vol:
+        # Add this volume if it does not already exists
+        if dataset not in cloud_volumes:
             # Set and update defaults from kwargs
             defaults = dict(mip=0,
                             fill_missing=True,
@@ -362,11 +416,10 @@ def parse_volume(vol, **kwargs):
             #    if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
             #        defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
 
-            fw_vol = cv.CloudVolume(vol, **defaults)
-            fw_vol.path = vol
-    else:
-        fw_vol = vol
-    return fw_vol
+            cloud_volumes[dataset] = cv.CloudVolume(dataset, **defaults)
+            cloud_volumes[dataset].path = dataset
+
+        return cloud_volumes[dataset]
 
 
 def retry(func, retries=5, cooldown=2):
@@ -508,8 +561,44 @@ def get_lr_position(x, coordinates='nm'):
     return (m[:, 0] - x[:, 0]) / 2
 
 
-def find_mat_version(ids, verbose=True, dataset='production'):
-    """Find a materialization version (or live) for given IDs."""
+def find_mat_version(ids,
+                     verbose=True,
+                     allow_multiple=False,
+                     raise_missing=True,
+                     dataset='production'):
+    """Find a materialization version (or live) for given IDs.
+
+    Parameters
+    ----------
+    ids :           iterable
+                    Root IDs to check.
+    verbose :       bool
+                    Whether to print results of search. See also the
+                    `flywire.utils.silence_find_mat_version` context manager to
+                    silence output.
+    allow_multiple : bool
+                    If True, will track if IDs can be found spread across multiple
+                    materialization versions if there is no single one containing
+                    all.
+    raise_missing : bool
+                    Only relevant if `allow_multiple=True`. If False, will return
+                    versions even if some IDs could not be found.
+
+    Returns
+    -------
+    version :       int | "live"
+                    A single version (including "live") that contains all given
+                    root IDs.
+    versions :      np.ndarray
+                    If no single version was found and `allow_multiple=True` will
+                    return a vector of `len(ids)` with the latest version at which
+                    the respective ID can be found.
+                    Important: "live" version will be return as -1!
+                    If `raise_missing=False` and one or more root IDs could not
+                    be found in any of the available materialization versions
+                    these IDs will be return as version 0.
+
+    """
     # If dataset is the flat segmentation we can take a shortcut
     if dataset == 'flat_630':
         return 630
@@ -520,6 +609,9 @@ def find_mat_version(ids, verbose=True, dataset='production'):
 
     client = get_cave_client(dataset=dataset)
 
+    # For each ID track the most recent valid version
+    latest_valid = np.zeros(len(ids), dtype=np.int32)
+
     # Go over each version (start with the most recent)
     for i, version in enumerate(sorted(client.materialize.get_versions(), reverse=True)):
         ts_m = client.materialize.get_timestamp(version)
@@ -527,20 +619,63 @@ def find_mat_version(ids, verbose=True, dataset='production'):
         # Check which root IDs were valid at the time
         is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
 
+        # Update latest valid versions
+        latest_valid[(latest_valid == 0) & is_valid] = version
+
         if all(is_valid):
-            if verbose:
+            if verbose and not SILENCE_FIND_MAT_VERSION:
                 print(f'Using materialization version {version}')
             return version
 
-    # If no version found, see if we can get by with the live version
-    if all(client.chunkedgraph.is_latest_roots(ids, timestamp=None)):
-        if verbose:
-            print(f'Using live materialization')
+    # If no single materialized version can be found, see if we can get
+    # by with the live materialization
+    is_latest = client.chunkedgraph.is_latest_roots(ids, timestamp=None)
+    latest_valid[(latest_valid == 0) & is_latest] = -1  # track "live" as -1
+    if all(is_latest):
+        if verbose and not SILENCE_FIND_MAT_VERSION:
+            print('Using live materialization')
         return 'live'
 
-    raise ValueError('Given root IDs could not be mapped to a common '
-                     'materialization version (including live). Try updating '
-                     'roots to a single timestamp and rerun your query.')
+    if allow_multiple:
+        if all(latest_valid != 0):
+            if verbose and not SILENCE_FIND_MAT_VERSION:
+                print(f"Found root IDs spread across {len(np.unique(latest_valid))} "
+                    "materialization versions.")
+            return latest_valid
+
+        msg = (f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
+               f"materialization versions but {(latest_valid == 0).sum()} IDs "
+               "do not exist in any of the materialized tables.")
+
+        if not raise_missing:
+            if verbose and not SILENCE_FIND_MAT_VERSION:
+                print(msg)
+            return latest_valid
+        else:
+            raise ValueError(msg)
+
+    if dataset not in ('public, '):
+        raise ValueError('Given root IDs do not co-exist in any of the available '
+                        'materialization versions (including live). Try updating '
+                        'root IDs and rerun your query.')
+    else:
+        raise ValueError('Given root IDs do not co-exist in any of the available '
+                        'public materialization versions. Please make sure that '
+                        'the root IDs do exist and rerun your query.')
+
+
+def _is_valid_version(ids, version, dataset):
+    """Test if materialization version is valid for givenroot IDs."""
+    client = get_cave_client(dataset=dataset)
+    ts_m = client.materialize.get_timestamp(version)
+
+    # Check which root IDs were valid at the time
+    is_valid = client.chunkedgraph.is_latest_roots(ids, timestamp=ts_m)
+
+    if all(is_valid):
+        return True
+
+    return False
 
 
 def package_timestamp(timestamp, name="timestamp"):
@@ -555,3 +690,13 @@ def package_timestamp(timestamp, name="timestamp"):
 
         query_d = {name: timestamp.timestamp()}
     return query_d
+
+
+class silence_find_mat_version:
+    def __enter__(self):
+        global SILENCE_FIND_MAT_VERSION
+        SILENCE_FIND_MAT_VERSION = True
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        global SILENCE_FIND_MAT_VERSION
+        SILENCE_FIND_MAT_VERSION = False

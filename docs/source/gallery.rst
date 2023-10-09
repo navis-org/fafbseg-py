@@ -12,7 +12,7 @@ FlyWire
 .. toctree::
    :maxdepth: 1
 
-   tutorials/flywire_secret
+   tutorials/flywire_setup
    tutorials/neuroglancer
    tutorials/flywire_neurons
    tutorials/flywire_segments

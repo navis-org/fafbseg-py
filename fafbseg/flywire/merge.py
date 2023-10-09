@@ -15,11 +15,13 @@
 import navis
 import trimesh as tm
 
+import numpy as np
+
 from .. import xform
 from ..move import merge_into_catmaid
 
 from .skeletonize import skeletonize_neuron
-from .utils import parse_volume
+from .utils import get_cloudvolume
 
 try:
     import skeletor as sk
@@ -83,7 +85,7 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     if not sk:
         raise ImportError('Must install skeletor: pip3 install skeletor')
 
-    vol = parse_volume(flywire_dataset)
+    vol = get_cloudvolume(flywire_dataset)
 
     # Make sure this is a valid integer
     id = np.int64(id)

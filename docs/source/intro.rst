@@ -5,8 +5,9 @@ Overview
 
 What is FAFB?
 -------------
-The FAFB dataset is an SSTEM image data set of an entire female fly brain
-imaged by Zhihao Zheng and Davi Bock
+The FAFB (short for "full adult fly brain") dataset is an serial-section transmission
+electron microscopy (ssTEM) image data set of an entire female *Drosophila melanogaster*
+brain imaged by Zhihao Zheng and Davi Bock
 (see `Zheng et al., 2018 <https://www.sciencedirect.com/science/article/pii/S0092867418307876>`_).
 The raw image data can be downloaded from https://temca2data.org/.
 
@@ -23,26 +24,13 @@ Generally speaking, "segmentation" refers to the automatic labelling of some fea
 image data using machine learning algorithms. These features can be neurons but
 also ultrastructural structures such as synapses.
 
-Google neuron segmentation
-**************************
-In 2018/19, Peter Li auto-segmented the FAFB dataset using Google's flood
-filling algorithm. See `this <http://fafb-ffn1.storage.googleapis.com/landing.html>`_
-website for the paper, examples and data. Peter kindly shared skeletons derived
-from the segmentation with the FAFB tracing community early on. These skeletons
-were loaded into CATMAID instances by Tom Kazimiers and Eric Perlman.
-
-To summarize, there are currently 5 "walled garden" FAFB CATMAID instances:
-
-1. The main instance at ``fafb/v14/`` (neuropil)
-2. The first Google segmentation at ``fafb/v14-seg`` (neuropil)
-3. A second iteration of the Google segmentation at ``fafb/v14seg-Li-190411.0`` (neuropil)
-4. A third iteration of the Google segmentation at ``fafb/v14-seg-li-190805.0`` (neuropil)
-5. The most recent iteration of the Google segmentation at ``catmaid/fafb-v14-seg-li-200412.0/`` (spine)
-
 FlyWire neuron segmentation
 ***************************
 As of mid 2020, the Seung and Murthy labs at Princeton have made their
-segmentation of FAFB public as `"FlyWire" <https://flywire.ai/>`_.
+segmentation of FAFB public through `"FlyWire" <https://flywire.ai/>`_. The
+data was publicly released in July 2023 (see `Dorkenwald et al. <https://www.biorxiv.org/content/10.1101/2023.06.27.546656v2>`_
+and `Schlegel et al. <https://www.biorxiv.org/content/10.1101/2023.06.27.546055v2>`_
+for reference).
 
 Anyone can join this project but community guidelines similar to those for the
 "walled garden" apply. Importantly, newly joined users will be confined to a
@@ -56,6 +44,22 @@ between original FAFB (also called "FAFB v14" or just "FAFB14") and FlyWire
 
 Deformation fields mapping between FAFB14 and FlyWire have been kindly provided
 by the Seung lab.
+
+Google neuron segmentation
+**************************
+In 2018/19, Peter Li (Google) auto-segmented the FAFB dataset using Google's flood
+filling algorithm. See `this <http://fafb-ffn1.storage.googleapis.com/landing.html>`_
+website for the paper, examples and data. Peter kindly shared skeletons derived
+from the segmentation with the FAFB tracing community early on. These skeletons
+were loaded into CATMAID instances by Tom Kazimiers and Eric Perlman.
+
+To summarize, there are currently 5 "walled garden" FAFB CATMAID instances:
+
+1. The main instance at ``fafb/v14/`` (neuropil)
+2. The first Google segmentation at ``fafb/v14-seg`` (neuropil)
+3. A second iteration of the Google segmentation at ``fafb/v14seg-Li-190411.0`` (neuropil)
+4. A third iteration of the Google segmentation at ``fafb/v14-seg-li-190805.0`` (neuropil)
+5. The most recent iteration of the Google segmentation at ``catmaid/fafb-v14-seg-li-200412.0/`` (spine)
 
 Synaptic partner predictions
 ****************************
@@ -84,25 +88,18 @@ spaces (FAFB14 and FlyWire/FAFB14.1).
 ``FAFBseg`` and its R analog (`link <https://github.com/natverse/fafbseg>`_)
 provide a single interface to draw from and combine all the FAFB data.
 
-In particular, it enables you to:
-
-- load FlyWire neurons (e.g. for visualization and analysis)
-- skeletonize FlyWire neurons
-- query connectivity for FlyWire or FAFB14 neurons
-- transform data between FAFB14 and FlyWire
-- move data between manual FAFB14, Google and FlyWire segmentation (experimental and subject to community guidelines!)
-
 General layout
 **************
-Currently, ``FAFBseg`` is divided into three main modules:
+Currently, ``FAFBseg`` is divided into two main modules:
 
-- ``fafbseg.flywire``: work with FlyWire segmentation
-- ``fafbseg.google``: work with Google segmentation of FAFB14
-- ``fafbseg.move``: import/export/move data around
+- ``fafbseg.flywire``: work with FlyWire segmentation of FAFB
+- ``fafbseg.google``: work with Google segmentation of FAFB
 
 You will find that certain functions have a version for Google and for FlyWire.
 For example, :func:`fafbseg.flywire.locs_to_segments` and
 :func:`fafbseg.google.locs_to_segments` let you map locations to segmentation
-IDs for the respective data set.
+IDs for the respective data set. That said, at this point the Google segmentation
+has effectively been superseded by the FlyWire and has therefore seen less
+attention.
 
-Check out the tutorials for details!
+Please check out the `tutorials <tutorials>` for details!

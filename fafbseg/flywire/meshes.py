@@ -21,18 +21,18 @@ import trimesh as tm
 import cloudvolume as cv
 
 from cloudvolume.mesh import Mesh
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .l2 import l2_graph, chunks_to_nm
+from .l2 import l2_graph
 from .synapses import fetch_synapses
-from .utils import parse_volume
+from .utils import get_cloudvolume, inject_dataset
 
 __all__ = ['get_mesh_neuron']
 
 
+@inject_dataset()
 def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
-                    lod=None, progress=True, dataset='production'):
+                    lod=None, progress=True, *, dataset=None):
     """Fetch FlyWire neuron as navis.MeshNeuron.
 
     Parameters
@@ -63,12 +63,15 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
     dataset :           str | CloudVolume
                         Against which FlyWire dataset to query::
                           - "production" (currently fly_v31)
+                          - "public"
                           - "sandbox" (currently fly_v26)
                           - "flat_630" or "flat_571" will use the flat
                             segmentations matching the respective materialization
                             versions. By default these use `lod=2`, you can
                             change that behaviour by passing `lod` as keyword
                             argument.
+                            If ``None`` will fall back to the default dataset
+                            (see :func:`~fafbseg.flywire.set_default_dataset`).
 
     Return
     ------
@@ -89,7 +92,7 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
 
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(id):
         id = np.asarray(id, dtype=np.int64)
@@ -143,10 +146,12 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
                     lod_ -= 1
                 except BaseException:
                     raise
+            if lod_ < 0:
+                raise ValueError(f'No mesh for id {id} found')
     except KeyboardInterrupt:
         raise
     except BaseException:
-        if omit_failures == None:
+        if omit_failures is None:
             raise
         elif omit_failures:
             return navis.NeuronList([])
@@ -160,7 +165,7 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
     n = navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
 
     if with_synapses:
-        _ = fetch_synapses(n, attach=True, min_score=30, dataset=dataset,
+        _ = fetch_synapses(n.id, attach=True, min_score=30, dataset=dataset,
                            progress=False)
 
     return n
@@ -228,7 +233,7 @@ def _get_mesh(seg_id, vol):
     return mesh, l2_map
 
 
-def detect_soma(x, min_rad=800, N=3, progress=True, dataset='production'):
+def detect_soma(x, min_rad=800, N=3, progress=True, *, dataset=None):
     """Try detecting the soma based on radius of the mesh.
 
     Parameters
@@ -240,6 +245,10 @@ def detect_soma(x, min_rad=800, N=3, progress=True, dataset='production'):
     N :         int
                 Number of consecutive vertices with radius > `min_rad` in
                 order to consider them soma candidates.
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -285,8 +294,34 @@ def detect_soma(x, min_rad=800, N=3, progress=True, dataset='production'):
     return centers[candidates[-1]]
 
 
-def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, dataset='production'):
-    """Create high quality mesh for given neuron."""
+@inject_dataset()
+def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, *, dataset=None):
+    """Create high quality mesh for given neuron.
+
+    Parameters
+    ----------
+    x :         int
+                Single FlyWire root ID.
+    mip :       int [0-3]
+                Level of detail. Lower = higher resolution.
+    bounds :    (3, 2) or (2, 3) array, optional
+                Bounding box to return voxels in. Expected to be in 4, 4, 40
+                voxel space.
+    thin :      bool
+                If True, will remove voxels at the interface of adjacent
+                supervoxels that are not supposed to be connected according
+                to the L2 graph. This is rather expensive but can help in
+                situations where a neuron self-touches.
+    dataset :   "public" | "production" | "sandbox" | "flat_630", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see
+                :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    navis.MeshNeuron
+
+    """
     try:
         import sparsecubes as sc
     except ImportError:
@@ -297,7 +332,7 @@ def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, dataset='produ
     # Get voxels for this neuron
     vxl = get_voxels(x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset)
 
-    vol = parse_volume(dataset)
+    vol = get_cloudvolume(dataset)
     spacing = vol.scales[mip]['resolution']
 
     mesh = sc.marching_cubes(vxl, spacing=spacing)
