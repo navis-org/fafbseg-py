@@ -50,9 +50,9 @@ __all__ = [
 def synapse_counts(
     x,
     by_neuropil=False,
-    min_score=30,
     mat="auto",
-    filtered=False,
+    filtered=True,
+    min_score=None,
     batch_size=10,
     *,
     dataset=None,
@@ -71,9 +71,6 @@ def synapse_counts(
     by_neuropil :   bool
                     If True, returned DataFrame will contain a break down by
                     neuropil.
-    min_score :     int, optional
-                    Minimum "cleft score". The default of 30 is what Buhmann et al.
-                    used in the paper.
     mat :           int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
@@ -83,9 +80,13 @@ def synapse_counts(
                      - pass an integer (e.g. `447`) to use a specific materialization version
     filtered :      bool
                     Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
+                    filter removes redundant and low confidence (<= 50 cleft score)
+                    synapses. See also https://tinyurl.com/4j9v7t86 (links to
+                    CAVE website).
+    min_score :     int
+                    Minimum "cleft score". Buhmann et al. used a threshold of 30
+                    in their paper. However, for FlyWire analyses that threshold
+                    was raised to 50 (see also `filtered`).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -168,7 +169,7 @@ def predict_transmitter(
     single_pred=False,
     weighted=True,
     mat="auto",
-    filtered=False,
+    filtered=True,
     neuropils=None,
     batch_size=10,
     *,
@@ -206,9 +207,9 @@ def predict_transmitter(
                      - pass an integer (e.g. `447`) to use a specific materialization version
     filtered :      bool
                     Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
+                    filter removes redundant and low confidence (<= 50 cleft score)
+                    synapses. See also https://tinyurl.com/4j9v7t86 (links to
+                    CAVE website).
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter predictions to these ROIs.
@@ -320,12 +321,13 @@ def fetch_synapses(
                     function will still return the full synapse table.
     filtered :      bool
                     Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (link to CAVE website).
-    min_score :     int, optional
-                    Minimum "cleft score". The default `filtered=True` (see above)
-                    already removes connections with score of <= 50.
+                    filter removes redundant and low confidence (<= 50 cleft score)
+                    synapses. See also https://tinyurl.com/4j9v7t86 (links to
+                    CAVE website).
+    min_score :     int
+                    Minimum "cleft score". Buhmann et al. used a threshold of 30
+                    in their paper. However, for FlyWire analyses that threshold
+                    was raised to 50 (see also `filtered`).
     clean :         bool
                     If True, we will perform some clean up of the connectivity
                     compared with the raw synapse information. Currently, we::
@@ -596,9 +598,9 @@ def fetch_synapses(
 def fetch_adjacency(
     sources,
     targets=None,
-    filtered=True,
     mat="auto",
     neuropils=None,
+    filtered=True,
     min_score=None,
     batch_size=1000,
     *,
@@ -631,18 +633,19 @@ def fetch_adjacency(
                     the root ID. If you have a neuron (in FlyWire space) but
                     don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
                     first. If ``None``, will assume ```targets = sources``.
-    min_score :     int
-                    Minimum "cleft score". The default of 30 is what Buhmann et al.
-                    used in the paper.
     neuropils :     str | list of str, optional
                     Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     filtered :      bool
                     Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
+                    filter removes redundant and low confidence (<= 50 cleft score)
+                    synapses. See also https://tinyurl.com/4j9v7t86 (links to
+                    CAVE website).
+    min_score :     int
+                    Minimum "cleft score". Buhmann et al. used a threshold of 30
+                    in their paper. However, for FlyWire analyses that threshold
+                    was raised to 50 (see also `filtered`).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches can
                     lead to truncated tables: currently individual queries do
@@ -844,13 +847,13 @@ def fetch_connectivity(
     x,
     clean=True,
     style="simple",
-    min_score=30,
     upstream=True,
     downstream=True,
     proofread_only=False,
     transmitters=False,
     neuropils=None,
-    filtered=False,
+    filtered=True,
+    min_score=None,
     batch_size=30,
     mat="auto",
     *,
@@ -866,7 +869,7 @@ def fetch_connectivity(
     which can be much faster to query. We will automatically use use the
     view _if_:
      1. `filtered=True` (default is `False`)
-     2. `min_score=None` or `min_score=50` (default is 30)
+     2. `min_score=None` or `min_score=50`
      3. `neuropils=None` (default is `None`)
      4. `mat!='live'` (default is "auto" which can end up as "live")
 
@@ -884,9 +887,6 @@ def fetch_connectivity(
                      - drop synapses from/to background (id 0)
     style :         "simple" | "catmaid"
                     Style of the returned table.
-    min_score :     int
-                    Minimum "cleft score". The default of 30 is what Buhmann et al.
-                    used in the paper.
     upstream :      bool
                     Whether to fetch upstream connectivity of ```x``.
     downstream :    bool
@@ -911,9 +911,13 @@ def fetch_connectivity(
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     filtered :      bool
                     Whether to use the filtered synapse table. Briefly, this
-                    filter removes falsely redundant and automatically
-                    removes synapses with confidence <= 50. See also
-                    https://tinyurl.com/4j9v7t86 (links to CAVE website).
+                    filter removes redundant and low confidence (<= 50 cleft score)
+                    synapses. See also https://tinyurl.com/4j9v7t86 (links to
+                    CAVE website).
+    min_score :     int
+                    Minimum "cleft score". Buhmann et al. used a threshold of 30
+                    in their paper. However, for FlyWire analyses that threshold
+                    was raised to 50 (see also `filtered`).
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
@@ -984,7 +988,7 @@ def fetch_connectivity(
     elif filtered:
         has_view = "valid_connection_v2" in client.materialize.get_views(mat)
         no_np = isinstance(neuropils, type(None))
-        no_score_thresh = not min_score or min_score == 50
+        no_score_thresh = (not min_score) or (min_score == 50)
         if has_view & no_np & no_score_thresh:
             columns = ["pre_pt_root_id", "post_pt_root_id", "n_syn"]
             if transmitters:
@@ -1148,12 +1152,6 @@ def fetch_supervoxel_synapses(
                     Whether to fetch presynapses for the given neurons.
     post :          bool
                     Whether to fetch postsynapses for the given neurons.
-    transmitters :  bool
-                    Whether to also load per-synapse neurotransmitter predictions
-                    from Eckstein et al. (2020).
-    min_score :     int, optional
-                    Minimum "cleft score". The default of 30 is what Buhmann et al.
-                    used in the paper.
     batch_size :    int
                     Number of IDs to query per batch. Too large batches might
                     lead to truncated tables: currently individual queries can
