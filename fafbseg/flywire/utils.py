@@ -291,34 +291,32 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
     return cave_clients[datastack]
 
 
-def get_chunkedgraph_secret(domain='prod.flywire-daf.com'):
+def get_chunkedgraph_secret(domain=('global.daf-apis.com', 'prod.flywire-daf.com')):
     """Get local FlyWire chunkedgraph/CAVE secret.
 
     Parameters
     ----------
-    domain :    str
-                Domain to get the secret for. Only relevant for
-                ``cloudvolume>=3.11.0``.
+    domain :    str | list thereof
+                Domain to get the secret for.
 
     Returns
     -------
     token :     str
 
     """
-    if hasattr(cv.secrets, 'cave_credentials'):
-        token = cv.secrets.cave_credentials(domain).get('token', None)
-        if not token:
-            raise ValueError(f'No chunkedgraph/CAVE secret for domain {domain} '
-                             'found. Please see '
-                             'fafbseg.flywire.set_chunkedgraph_secret to set '
-                             'your secret.')
-    else:
-        try:
-            token = cv.secrets.chunkedgraph_credentials['token']
-        except BaseException:
-            raise ValueError('No chunkedgraph/CAVE secret found. Please see '
-                             '`fafbseg.flywire.set_chunkedgraph_secret` to set '
-                             'your secret.')
+    if isinstance(domain, str):
+        domain = [domain]
+
+    token = None
+    for dom in domain:
+        token = cv.secrets.cave_credentials(dom).get('token', None)
+        if token:
+            break
+
+    if not token:
+        raise ValueError(f'No chunkedgraph/CAVE secret for domain(s) {domain} '
+                        'found. Please see fafbseg.flywire.set_chunkedgraph_secret '
+                        'to store your API token.')
     return token
 
 
