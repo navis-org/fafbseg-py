@@ -81,7 +81,9 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
-    fafbseg.flywire.find_celltypes
+    fafbseg.flywire.search_community_annotations
+    fafbseg.flywire.search_annotations
+
 
 Utiliy functions:
 
@@ -89,6 +91,7 @@ Utiliy functions:
     :toctree: generated/
 
     fafbseg.flywire.set_default_dataset
+    fafbseg.flywire.get_user_information
 
 
 Google segmentation
