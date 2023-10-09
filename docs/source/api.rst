@@ -45,7 +45,6 @@ Fetch neurons:
     fafbseg.flywire.get_skeletons
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
-    fafbseg.flywire.merge_flywire_neuron
 
 L2-related functions:
 
