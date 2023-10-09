@@ -7,7 +7,7 @@ version: 2
 
 # Make sure that dependencies are installed with pip instead of setup.py
 python:
-  version: 3.8
+  version: 3.10
   install:
     - requirements: docs/preinstall_requirements.txt
     - requirements: docs/requirements.txt
