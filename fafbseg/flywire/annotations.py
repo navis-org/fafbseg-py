@@ -999,9 +999,9 @@ def search_annotations(x,
             materialization = 'latest'
         else:
             # First check among the available versions
-            available_versions = _get_cached_annotation_materializations()
-            if available_versions:
-                for version in sorted(available_versions)[::-1]:
+            cached_versions = _get_cached_annotation_materializations()
+            if len(cached_versions):
+                for version in sorted(cached_versions)[::-1]:
                     if _is_valid_version(ids=x, version=version, dataset=dataset):
                         materialization = version
                         print(f'Using cached materialization version {version}')
@@ -1011,16 +1011,18 @@ def search_annotations(x,
 
     if materialization == 'latest':
         # Map to the latest cached version
-        available_versions = _get_cached_annotation_materializations()
-        if available_versions:
-            materialization = sorted(available_versions)[-1]
+        cached_versions = _get_cached_annotation_materializations()
+        available_version = get_cave_client(dataset=dataset).materialize.get_versions()
+        available_and_cached = cached_versions[np.isin(cached_versions, available_version)]
+        if len(available_and_cached):
+            materialization = sorted(available_and_cached)[-1]
         else:
-            client = get_cave_client()
-            materialization = sorted(client.materialize.get_versions())[-1]
+            materialization = sorted(available_version)[-1]
         print(f'Using materialization version {materialization}')
 
     # Grab the table at the requested materialization
     ann = get_hierarchical_annotations(mat=materialization,
+                                       dataset=dataset,
                                        force_reload=clear_cache)
 
     # If no query term, we'll just return the whole table
@@ -1203,11 +1205,12 @@ def _get_cached_annotation_materializations():
         if not col.startswith('root_'):
             continue
         try:
-            mats.append(int(col.replace('root_', '')))
+            this_mat = int(col.replace('root_', ''))
+            mats.append(this_mat)
         except ValueError:
             pass
 
-    return mats
+    return np.array(mats)
 
 
 def get_user_information(user_ids, field=None):
@@ -1401,6 +1404,10 @@ def search_community_annotations(x,
 @lru_cache
 def _get_cell_type_table(dataset, materialization, split_positions=False, verbose=True):
     """Fetch (and cache) annotation tables."""
+    if materialization == 'latest':
+        versions = get_cave_client(dataset=dataset).materialize.get_versions()
+        materialization = sorted(versions)[-1]
+
     if verbose:
         print(f'Caching community annotations for materialization version "{materialization}"...',
               end='', flush=True)
