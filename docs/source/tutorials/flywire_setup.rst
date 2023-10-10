@@ -156,7 +156,7 @@ materialization versions, we can query those tables with very little overhead on
 our end. Things get tricky if:
 
 - the root IDs are more recent than the latest materialization
-- the root IDs did only exist briefly _in between_ materializations
+- the root IDs did only exist briefly *in between* materializations
 - the root IDs never co-existed at any of the materializations
 
 ``fafbseg`` tries to abstract away a lot of the complications - in fact the
