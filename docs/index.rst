@@ -47,8 +47,8 @@ How to cite
 -----------
 If you use ``fafbseg`` for your publication, please cite the two FlyWire papers:
 
-1. "_Whole-brain annotation and multi-connectome cell typing quantifies circuit stereotypy in Drosophila_" Schlegel _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546055
-2. "_Neuronal wiring diagram of an adult brain_" Dorkenwald _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546656
+1. "*Whole-brain annotation and multi-connectome cell typing quantifies circuit stereotypy in Drosophila*" Schlegel _et al._, bioRxiv (2023); https://doi.org/10.1101/2023.06.27.546055
+2. "*Neuronal wiring diagram of an adult brain*" Dorkenwald *et al.*, bioRxiv (2023); https://doi.org/10.1101/2023.06.27.546656
 
 Questions/Issues?
 -----------------

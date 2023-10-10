@@ -20,5 +20,6 @@ to get started.
 
 .. warning::
 
-  ``fafbseg`` has not been tested on Windows and is unlikely to work off the
-  bat. I highly recommend using either OSX or Linux.
+  For Windows users: ``fafbseg`` is unlikely to work off the bat even if you use
+  ``conda``. I highly recommend you install and use
+  `Windows Subsystem for Linux <https://learn.microsoft.com/en-us/windows/wsl/install>`_.
