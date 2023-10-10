@@ -944,7 +944,10 @@ def fetch_connectivity(
     if not upstream and not downstream:
         raise ValueError("`upstream` and `downstream` must not both be False")
 
-    if transmitters and style == "catmaid":
+    if style not in ('simple', 'catmaid'):
+        raise ValueError(f'`style` must be "simple" or "catmaid", got "{style}"')
+
+    if transmitters and (style == "catmaid"):
         raise ValueError('`style` must be "simple" when asking for transmitters')
 
     if isinstance(mat, str):
