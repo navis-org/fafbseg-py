@@ -295,7 +295,7 @@ def encode_url(
 
     # Add annotations if provided
     if annotations is not None:
-        if isinstance(annotations, np.ndarray):
+        if isinstance(annotations, (np.ndarray, list)):
             scene = add_annotation_layer(annotations, scene)
         elif isinstance(annotations, dict):
             for layer, an in annotations.items():
