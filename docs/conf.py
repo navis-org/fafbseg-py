@@ -96,6 +96,17 @@ def remove_hbox(filepath):
             f.write(s)
 
 
+def remove_pbars(filepath):
+    """Drop accidental progress bars '... [00:00<?, ?it/s]' lines from .rst files."""
+    with open(filepath, 'r') as f:
+        s = f.read()
+
+    if 'it/s]' in s:
+        s = re.sub(".. parsed-literal::\n\n.*?it/s]", '', s)
+        with open(filepath, 'w') as f:
+            f.write(s)
+
+
 # -- Make execution numbers in Jupyter notebooks ascending -------------------
 source_path = os.path.dirname(os.path.abspath(__file__)) + '/source'
 all_nb = list()
@@ -108,6 +119,7 @@ for (dirpath, dirnames, filenames) in os.walk(source_path):
 for nb in all_nb:
     convert_nb(nb)
     remove_hbox(nb.replace('.ipynb', '.rst'))
+    remove_pbars(nb.replace('.ipynb', '.rst'))
 
 # -- General configuration ------------------------------------------------
 
