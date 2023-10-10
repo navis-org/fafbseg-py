@@ -7,3 +7,4 @@ numpydoc
 sphinx>=3.1
 furo
 sphinx-autodoc-typehints
+sphinx-copybutton

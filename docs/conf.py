@@ -139,6 +139,7 @@ extensions = [
     'sphinx.ext.napoleon',
     #'sphinx.ext.mathjax', # mathjax is interactive and configurable but can also misbehave when rendering - switched to imgmath instead
     'sphinx.ext.imgmath',
+    'sphinx_copybutton',
     #'sphinx_autodoc_typehints',  # unfortunately this does not play nicely with mocking
     #'numpydoc'
 ]
@@ -194,6 +195,9 @@ if mo:
     verstr = mo.group(1)
 else:
     verstr = '0.0.0'
+
+# Exclude any "">>>" from copy button
+copybutton_prompt_text = ">>> "
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
