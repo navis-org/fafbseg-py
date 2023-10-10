@@ -662,8 +662,13 @@ def find_mat_version(ids,
 
 
 def _is_valid_version(ids, version, dataset):
-    """Test if materialization version is valid for givenroot IDs."""
+    """Test if materialization version is valid for given root IDs."""
     client = get_cave_client(dataset=dataset)
+
+    # If this is not even a valid version (for this dataset) return False
+    if version not in client.materialize.get_versions():
+        return False
+
     ts_m = client.materialize.get_timestamp(version)
 
     # Check which root IDs were valid at the time
