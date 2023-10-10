@@ -6,9 +6,8 @@ API Documentation
 FAFBseg is divided into separate modules to split functions by data source/type:
 
   - ``fafbseg.flywire`` for FlyWire functions
-  - ``fafbseg.google`` for Google segmentation-related functions
+  - ``fafbseg.google`` for functions related to Google's segmentation of FAFB
   - ``fafbseg.xform`` for transforming spatial data between FAFB14 and FlyWire's FAFB14.1
-  - ``fafbseg.move`` for moving/merging data between data sets
 
 See below for a by-module breakdown.
 
@@ -109,19 +108,6 @@ Google segmentation
     fafbseg.google.autoreview_edges
     fafbseg.google.test_edges
 
-Connectivity
-------------
-.. autosummary::
-    :toctree: generated/
-
-    fafbseg.google.synapses.fetch_connectivity
-    fafbseg.flywire.synapses.fetch_adjacency
-    fafbseg.flywire.synapses.fetch_connectivity
-    fafbseg.flywire.synapses.fetch_synapses
-    fafbseg.flywire.synapses.synapse_counts
-    fafbseg.flywire.synapses.predict_transmitter
-    fafbseg.synapses.plot_nt_predictions
-
 Spatial transformation
 ----------------------
 Note that typically you will want to use e.g.
@@ -133,10 +119,3 @@ also use these low-level functions:
 
     fafbseg.xform.flywire_to_fafb14
     fafbseg.xform.fafb14_to_flywire
-
-Merging/combining data
-----------------------
-.. autosummary::
-    :toctree: generated/
-
-    fafbseg.move.merge_into_catmaid

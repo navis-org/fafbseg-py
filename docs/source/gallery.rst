@@ -13,44 +13,11 @@ FlyWire
    :maxdepth: 1
 
    tutorials/flywire_setup
-   tutorials/neuroglancer
-   tutorials/flywire_neurons
    tutorials/flywire_segments
-   tutorials/merge_flywire_neuron
+   tutorials/flywire_neurons
+   tutorials/flywire_annotations
+   tutorials/neuroglancer
+   tutorials/flywire_connectivity
+   tutorials/hemibrain_nblast
+   tutorials/transforming
 
-Google (FAFB14)
----------------
-
-.. toctree::
-   :maxdepth: 1
-
-   tutorials/merge_google_neuron
-   tutorials/find_missing
-   tutorials/autocomplete
-
-
-NBLAST
-------
-
-.. toctree::
-  :maxdepth: 1
-
-  tutorials/hemibrain_nblast
-
-
-Connectivity
-------------
-
-.. toctree::
-  :maxdepth: 1
-
-  tutorials/flywire_connectivity
-
-Transformations
----------------
-
-
-.. toctree::
-  :maxdepth: 1
-
-  tutorials/transforming

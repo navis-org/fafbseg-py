@@ -20,9 +20,9 @@ fair and respectful treatment of each other's unpublished data.
 
 FAFB segmentations
 ------------------
-Generally speaking, "segmentation" refers to the automatic labelling of some feature in
-image data using machine learning algorithms. These features can be neurons but
-also ultrastructural structures such as synapses.
+Generally speaking, "segmentation" refers to the automatic labelling of some
+feature in image data using machine learning algorithms. These features can be
+neurons but also ultrastructural structures such as synapses.
 
 FlyWire neuron segmentation
 ***************************
@@ -98,8 +98,8 @@ Currently, ``FAFBseg`` is divided into two main modules:
 You will find that certain functions have a version for Google and for FlyWire.
 For example, :func:`fafbseg.flywire.locs_to_segments` and
 :func:`fafbseg.google.locs_to_segments` let you map locations to segmentation
-IDs for the respective data set. That said, at this point the Google segmentation
-has effectively been superseded by the FlyWire and has therefore seen less
+IDs for the respective data set. That said: at this point the Google segmentation
+has effectively been superseded by FlyWire and has therefore seen less
 attention.
 
 Please check out the :ref:`tutorials<tutorials>` for details!
