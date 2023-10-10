@@ -629,7 +629,7 @@ def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
     # Get segmentation IDs
     nodes['root_id'] = locs_to_segments(nodes[['x', 'y', 'z']].values,
                                         coordinates=coordinates,
-                                        root_ids=True, dataset=dataset)
+                                        dataset=dataset)
 
     # Count segment IDs
     seg_counts = nodes.groupby(['neuron', 'root_id'], as_index=False).node_id.count()
