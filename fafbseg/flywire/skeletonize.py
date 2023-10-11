@@ -572,6 +572,8 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     -------
     skeletons :         navis.NeuronList of navis.TreeNeurons
 
+    Examples
+    --------
     >>> from fafbseg import flywire
     >>> n = flywire.fetch_skeleton(720575940614131061)
 
