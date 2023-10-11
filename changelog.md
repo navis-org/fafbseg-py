@@ -6,12 +6,12 @@ This is a major release with lots of under-the-hood reworks to accompany the
 public release of FlyWire.
 
 ### Querying the public release data
-With the publication of the two FlyWire papers on bioRxiv everyone access to the
-public released data - currently this corresponds to materialization version 630.
+With the publication of the two FlyWire papers on bioRxiv everyone access has to the
+publicly released data - currently this corresponds to materialization version `630`.
 
-Previously, many `fafbseg.flywire` functions accepted a `dataset` parameter
-that accepted (for the most part) either "production" or "sandbox". As of
-version `2.0.0` "public" is also an accepted value:
+Previously, many `fafbseg.flywire` functions already had a `dataset` parameter
+that accepted either "production" or "sandbox". As of version `2.0.0` "public"
+is also an accepted value:
 
 ```python
 >>> from fafbseg import flywire
