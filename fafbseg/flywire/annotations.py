@@ -934,6 +934,7 @@ def search_annotations(x,
     --------
 
     Find info for given root ID(s)
+
     >>> an = flywire.search_annotations(720575940628857210)
     >>> an.iloc[0]
     supervoxel_id               78112261444987077
@@ -962,12 +963,15 @@ def search_annotations(x,
     status                                    NaN
 
     Search for a cell type
+
     >>> ps009 = flywire.search_annotations('PS009', exact=True)
 
     Use "colum:value" to search for a specific field
+
     >>> phn = flywire.search_annotations('nerve:PhN')
 
     Use regex to refine search (here we try finding all "PSXXX" hemibrain types)
+
     >>> all_ps = flywire.search_annotations('hemibrain_type:PS[0-9]{3}', regex=True)
 
     """
@@ -1300,7 +1304,8 @@ def search_community_annotations(x,
     Examples
     --------
 
-    # Search for annotations for given root ID(s)
+    Search for annotations for given root ID(s)
+
     >>> an = flywire.search_community_annotations(720575940628857210)
     >>> an.iloc[0]
     id                                             46699
@@ -1315,7 +1320,8 @@ def search_community_annotations(x,
     pt_supervoxel_id                   77830580511126708
     pt_root_id                        720575940628857210
 
-    # Search for all tags matching a given pattern
+    Search for all tags matching a given pattern
+
     >>> ps009 = flywire.search_community_annotations('PS009')
     >>> ps009
                 id                          created  ...      supervoxel_id             root_id
