@@ -67,7 +67,16 @@ Misc:
     fafbseg.flywire.get_lr_position
     fafbseg.flywire.get_voxels
 
-For interaction with the annotation/materialization engine:
+For fetchin annotations:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.search_community_annotations
+    fafbseg.flywire.search_annotations
+    fafbseg.flywire.get_hierarchical_annotations
+
+For interaction with the CAVE engine:
 
 .. autosummary::
     :toctree: generated/
@@ -79,8 +88,6 @@ For interaction with the annotation/materialization engine:
     fafbseg.flywire.get_annotations
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
-    fafbseg.flywire.search_community_annotations
-    fafbseg.flywire.search_annotations
 
 
 Utiliy functions:

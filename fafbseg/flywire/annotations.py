@@ -44,7 +44,8 @@ __all__ = ['get_somas',
            'get_annotation_table_info',
            'delete_annotations', 'upload_annotations',
            'is_proofread',
-           'search_community_annotations', 'search_annotations']
+           'search_community_annotations', 'search_annotations',
+           'get_hierarchical_annotations']
 
 
 PR_TABLE = {}
