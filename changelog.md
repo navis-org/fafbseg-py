@@ -33,7 +33,7 @@ Using materialization version 630
 ```
 
 The default for `dataset` is still "production" but this can be changed by either
-calling `flywire.set_default_dataset` at the beginning of a session...
+calling [`flywire.set_default_dataset`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.set_default_dataset.html) at the beginning of a session...
 
 ```python
 >>> flywire.set_default_dataset('public')
@@ -53,7 +53,7 @@ deduplicated synapses and applied a higher confidence (cleft) score threshold of
 See [here](https://prod.flywire-daf.com/annotation/views/aligned_volume/fafb_seung_alignment_v0/table/valid_synapses_nt_v2)
 for a full explanation (requires login with FlyWire account).
 
-Corresponding functions such as `flywire.fetch_synapses` have had their defaults
+Corresponding functions such as [`flywire.fetch_synapses`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.fetch_synapses.html) have had their defaults
 changed to `filtered=True` and `min_score=None` which makes it so that this
 filtered synapse table is queried by default. We recommend sticking to these defaults.
 
@@ -62,15 +62,15 @@ production dataset and will not work with the "public" release version.
 
 ### Added
 
-- `flywire.get_skeletons` downloads skeletons precomputed for the public (v630) release
+- [`flywire.get_skeletons`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.get_skeletons.html) downloads skeletons precomputed for the public (v630) release
 - added functions to query the hierarchical annotations (Classification column in Codex):
-  `flywire.search_annotations` and `flywire.get_hierarchical_annotations`
-- added function to query the community annotations: `flywire.search_community_annotations`
+  [`flywire.search_annotations`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.search_annotations.html) and [`flywire.get_hierarchical_annotations`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.get_hierarchical_annotations.html)
+- added function to query the community annotations: [`flywire.search_community_annotations`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.search_community_annotations.html)
 
 ### Breaking
 
-- `flywire.get_annotation_tables` has been renamed to `flywire.list_annotation_tables`
+- `flywire.get_annotation_tables` has been renamed to [`flywire.list_annotation_tables`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.list_annotation_tables.html)
 - neuropils returned by synapse queries had their side (`_L`/`_R`) flipped to compensate
   for the inversion during image acquisition of the FAFB volume and now refer
   to the correct side from the flies perspective
-- `flywire.encode_url` has been reworked and some of the parameters have been renamed
+- [`flywire.encode_url`](https://fafbseg-py.readthedocs.io/en/latest/source/generated/fafbseg.flywire.encode_url.html) has been reworked and some of the parameters have been renamed
