@@ -2,9 +2,9 @@
 
 Tutorials
 =========
-These tutorials are meant to illustrate fafbseg functions. As per usual:
+These tutorials are meant to highlight certain ``fafbseg`` features. As per usual:
 have a look at the :ref:`API reference <api>` to find out details about a given
-function. There you will also find more examples.
+function. There, you will also find more examples.
 
 FlyWire
 -------

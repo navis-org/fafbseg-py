@@ -15,11 +15,17 @@ For the development version from Github:
    pip3 install git+https://github.com/navis-org/fafbseg-py.git
 
 
-Now have a look at the :ref:`examples<tutorials>` or the :ref:`API<api>`
-to get started.
+After the successful installation, please check out the
+:ref:`FlyWire setup<flywire_setup>` for instructions on how to retrieve and
+set your FlyWire API token.
+
+To get started, have a look at the :ref:`examples<tutorials>` or the :ref:`API reference<api>`.
+
 
 .. warning::
 
-  For Windows users: ``fafbseg`` is unlikely to work off the bat even if you use
-  ``conda``. I highly recommend you install and use
-  `Windows Subsystem for Linux <https://learn.microsoft.com/en-us/windows/wsl/install>`_.
+  For Windows users: ``fafbseg`` is unlikely to work off the bat as some of its
+  dependencies might not install correctly. I highly recommend you install and use the
+  `Windows Subsystem for Linux <https://learn.microsoft.com/en-us/windows/wsl/install>`_
+  which lets you circumvent the problem by running a virtual Linux on your
+  Windows machine.
