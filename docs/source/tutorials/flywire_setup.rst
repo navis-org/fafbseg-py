@@ -15,7 +15,7 @@ an API token (or "secret"). This needs to be done only once.
 
 Generate your secret
 ********************
-Go to https://globalv1.flywire-daf.com/auth/api/v1/user/token and log in with
+Go to https://global.daf-apis.com/auth/api/v1/user/token and log in with
 the account you use for FlyWire. You should then get bit of text with a token
 that looks something like this:
 
