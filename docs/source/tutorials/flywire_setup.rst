@@ -27,22 +27,24 @@ That's your token!
 
 Saving the secret
 *****************
-Your token must then be saved to a file on your computer:
-``~/.cloudvolume/secrets/global.daf-apis.com-cave-secret.json``. That file's
-content needs to look something like this:
+Your token must then be saved to a file on your computer. ``fafbseg`` offers a
+convenient function that does that for you (piggy-backing on ``caveclient``):
+
+.. code-block:: python
+
+  >>> from fafbseg import flywire
+  >>> flywire.set_chunkedgraph_secret("ghd2nfk67kdndncf5kdmsqwo8kf23md6")
+
+
+Alternatively, you can also manually create a file at
+``~/.cloudvolume/secrets/global.daf-apis.com-cave-secret.json`` and add your
+token like so:
 
 .. code-block:: bat
 
   {
   "token: ""ghd2nfk67kdndncf5kdmsqwo8kf23md6"
   }
-
-``fafbseg`` offers a convenient function that does that for you:
-
-.. code-block:: python
-
-  >>> from fafbseg import flywire
-  >>> flywire.set_chunkedgraph_secret("ghd2nfk67kdndncf5kdmsqwo8kf23md6")
 
 That's it, you're done! You should now be able to query the FlyWire dataset.
 
@@ -59,10 +61,10 @@ FlyWire actually has three different datasets/versions:
    is close to the bsae segmentation). Anyone has access to this dataset.
 3. The "Production" dataset is where people do the actual proofreading/annotation.
    As such it is ahead of the public release dataset. To get access to the
-   production dataset you have to approved by one of the community managers.
+   production dataset you have to be approved by one of the community managers.
 
 Most functions in ``fafbseg.flywire`` accept a ``dataset`` parameter. If not
-specified it will fall back to the production dataset.
+specified it will fall back to the production dataset!
 
 .. code-block:: python
 
@@ -101,10 +103,10 @@ Understanding FlyWire root IDs
 ------------------------------
 
 Under the hood FlyWire is using chunkedgraph, an octree-like structure, to manage
-the segmentation. In brief, "supervoxels" are the atomic unit of the
+the segmentation. In brief: "supervoxels" are the atomic unit of the
 segmentation which are grouped into "root IDs". Or conversely: each root ID is a
 collection of supervoxels. Any edit to the segmentation is effectively
-just the addition or subtraction of supervoxels.
+just the addition or subtraction of supervoxels to that collection.
 
 Like supervoxels, root IDs are immutable though. So whenever edits are made
 new root IDs are generated which then represent the post-edit agglomeration of
@@ -116,7 +118,7 @@ combination of their supervoxels.
 Importantly, "outdated" root IDs are not deleted and you can still pull up e.g.
 their meshes in the FlyWire neuroglancer. This is super convenient but it comes
 with a caveat: you can find yourself with a list of root IDs that never
-co-existed which can be problematic when querying associated meta data (see
+co-existed which will be problematic when querying associated meta data (see
 paragraph below).
 
 Here are a couple ``fabseg`` functions that will help you tracking root IDs:
@@ -136,7 +138,7 @@ Materializations and the CAVE
 -----------------------------
 
 As established above, root IDs can change over time. So how do we maintain the
-link between a neuron and its meta data (e.g. its annotations, synapses, etc)
+link between a neuron and its meta data (e.g. its annotations, synapses, etc.)
 as it evolves? Principally this is done by associating each annotation with an
 x/y/z coordinate. That coordinate in turn maps to a supervoxel and we can then ask
 which root ID it currently belongs to - or belonged to if we want to go back in time.
