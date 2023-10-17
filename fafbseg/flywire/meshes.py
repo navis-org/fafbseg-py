@@ -56,10 +56,11 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
                         Whether to use threads to fetch meshes in parallel.
     lod :               int [0-3], optional
                         Level-of-detail; higher = lower resolution. Only
-                        relevant if dataset is either 'flat_630' or 'flat_571'.
-                        Defaults to 2. Note that not all meshes are available at
-                        the lowest resolution (lod 3). If that happens, we will
-                        automatically try to fetch the next lowest one.
+                        relevant if dataset is actually has multi-resolution
+                        meshes. Defaults to 2. Note that not all meshes are
+                        available at the lowest resolution (lod 3). If that
+                        happens, we will automatically try to fetch the next
+                        lowest one.
     dataset :           str | CloudVolume
                         Against which FlyWire dataset to query::
                           - "production" (currently fly_v31)
@@ -84,10 +85,6 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
     >>> m.plot3d()                                              # doctest: +SKIP
 
     """
-    if lod is not None and dataset not in ('flat_630', 'flat_571'):
-        raise ValueError('`lod` can only be used for datasets "flat_630" and '
-                         '"flat_571"')
-
     if omit_failures not in (None, True, False):
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
