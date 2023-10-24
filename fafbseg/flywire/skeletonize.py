@@ -28,16 +28,15 @@ import numpy as np
 import skeletor as sk
 import trimesh as tm
 
-from scipy.spatial import cKDTree
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 
-from .segmentation import snap_to_id, is_latest_root, supervoxels_to_roots, locs_to_supervoxels
+from .segmentation import snap_to_id, is_latest_root
 from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
-from .l2 import l2_graph
 from .annotations import get_somas
 
 SKELETON_BASE_URL = "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons"
+SKELETON_INFO = {"@type": "neuroglancer_skeletons", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0], "vertex_attributes": [{"id": "radius", "data_type": "float32", "num_components": 1}]}
 
 
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel', 'get_skeletons']
@@ -623,7 +622,8 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
 
     try:
         tn = navis.read_precomputed(f'{SKELETON_BASE_URL}/{root_id}',
-                                    datatype='skeleton')
+                                    datatype='skeleton',
+                                    info=SKELETON_INFO)
         # Force integer (navis.read_precomputed will turn Id into string)
         tn.id = root_id
         tn.units = '1nm'
