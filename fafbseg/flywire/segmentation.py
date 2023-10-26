@@ -1071,11 +1071,7 @@ def update_ids(id,
 
     if isinstance(id, (list, set, np.ndarray)):
         # Run is_latest once for all roots
-        if isinstance(timestamp, type(None)):
-            is_latest = is_latest_root(id, dataset=dataset)
-        else:
-            # No need to fetch is_latest if timestamp is specified
-            is_latest = np.full(len(id), None)
+        is_latest = is_latest_root(id, dataset=dataset, timestamp=timestamp)
 
         if isinstance(supervoxels, type(None)):
             res = [update_ids(x,
@@ -1122,75 +1118,76 @@ def update_ids(id,
         return id
 
     # Check if outdated
-    if isinstance(is_latest, type(None)) and not timestamp:
-        is_latest = is_latest_root(id, dataset=dataset)[0]
+    if isinstance(is_latest, type(None)):
+        is_latest = is_latest_root(id, dataset=dataset, timestamp=timestamp)[0]
 
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
 
-    if timestamp:
-        client = get_cave_client(dataset=dataset)
-        get_leaves = retry(client.chunkedgraph.get_leaves)
-        l2_ids_orig = get_leaves(id, stop_layer=stop_layer)
-
-        get_roots = retry(vol.get_roots)
-        roots = get_roots(l2_ids_orig, timestamp=timestamp)
-
-        # Drop zeros
-        roots = roots[roots != 0]
-
-        if not len(roots):
-            new_id = 0
-            conf = 0
-        else:
-            uni, cnt = np.unique(roots, return_counts=True)
-            new_id = uni[np.argmax(cnt)]
-            conf = cnt[np.argmax(cnt)] / len(roots)
-    elif not is_latest:
-        client = get_cave_client(dataset=dataset)
-        get_latest_roots = retry(client.chunkedgraph.get_latest_roots)
-        # This endpoint in caveclient seems to require uint64
-        pot_roots = get_latest_roots(np.uint64(id))
-
-        # Note that we're checking whether the suggested new ID is not the same
-        # as the old ID? That's because I came across a few example where the
-        # lineage graph appears disconnected (e.g. 720575940613297192), perhaps
-        # due to an issue in the operations log. The result of that is that
-        # despite the root ID being outdated, the latest node in the graph is
-        # still not the most-up-to-date ID.
-        if len(pot_roots) == 1 and pot_roots[0] != id:
-            new_id = pot_roots[0]
-            conf = 1
-        elif supervoxels:
-            try:
-                supervoxels = np.int64(supervoxels)
-            except ValueError:
-                raise ValueError(f'"{supervoxels}" does not look like a valid '
-                                 'supervoxel ID.')
-            get_root_id = retry(client.chunkedgraph.get_root_id)
-            new_id = get_root_id(supervoxels_to_roots)
-            conf = 1
-        else:
-            # Get L2 IDs for the original ID
-            # Note: we could also use higher level IDs
-            # (stop layer 3 or 4) which would be even fasters
+    if not is_latest:
+        if timestamp:
+            client = get_cave_client(dataset=dataset)
             get_leaves = retry(client.chunkedgraph.get_leaves)
             l2_ids_orig = get_leaves(id, stop_layer=stop_layer)
-            # Get new roots for these L2 IDs
-            get_roots = retry(client.chunkedgraph.get_roots)
-            new_roots = get_roots(l2_ids_orig)
 
-            # Find the most frequent new root
-            roots, counts = np.unique(new_roots, return_counts=True)
-            srt = np.argsort(counts)[::-1]
-            roots = roots[srt]
-            counts = counts[srt]
+            get_roots = retry(vol.get_roots)
+            roots = get_roots(l2_ids_orig, timestamp=timestamp)
 
-            # New ID is the most frequent ID
-            new_id = roots[0]
+            # Drop zeros
+            roots = roots[roots != 0]
 
-            # Confidence is the fraction of original L2 IDs in the new ID
-            conf = round(counts[0] / sum(counts), 2)
+            if not len(roots):
+                new_id = 0
+                conf = 0
+            else:
+                uni, cnt = np.unique(roots, return_counts=True)
+                new_id = uni[np.argmax(cnt)]
+                conf = cnt[np.argmax(cnt)] / len(roots)
+        else:
+            client = get_cave_client(dataset=dataset)
+            get_latest_roots = retry(client.chunkedgraph.get_latest_roots)
+            # This endpoint in caveclient seems to require uint64
+            pot_roots = get_latest_roots(np.uint64(id))
+
+            # Note that we're checking whether the suggested new ID is not the same
+            # as the old ID? That's because I came across a few example where the
+            # lineage graph appears disconnected (e.g. 720575940613297192), perhaps
+            # due to an issue in the operations log. The result of that is that
+            # despite the root ID being outdated, the latest node in the graph is
+            # still not the most-up-to-date ID.
+            if len(pot_roots) == 1 and pot_roots[0] != id:
+                new_id = pot_roots[0]
+                conf = 1
+            elif supervoxels:
+                try:
+                    supervoxels = np.int64(supervoxels)
+                except ValueError:
+                    raise ValueError(f'"{supervoxels}" does not look like a valid '
+                                    'supervoxel ID.')
+                get_root_id = retry(client.chunkedgraph.get_root_id)
+                new_id = get_root_id(supervoxels_to_roots)
+                conf = 1
+            else:
+                # Get L2 IDs for the original ID
+                # Note: we could also use higher level IDs
+                # (stop layer 3 or 4) which would be even fasters
+                get_leaves = retry(client.chunkedgraph.get_leaves)
+                l2_ids_orig = get_leaves(id, stop_layer=stop_layer)
+                # Get new roots for these L2 IDs
+                get_roots = retry(client.chunkedgraph.get_roots)
+                new_roots = get_roots(l2_ids_orig)
+
+                # Find the most frequent new root
+                roots, counts = np.unique(new_roots, return_counts=True)
+                srt = np.argsort(counts)[::-1]
+                roots = roots[srt]
+                counts = counts[srt]
+
+                # New ID is the most frequent ID
+                new_id = roots[0]
+
+                # Confidence is the fraction of original L2 IDs in the new ID
+                conf = round(counts[0] / sum(counts), 2)
     else:
         new_id = id
         conf = 1
