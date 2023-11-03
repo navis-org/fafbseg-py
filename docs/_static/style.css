@@ -5,7 +5,8 @@ table {
     border: none;
     border-collapse: collapse;
     border-spacing: 0;
-    font-size: 14px;
+    font-size: 15px;
+    width: 100%;
     /*table-layout: fixed;*/
 }
 
