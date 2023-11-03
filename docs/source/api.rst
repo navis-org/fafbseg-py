@@ -45,6 +45,17 @@ Fetch neurons:
     fafbseg.flywire.skeletonize_neuron
     fafbseg.flywire.skeletonize_neuron_parallel
 
+Connectivity:
+
+.. autosummary::
+    :toctree: generated/
+
+    fafbseg.flywire.synapses.fetch_adjacency
+    fafbseg.flywire.synapses.fetch_connectivity
+    fafbseg.flywire.synapses.fetch_synapses
+    fafbseg.flywire.synapses.synapse_counts
+    fafbseg.flywire.synapses.predict_transmitter
+
 L2-related functions:
 
 .. autosummary::
@@ -67,7 +78,7 @@ Misc:
     fafbseg.flywire.get_lr_position
     fafbseg.flywire.get_voxels
 
-For fetchin annotations:
+For fetching annotations:
 
 .. autosummary::
     :toctree: generated/
@@ -90,7 +101,7 @@ For interaction with the CAVE engine:
     fafbseg.flywire.upload_annotations
 
 
-Utiliy functions:
+Utility functions:
 
 .. autosummary::
     :toctree: generated/
@@ -114,6 +125,7 @@ Google segmentation
     fafbseg.google.get_mesh
     fafbseg.google.autoreview_edges
     fafbseg.google.test_edges
+
 
 Spatial transformation
 ----------------------
