@@ -1059,6 +1059,8 @@ def update_ids(id,
                              '`root` column.')
     elif isinstance(id, pd.Series):
         id = id.values
+    elif isinstance(id, pd.core.arrays.string_.StringArray):
+        id = np.asarray(id)
 
     if isinstance(timestamp, str) and timestamp.startswith('mat'):
         client = get_cave_client(dataset=dataset)
