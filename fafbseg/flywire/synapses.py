@@ -443,7 +443,10 @@ def fetch_synapses(
         columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
     if mat == "live" and filtered:
-        raise ValueError("Can't fetch filtered synapses for live query.")
+        raise ValueError("It is currently not possible to fetch filtered "
+                         "synapses in live queries. You can set `filtered=False` "
+                         "but please be aware that this will query the "
+                         "unfiltered synapse table. See docs for details.")
     elif mat == "live":
         func = partial(
             retry(client.materialize.live_query),
@@ -991,7 +994,10 @@ def fetch_connectivity(
         columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
     if mat == "live" and filtered:
-        raise ValueError("Can't fetch filtered synapses for live query.")
+        raise ValueError("It is currently not possible to fetch filtered "
+                         "synapses in live queries. You can set `filtered=False` "
+                         "but please be aware that this will query the "
+                         "unfiltered synapse table. See docs for details.")
     elif mat == "live":
         func = partial(
             retry(client.materialize.live_query),
