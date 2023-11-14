@@ -437,6 +437,7 @@ def fetch_synapses(
         "post_pt_position",
         "id",
     ]
+    sv_cols = ["pre_pt_supervoxel_id", "post_pt_supervoxel_id"]
 
     if transmitters:
         columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
@@ -449,12 +450,14 @@ def fetch_synapses(
             table=client.materialize.synapse_table,
             timestamp=dt.datetime.utcnow(),
             split_positions=True,
-            select_columns=columns,
+            # nb there is a bug in CAVE which causes empty results if we don't
+            # ask for supervoxels
+            select_columns=columns + sv_cols,
         )
     elif filtered:
         func = partial(
             retry(client.materialize.query_view),
-            view_name='valid_synapses_nt_v2_view',
+            view_name="valid_synapses_nt_v2_view",
             materialization_version=mat,
             split_positions=True,
             select_columns=columns,
@@ -478,9 +481,17 @@ def fetch_synapses(
     ):
         batch = ids[i : i + batch_size]
         if post:
-            syn.append(func(filter_in_dict=dict(post_pt_root_id=batch)))
+            syn.append(
+                func(filter_in_dict=dict(post_pt_root_id=batch)).drop(
+                    sv_cols, axis=1, errors="ignore"
+                )
+            )
         if pre:
-            syn.append(func(filter_in_dict=dict(pre_pt_root_id=batch)))
+            syn.append(
+                func(filter_in_dict=dict(pre_pt_root_id=batch)).drop(
+                    sv_cols, axis=1, errors="ignore"
+                )
+            )
 
     # Drop attrs to avoid issues when concatenating
     for df in syn:
