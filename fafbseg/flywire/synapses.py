@@ -919,8 +919,9 @@ def fetch_connectivity(
                     of salt - in particular for weak connections!
                     To get the "full" predictions see
                     :func:`fafbseg.flywire.predict_transmitter`.
-    neuropils :     str | list of str, optional
-                    Provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
+    neuropils :     bool | str | list of str, optional
+                    If True, will return edges broken down by neuropils. You can
+                    also provide neuropil (e.g. ``'AL_R'``) or list thereof (e.g.
                     ``['AL_R', 'AL_L']``) to filter connectivity to these ROIs.
                     Prefix neuropil with a tilde (e.g. ``~AL_R``) to exclude it.
     filtered :      bool
@@ -958,11 +959,14 @@ def fetch_connectivity(
     if not upstream and not downstream:
         raise ValueError("`upstream` and `downstream` must not both be False")
 
-    if style not in ('simple', 'catmaid'):
+    if style not in ("simple", "catmaid"):
         raise ValueError(f'`style` must be "simple" or "catmaid", got "{style}"')
 
-    if transmitters and (style == "catmaid"):
-        raise ValueError('`style` must be "simple" when asking for transmitters')
+    if style == 'catmaid':
+        if transmitters:
+            raise ValueError('`style` must be "simple" when asking for transmitters')
+        if neuropils is True:
+            raise ValueError('`style` must be "simple" when asking for neuropils')
 
     if isinstance(mat, str):
         if mat not in ("latest", "live", "auto"):
@@ -1077,19 +1081,20 @@ def fetch_connectivity(
 
     # Subset to the desired neuropils
     if not isinstance(neuropils, type(None)):
-        neuropils = make_iterable(neuropils)
+        syn["neuropil"] = get_synapse_areas(syn["id"].values)
+        syn["neuropil"] = syn.neuropil.astype("category")
 
-        if len(neuropils):
-            filter_in = [n for n in neuropils if not n.startswith("~")]
-            filter_out = [n[1:] for n in neuropils if n.startswith("~")]
+        if not isinstance(neuropils, bool):
+            neuropils = make_iterable(neuropils)
 
-            syn["neuropil"] = get_synapse_areas(syn["id"].values)
-            syn["neuropil"] = syn.neuropil.astype("category")
+            if len(neuropils):
+                filter_in = [n for n in neuropils if not n.startswith("~")]
+                filter_out = [n[1:] for n in neuropils if n.startswith("~")]
 
-            if filter_in:
-                syn = syn[syn.neuropil.isin(filter_in)]
-            if filter_out:
-                syn = syn[~syn.neuropil.isin(filter_out)]
+                if filter_in:
+                    syn = syn[syn.neuropil.isin(filter_in)]
+                if filter_out:
+                    syn = syn[~syn.neuropil.isin(filter_out)]
 
     # Rename some of those columns
     syn.rename(
@@ -1120,11 +1125,18 @@ def fetch_connectivity(
 
     # Turn into connectivity table
     if "weight" not in syn.columns:
-        cn_table = (
-            syn.groupby(["pre", "post"], as_index=False)
-            .size()
-            .rename({"size": "weight"}, axis=1)
-        )
+        if neuropils is True and 'neuropil' in syn.columns:
+            cn_table = (
+                syn.groupby(["pre", "post", "neuropil"], as_index=False)
+                .size()
+                .rename({"size": "weight"}, axis=1)
+            )
+        else:
+            cn_table = (
+                syn.groupby(["pre", "post"], as_index=False)
+                .size()
+                .rename({"size": "weight"}, axis=1)
+            )
     else:
         cn_table = syn
 
