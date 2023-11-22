@@ -329,8 +329,9 @@ def set_chunkedgraph_secret(token, overwrite=False, **kwargs):
     ----------
     token :     str
                 Get your token from
-                https://globalv1.flywire-daf.com/auth/api/v1/user/token.
-                https://global.daf-apis.com/auth/api/v1/user/token.
+                https://global.daf-apis.com/auth/api/v1/user/token. If that URL
+                returns an empty list ``[]`` you should visit
+                https://global.daf-apis.com/auth/api/v1/create_token instead.
     overwrite : bool
                 Whether to overwrite any existing secret.
     **kwargs
