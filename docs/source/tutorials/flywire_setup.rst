@@ -25,6 +25,9 @@ that looks something like this:
 
 That's your token!
 
+If you get an empty ``[]`` (and only then) you can visit
+https://global.daf-apis.com/auth/api/v1/create_token to generate a new token.
+
 Saving the secret
 *****************
 Your token must then be saved to a file on your computer. ``fafbseg`` offers a
