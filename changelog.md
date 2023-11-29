@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.3] - 2023-11-29
+One fix, one improvement:
+- `flywire.fetch_connectivity` now allows `neuropils=True` to return edges broken
+  down by neuropils
+- fix `flywire.predict_neuropils` with `single_pred=True`
+
+## [2.0.2] - 2023-11-14
+Various fixes and improvements:
+- `flywire.get_mesh_neuron` ignore `lod` parameter if not applicable
+- `flywire.get_skeletons` now correctly loads radii information (requires
+  up-to-date version of `navis`)
+- `flywire.update_ids` is now much faster if `timestamp` is provided
+- fix live connectivity queries
+- improved error messages for connectivity queries
+
+## [2.0.1] - 2023-10-11
+Minor fixes and improvements:
+- better handling of the CAVE secret
+- improve `flywire.search_annotations`
+
 ## [2.0.0] - 2023-10-09
 
 This is a major release with lots of under-the-hood reworks to accompany the
