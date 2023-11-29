@@ -236,7 +236,25 @@ def predict_transmitter(
 
     dict
                     If `single_pred=True`: returns dictionary with
-                    `(top_transmitter, confidence)` tuple for each query neuron.
+                    `(top_transmitter, confidence)` named tuple for each query
+                    neuron.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> # Single neuron
+    >>> flywire.predict_transmitter(720575940613941475)
+    root_id        720575940613941475
+    gaba                     0.007765
+    acetylcholine            0.936613
+    glutamate                0.009453
+    octopamine               0.014961
+    serotonin                0.001858
+    dopamine                 0.029349
+    >>> # Return only highest transmitter
+    >>> flywire.predict_transmitter(720575940613941475, single_pred=True)
+    {720575940613941475: prediction(transmitter='acetylcholine', probability=0.9366134904655998)}
+
 
     """
     # First get the synapses
@@ -273,8 +291,11 @@ def predict_transmitter(
     pred = collapse_nt_predictions(
         syn, single_pred=single_pred, weighted=weighted, id_col="pre"
     )
-
-    return pred.reindex(make_iterable(x).astype(np.int64), axis=1)
+    if not single_pred:
+        pred.columns.name = 'root_id'
+        return pred.reindex(make_iterable(x).astype(np.int64), axis=1)
+    else:
+        return pred
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
