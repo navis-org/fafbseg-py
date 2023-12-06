@@ -758,13 +758,13 @@ def _load_ngl_scenes():
 
 def _find_flywire_layer(layers, raise_not_found=True):
     """Find the FlyWire segmentation layer among given layers."""
-    for i, l in enumerate(layers):
-        if l["type"] == "segmentation_with_graph":
+    poss_names = list(utils.FLYWIRE_DATASETS.values())
+    for i, layer in enumerate(layers):
+        if layer["type"] == "segmentation_with_graph":
             return i
-        if l["type"] == "segmentation" and l["name"] in list(
-            utils.FLYWIRE_DATASETS.values()
-        ):
-            return i
+        if layer["type"] == "segmentation":
+            if (layer["name"] in poss_names or 'flywire' in layer['name']):
+                return i
     if raise_not_found:
         raise ValueError("Unable to identify flywire segmentation among layers")
 
@@ -806,7 +806,7 @@ def construct_scene(
                     requires changes to the source for the segmentation.
     layout :        "3d" | "xy-3d" | "xy"
                     Layout to show.
-    dataset :       "public" | "production" | "sandbox" | "flat_630"
+    dataset :       "public" | "production" | "sandbox" | "flat_630" | "flat_783"
                     Which segmentation dataset to use.
 
     Returns
@@ -835,7 +835,9 @@ def construct_scene(
     # Add segmentation layer
     if segmentation:
         if dataset == "flat_630":
-            scene["layers"].append(NGL_SCENES["FLYWIRE_SEG_LAYER_FLAT"])
+            scene["layers"].append(NGL_SCENES["FLYWIRE_SEG_LAYER_FLAT_630"])
+        elif dataset == "flat_783":
+            scene["layers"].append(NGL_SCENES["FLYWIRE_SEG_LAYER_FLAT_783"])
         else:
             if not base_neuroglancer:
                 scene["layers"].append(NGL_SCENES["FLYWIRE_SEG_LAYER"])

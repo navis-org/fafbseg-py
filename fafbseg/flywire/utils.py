@@ -49,10 +49,12 @@ FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentat
                 'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v26',
                 'public': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public',
                 'flat_630': 'precomputed://gs://flywire_v141_m630',
-                'flat_571': 'precomputed://gs://flywire_v141_m526'}
+                'flat_571': 'precomputed://gs://flywire_v141_m526',
+                'flat_783': 'precomputed://gs://flywire_v141_m783'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
-                 'flat_630': 'flywire_fafb_production',
+                 'flat_783': 'flywire_fafb_production',
+                 'flat_630': 'flywire_fafb_public',
                  'flat_571': 'flywire_fafb_production',
                  'sandbox': 'flywire_fafb_sandbox',
                  'public': 'flywire_fafb_public'}
@@ -190,7 +192,7 @@ def get_neuropil_volumes(neuropils):
 
 
 def get_synapse_areas(ind):
-    """Lazy-load synapse areas.
+    """Lazy-load synapse areas (neuropils).
 
     Parameters
     ----------

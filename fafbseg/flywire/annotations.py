@@ -384,7 +384,7 @@ def get_annotation_table_info(table_name: str,
     return client.annotation.get_table_metadata(table_name)
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@inject_dataset()
 def get_annotations(table_name: str,
                     materialization='latest',
                     split_positions: bool = False,
@@ -592,7 +592,7 @@ def upload_annotations(table_name: str,
     return resp
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@inject_dataset()
 def get_somas(x=None,
               materialization='auto',
               raise_missing=True,
@@ -919,14 +919,13 @@ def search_annotations(x,
     Returns
     -------
     pandas.DataFrame
-                If `x` is root IDs
-                Pandas DataFrame with annotations matching ``x``. Coordinates
+                DataFrame with annotations matching ``x``. Coordinates
                 are in 4x4x40nm voxel space.
 
     See Also
     --------
     :func:`~fafbseg.flywire.get_hierarchical_annotations`
-                Use this to load get a table with all hierarchical annotations.
+                Use this to load a table with all hierarchical annotations.
     :func:`~fafbseg.flywire.search_community_annotations`
                 Use this to search the community annotations.
 
@@ -1264,7 +1263,7 @@ def search_community_annotations(x,
     Parameter
     ---------
     x :         str | int | Neuron/List | list of ints | None
-                Term (str) or root ID(s) to search for. Set to `None` to fetch
+                Term (str) or root ID(s) to search for. Set to ``None`` to fetch
                 all annotations.
     exact :     bool
                 Whether term must be an exact match. For example, if
@@ -1290,16 +1289,15 @@ def search_community_annotations(x,
     Returns
     -------
     pandas.DataFrame
-                If `x` is root IDs
-                Pandas DataFrame with annotations matching ``x``. Coordinates
+                DataFrame with annotations matching ``x``. Coordinates
                 are in 4x4x40nm voxel space.
 
     See Also
     --------
     :func:`~fafbseg.flywire.search_annotations`
-                Use this to search through the hiearchical annotations.
+                Use this to search through the hierarchical annotations.
     :func:`~fafbseg.flywire.get_hierarchical_annotations`
-                Use this to load get a table with all hierarchical annotations.
+                Use this to load a table with all hierarchical annotations.
 
     Examples
     --------
@@ -1369,7 +1367,7 @@ def search_community_annotations(x,
                                  split_positions=True,
                                  materialization=materialization)
 
-    # If no query term, we'll just return the whole
+    # If no query term, we'll just return the whole table
     if x is None:
         return ct
 

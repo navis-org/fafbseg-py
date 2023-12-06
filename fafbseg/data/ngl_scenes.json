@@ -65,14 +65,14 @@
                 },
                 "enableDefaultSubsources": false
             },
-            "precomputed://https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/ann/flytable-info"
+            "precomputed://https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/dynann/flytable-info"
         ],
         "tab": "segments",
         "segments": [],
         "colorSeed": 45225755,
         "name": "fly_v31"
     },
-    "FLYWIRE_SEG_LAYER_FLAT": {
+    "FLYWIRE_SEG_LAYER_FLAT_630": {
         "type": "segmentation",
         "source": {
             "url": "precomputed://gs://flywire_v141_m630",
@@ -87,6 +87,22 @@
         "meshRenderScale": 315182315218263.7,
         "colorSeed": 963379830,
         "name": "flywire_v141_m630"
+    },
+    "FLYWIRE_SEG_LAYER_FLAT_783": {
+        "type": "segmentation",
+        "source": {
+            "url": "precomputed://gs://flywire_v141_m783",
+            "subsources": {
+                "default": true,
+                "bounds": true,
+                "mesh": true
+            },
+            "enableDefaultSubsources": false
+        },
+        "tab": "segments",
+        "meshRenderScale": 315182315218263.7,
+        "colorSeed": 963379830,
+        "name": "flywire_v141_m783"
     },
     "FLYWIRE_BRAIN_LAYER": {
         "source": "precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",

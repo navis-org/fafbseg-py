@@ -35,7 +35,8 @@ from .segmentation import snap_to_id, is_latest_root
 from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
 from .annotations import get_somas
 
-SKELETON_BASE_URL = "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons"
+SKELETON_BASE_URL = {'630': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_630",
+                     '783': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_783",}
 SKELETON_INFO = {"@type": "neuroglancer_skeletons", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0], "vertex_attributes": [{"id": "radius", "data_type": "float32", "num_components": 1}]}
 
 
@@ -542,18 +543,18 @@ def _worker_wrapper(x):
 
 
 def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
-                  progress=True):
+                  dataset=783, progress=True):
     """Fetch precomputed skeletons.
 
-    Currently this only works for 630 roots (i.e. the first public release
-    of FlyWire).
+    Currently this only works for proofread 630 and 783 roots (i.e. the first
+    two public releases of FlyWire).
 
     Parameters
     ----------
     root_id  :          int | list of ints
                         Root ID(s) of the FlyWire neuron(s) you want to
                         skeletonize. Must be root IDs that existed at
-                        materialization 630.
+                        materialization 630 or 783 (see dataset parameter).
     omit_failures :     bool, optional
                         Determine behaviour when skeleton generation fails
                         (e.g. if the neuron has only a single chunk):
@@ -561,6 +562,8 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
                          - ``True`` will skip the offending neuron (might result
                            in an empty ``NeuronList``)
                          - ``False`` will return an empty ``TreeNeuron``
+    dataset :           630 | 783
+                        Which dataset to query.
     progress :          bool
                         Whether to show a progress bar.
     max_threads :       int
@@ -577,6 +580,10 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     >>> n = flywire.fetch_skeleton(720575940614131061)
 
     """
+    if str(dataset) not in SKELETON_BASE_URL:
+        raise ValueError('Currently we only provide precomputed skeletons for the '
+                         '630 and 783 data releases.')
+
     if omit_failures not in (None, True, False):
         raise ValueError('`omit_failures` must be either None, True or False. '
                          f'Got "{omit_failures}".')
@@ -584,14 +591,14 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     if navis.utils.is_iterable(root_id):
         root_id = np.asarray(root_id, dtype=np.int64)
 
-        il = is_latest_root(root_id, timestamp='mat_630')
+        il = is_latest_root(root_id, timestamp=f'mat_{dataset}')
         if np.any(~il):
-            msg = (f'{(~il).sum()} root ID(s) did not exists at materialization 630')
+            msg = (f'{(~il).sum()} root ID(s) did not exists at materialization {dataset}')
             if omit_failures is None:
                 raise ValueError(msg)
             navis.config.logger.warning(msg)
 
-        get_skels = partial(get_skeletons, omit_failures=omit_failures)
+        get_skels = partial(get_skeletons, omit_failures=omit_failures, dataset=dataset)
         if (max_threads > 1) and (len(root_id) > 1):
             with ThreadPoolExecutor(max_workers=max_threads) as pool:
                 futures = pool.map(get_skels, root_id)
@@ -621,7 +628,7 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     root_id = np.int64(root_id)
 
     try:
-        tn = navis.read_precomputed(f'{SKELETON_BASE_URL}/{root_id}',
+        tn = navis.read_precomputed(f'{SKELETON_BASE_URL[str(dataset)]}/{root_id}',
                                     datatype='skeleton',
                                     info=SKELETON_INFO)
         # Force integer (navis.read_precomputed will turn Id into string)
