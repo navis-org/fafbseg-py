@@ -20,4 +20,5 @@ FlyWire
    tutorials/flywire_connectivity
    tutorials/hemibrain_nblast
    tutorials/transforming
+   tutorials/flywire_mirror
 
