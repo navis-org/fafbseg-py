@@ -141,7 +141,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
         n_syn = {n: n_pre[n] + n_post[n] for n in G.nodes}
         nx.set_node_attributes(G, n_pre, name='presynapses')
         nx.set_node_attributes(G, n_post, name='postsynapses')
-        nx.set_node_attributes(G, n_post, name='synapses')
+        nx.set_node_attributes(G, n_syn, name='synapses')
 
     if proofreading_status:
         from .annotations import get_annotations
