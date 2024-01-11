@@ -72,7 +72,7 @@ def get_synapse_counts(
     by_neuropil :   bool
                     If True, returned DataFrame will contain a break down by
                     neuropil.
-    mat :           int | str, optional
+    materialization : int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
                        materialization version at which all the query IDs existed
@@ -138,7 +138,7 @@ def get_synapse_counts(
         attach=False,
         min_score=min_score,
         transmitters=True,
-        mat=mat,
+        materialization=materialization,
         neuropils=by_neuropil,
         filtered=filtered,
         batch_size=batch_size,
@@ -188,7 +188,7 @@ def get_transmitter_predictions(
     x,
     single_pred=False,
     weighted=True,
-    mat="auto",
+    materialization="auto",
     filtered=True,
     neuropils=None,
     batch_size=10,
@@ -218,7 +218,7 @@ def get_transmitter_predictions(
     weighted :      bool
                     If True, will weight predictions based on confidence: higher
                     cleft score = more weight.
-    mat :           int | str, optional
+    materialization : int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
                        materialization version at which all the query IDs existed
@@ -290,7 +290,7 @@ def get_transmitter_predictions(
         attach=False,
         min_score=None,
         transmitters=True,
-        mat=mat,
+        materialization=materialization,
         neuropils=neuropils is not None,
         filtered=filtered,
         batch_size=batch_size,
@@ -335,7 +335,7 @@ def get_synapses(
     transmitters=False,
     neuropils=False,
     clean=True,
-    mat="auto",
+    materialization="auto",
     batch_size=10,
     *,
     dataset=None,
@@ -387,7 +387,7 @@ def get_synapses(
                     lead to truncated tables: currently individual queries can
                     not return more than 500_000 rows and you will see a warning
                     if that limit is exceeded.
-    mat :           int | str, optional
+    materialization : int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
                        materialization version at which all the query IDs existed
@@ -452,14 +452,16 @@ def get_synapses(
         raise ValueError('Unable to query unfiltered synapses for the public '
                          'release data.')
 
-    if isinstance(mat, str):
-        if mat not in ("latest", "live", "auto"):
+    if isinstance(materialization, str):
+        if materialization not in ("latest", "live", "auto"):
             raise ValueError(
-                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
+                '`materialization` must be "auto", "latest", "live" or '
+                f'integer, got "{materialization}"'
             )
-    elif not isinstance(mat, int):
+    elif not isinstance(materialization, int):
         raise ValueError(
-            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+            '`materialization` must be "auto", "latest", "live" or integer, '
+            f'got "{type(materialization)}"'
         )
 
     if (min_score is not None) and (min_score < 50) and filtered:
@@ -476,13 +478,13 @@ def get_synapses(
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == "latest":
-        mat = client.materialize.most_recent_version()
+    if materialization == "latest":
+        materialization = client.materialize.most_recent_version()
 
-    if mat == "auto":
-        mat = find_mat_version(ids, dataset=dataset, verbose=progress)
+    if materialization == "auto":
+        materialization = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
-        _check_ids(ids, mat=mat, dataset=dataset)
+        _check_ids(ids, materialization=materialization, dataset=dataset)
 
     columns = [
         "pre_pt_root_id",
@@ -497,12 +499,14 @@ def get_synapses(
     if transmitters:
         columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
-    if mat == "live" and filtered:
-        raise ValueError("It is currently not possible to fetch filtered "
-                         "synapses in live queries. You can set `filtered=False` "
-                         "but please be aware that this will query the "
-                         "unfiltered synapse table. See docs for details.")
-    elif mat == "live":
+    if materialization == "live" and filtered:
+        raise ValueError(
+            "It is currently not possible to fetch filtered "
+            "synapses in live queries. You can set `filtered=False` "
+            "but please be aware that this will query the "
+            "unfiltered synapse table. See docs for details."
+        )
+    elif materialization == "live":
         func = partial(
             retry(client.materialize.live_query),
             table=client.materialize.synapse_table,
@@ -516,7 +520,7 @@ def get_synapses(
         func = partial(
             retry(client.materialize.query_view),
             view_name="valid_synapses_nt_v2_view",
-            materialization_version=mat,
+            materialization_version=materialization,
             split_positions=True,
             select_columns=columns,
         )
@@ -525,7 +529,7 @@ def get_synapses(
             retry(client.materialize.query_table),
             table=client.materialize.synapse_table,
             split_positions=True,
-            materialization_version=mat,
+            materialization_version=materialization,
             select_columns=columns,
         )
 
@@ -658,7 +662,7 @@ def get_synapses(
 
             n.connectors = connectors
 
-    syn.attrs["materialization"] = mat
+    syn.attrs["materialization"] = materialization
 
     return syn
 
@@ -668,7 +672,7 @@ def get_synapses(
 def get_adjacency(
     sources,
     targets=None,
-    mat="auto",
+    materialization="auto",
     neuropils=None,
     filtered=True,
     min_score=None,
@@ -722,7 +726,7 @@ def get_adjacency(
                     not return more than 200_000 connections. If you see a
                     warning that this limit has been exceeded, decrease the
                     batch size!
-    mat :           int | str, optional
+    materialization : int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
                        materialization version at which all the query IDs existed
@@ -764,18 +768,21 @@ def get_adjacency(
     if isinstance(targets, type(None)):
         targets = sources
 
-    if dataset in ('public', ) and not filtered:
-        raise ValueError('Unable to query unfiltered synapses for the public '
-                         'release data.')
-
-    if isinstance(mat, str):
-        if mat not in ("latest", "live", "auto"):
-            raise ValueError(
-                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
-            )
-    elif not isinstance(mat, int):
+    if dataset in ("public",) and not filtered:
         raise ValueError(
-            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+            "Unable to query unfiltered synapses for the public " "release data."
+        )
+
+    if isinstance(materialization, str):
+        if materialization not in ("latest", "live", "auto"):
+            raise ValueError(
+                '`materialization` must be "auto", "latest", "live" or '
+                f'integer, got "{materialization}"'
+            )
+    elif not isinstance(materialization, int):
+        raise ValueError(
+            '`materialization` must be "auto", "latest", "live" or integer, '
+            f'got "{type(materialization)}"'
         )
 
     # Parse root IDs
@@ -786,17 +793,17 @@ def get_adjacency(
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == "latest":
-        mat = client.materialize.most_recent_version()
+    if materialization == "latest":
+        materialization = client.materialize.most_recent_version()
 
-    if mat == "auto":
-        mat = find_mat_version(both, dataset=dataset, verbose=progress)
+    if materialization == "auto":
+        materialization = find_mat_version(both, dataset=dataset, verbose=progress)
     else:
-        _check_ids(both, mat=mat, dataset=dataset)
+        _check_ids(both, materialization=materialization, dataset=dataset)
 
     columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"]
 
-    if mat == "live":
+    if materialization == "live":
         func = partial(
             retry(client.materialize.live_query),
             table=client.materialize.synapse_table,
@@ -804,7 +811,9 @@ def get_adjacency(
             select_columns=columns,
         )
     elif filtered:
-        has_view = "valid_connection_v2" in client.materialize.get_views(mat)
+        has_view = "valid_connection_v2" in client.materialize.get_views(
+            materialization
+        )
         no_np = isinstance(neuropils, type(None))
         no_score_thresh = not min_score or min_score == 50
         if has_view & no_np & no_score_thresh:
@@ -813,7 +822,7 @@ def get_adjacency(
                 retry(client.materialize.query_view),
                 view_name="valid_connection_v2",
                 select_columns=columns,
-                materialization_version=mat,
+                materialization_version=materialization,
             )
             filtered = False  # Set to false since we don't need the join
         else:
@@ -823,14 +832,14 @@ def get_adjacency(
                     [client.materialize.synapse_table, "id"],
                     ["valid_synapses_nt_v2", "target_id"],
                 ],
-                materialization_version=mat,
+                materialization_version=materialization,
                 select_columns={client.materialize.synapse_table: columns},
             )
     else:
         func = partial(
             retry(client.materialize.query_table),
             table=client.materialize.synapse_table,
-            materialization_version=mat,
+            materialization_version=materialization,
             select_columns=columns,
         )
 
@@ -946,10 +955,10 @@ def get_connectivity(
     filtered=True,
     min_score=None,
     batch_size=30,
-    mat="auto",
+    materialization="auto",
     *,
     progress=True,
-    dataset=None
+    dataset=None,
 ):
     """Fetch Buhmann et al. (2019) connectivity for given neuron(s).
 
@@ -1015,7 +1024,7 @@ def get_connectivity(
                     lead to truncated tables: currently individual queries can
                     not return more than 200_000 rows and you will see a warning
                     if that limit is exceeded.
-    mat :           int | str, optional
+    materialization : int | str, optional
                     Which materialization to query:
                      - 'auto' (default) tries to find the most recent
                        materialization version at which the query IDs co-exist
@@ -1061,20 +1070,22 @@ def get_connectivity(
     if style not in ("simple", "catmaid"):
         raise ValueError(f'`style` must be "simple" or "catmaid", got "{style}"')
 
-    if style == 'catmaid':
+    if style == "catmaid":
         if transmitters:
             raise ValueError('`style` must be "simple" when asking for transmitters')
         if neuropils is True:
             raise ValueError('`style` must be "simple" when asking for neuropils')
 
-    if isinstance(mat, str):
-        if mat not in ("latest", "live", "auto"):
+    if isinstance(materialization, str):
+        if materialization not in ("latest", "live", "auto"):
             raise ValueError(
-                '`mat` must be "auto", "latest", "live" or ' f'integer, got "{mat}"'
+                '`materialization` must be "auto", "latest", "live" or '
+                f'integer, got "{materialization}"'
             )
-    elif not isinstance(mat, int):
+    elif not isinstance(materialization, int):
         raise ValueError(
-            '`mat` must be "auto", "latest", "live" or integer, ' f'got "{type(mat)}"'
+            '`materialization` must be "auto", "latest", "live" or integer, '
+            f'got "{type(materialization)}"'
         )
 
     # Parse root IDs
@@ -1083,25 +1094,27 @@ def get_connectivity(
     client = get_cave_client(dataset=dataset)
 
     # Check if IDs existed at this materialization
-    if mat == "latest":
-        mat = client.materialize.most_recent_version()
+    if materialization == "latest":
+        materialization = client.materialize.most_recent_version()
 
-    if mat == "auto":
-        mat = find_mat_version(ids, dataset=dataset, verbose=progress)
+    if materialization == "auto":
+        materialization = find_mat_version(ids, dataset=dataset, verbose=progress)
     else:
-        _check_ids(ids, mat=mat, dataset=dataset)
+        _check_ids(ids, materialization=materialization, dataset=dataset)
 
     columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"]
 
     if transmitters:
         columns += ["gaba", "ach", "glut", "oct", "ser", "da"]
 
-    if mat == "live" and filtered:
-        raise ValueError("It is currently not possible to fetch filtered "
-                         "synapses in live queries. You can set `filtered=False` "
-                         "but please be aware that this will query the "
-                         "unfiltered synapse table. See docs for details.")
-    elif mat == "live":
+    if materialization == "live" and filtered:
+        raise ValueError(
+            "It is currently not possible to fetch filtered "
+            "synapses in live queries. You can set `filtered=False` "
+            "but please be aware that this will query the "
+            "unfiltered synapse table. See docs for details."
+        )
+    elif materialization == "live":
         func = partial(
             retry(client.materialize.live_query),
             table=client.materialize.synapse_table,
@@ -1109,7 +1122,9 @@ def get_connectivity(
             select_columns=columns,
         )
     elif filtered:
-        has_view = "valid_connection_v2" in client.materialize.get_views(mat)
+        has_view = "valid_connection_v2" in client.materialize.get_views(
+            materialization
+        )
         no_np = isinstance(neuropils, type(None))
         no_score_thresh = (not min_score) or (min_score == 50)
         if has_view & no_np & no_score_thresh:
@@ -1120,7 +1135,7 @@ def get_connectivity(
                 retry(client.materialize.query_view),
                 view_name="valid_connection_v2",
                 select_columns=columns,
-                materialization_version=mat,
+                materialization_version=materialization,
             )
             filtered = False  # Set to false since we don't need the join
         else:
@@ -1130,14 +1145,14 @@ def get_connectivity(
                     [client.materialize.synapse_table, "id"],
                     ["valid_synapses_nt_v2", "target_id"],
                 ],
-                materialization_version=mat,
+                materialization_version=materialization,
                 select_columns={client.materialize.synapse_table: columns},
             )
     else:
         func = partial(
             retry(client.materialize.query_table),
             table=client.materialize.synapse_table,
-            materialization_version=mat,
+            materialization_version=materialization,
             select_columns=columns,
         )
 
@@ -1242,7 +1257,7 @@ def get_connectivity(
     # Filter to proofread neurons only
     if proofread_only:
         all_ids = np.unique(cn_table[["pre", "post"]].values.flatten())
-        is_pr = all_ids[is_proofread(all_ids, materialization=mat)]
+        is_pr = all_ids[is_proofread(all_ids, materialization=materialization)]
 
         # Make sure we don't drop our query neurons
         keep = np.append(is_pr, ids)
@@ -1264,7 +1279,7 @@ def get_connectivity(
         cn_table["pred_nt"] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
         cn_table["pred_conf"] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
 
-    cn_table.attrs["materialization"] = mat
+    cn_table.attrs["materialization"] = materialization
 
     return cn_table
 
@@ -1444,13 +1459,13 @@ def synapse_contributions(x, *, dataset=None):
     )
 
 
-def _check_ids(ids, mat, dataset="production"):
+def _check_ids(ids, materialization, dataset="production"):
     """Check IDs whether they existed at given materialization.
 
     Parameters
     ----------
-    ids :       iterable
-    mat :       "live" | "latest" | int
+    ids :               iterable
+    materialization :   "live" | "latest" | int
 
     Returns
     -------
@@ -1466,7 +1481,7 @@ def _check_ids(ids, mat, dataset="production"):
     _get_root_timestamps = retry(client.chunkedgraph.get_root_timestamps)
 
     # Check if any of these root IDs are outdated
-    if mat == "live":
+    if materialization == "live":
         not_latest = ids[~_is_latest_roots(ids)]
         if any(not_latest):
             print(
@@ -1474,20 +1489,20 @@ def _check_ids(ids, mat, dataset="production"):
                 "and live connectivity might be inaccurrate."
             )
     else:
-        if mat == "latest":
-            mat = client.materialize.most_recent_version()
+        if materialization == "latest":
+            materialization = client.materialize.most_recent_version()
 
         # Is the root ID more recent than the materialization?
-        ts_m = _get_timestamp(mat)
+        ts_m = _get_timestamp(materialization)
         ts_r = _get_root_timestamps(ids)
         too_recent = ids[ts_r > ts_m]
         if any(too_recent):
             print(
                 "Some root IDs are more recent than materialization "
-                f"{mat} and synapse/connectivity data will be "
+                f"{materialization} and synapse/connectivity data will be "
                 f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
                 "You can either try mapping these IDs back in time or use"
-                '`mat="auto"`.'
+                '`materialization="auto"`.'
             )
 
         # Those that aren't too young might be too old
@@ -1501,7 +1516,7 @@ def _check_ids(ids, mat, dataset="production"):
             if any(not_latest):
                 print(
                     "Some root IDs were already outdated at materialization "
-                    f"{mat} and synapse/connectivity data will be "
+                    f"{materialization} and synapse/connectivity data will be "
                     f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
                     "Try updating the root IDs using `flywire.update_ids` "
                     "or `flywire.supervoxels_to_roots` if you have supervoxel IDs,"
