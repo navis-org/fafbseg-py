@@ -73,6 +73,49 @@ vol_names = None
 
 # The default dataset
 DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'production')
+# Some useful data types
+INT_DTYPES = (np.int32, np.int64, int, np.uint32, np.uint64)
+FLOAT_DTYPES = (np.float32, np.float64, float)
+STR_DTYPES = (str, np.str_)
+
+
+def match_dtype(x, target_dt):
+    """Make sure that input has same dtype as target.
+
+    This function only maches the broad data type (float, integer, string), not
+    e.g. the exact precision.
+
+    Parameters
+    ----------
+    x
+                Input to be converted.
+    target_dt
+                The target data type.
+
+    Returns
+    -------
+    x :
+                Input with matching dtype. Lists and tuples will be converted
+                to numpy arrays.
+
+    """
+    if isinstance(x, (list, tuple, np.ndarray)):
+        x = np.asarray(x)
+        if target_dt in INT_DTYPES:
+            x = x.astype(np.int64)
+        elif target_dt in FLOAT_DTYPES:
+            x = x.astype(np.float64)
+        elif target_dt in STR_DTYPES:
+            x = x.astype(str)
+    else:
+        if target_dt in INT_DTYPES:
+            x = np.int64(x)
+        elif target_dt in FLOAT_DTYPES:
+            x = float(x)
+        elif target_dt in STR_DTYPES:
+            x = str(x)
+
+    return x
 
 
 def set_default_dataset(dataset):

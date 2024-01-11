@@ -26,19 +26,29 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .l2 import get_l2_graph
 from .synapses import get_synapses
 from .utils import get_cloudvolume, inject_dataset
+from .annotations import parse_neuroncriteria
 
-__all__ = ['get_mesh_neuron']
+__all__ = ["get_mesh_neuron"]
 
 
+@parse_neuroncriteria()
 @inject_dataset()
-def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
-                    lod=None, progress=True, *, dataset=None):
+def get_mesh_neuron(
+    id,
+    with_synapses=False,
+    omit_failures=None,
+    threads=5,
+    lod=None,
+    progress=True,
+    *,
+    dataset=None,
+):
     """Fetch FlyWire neuron as navis.MeshNeuron.
 
     Parameters
     ----------
-    id  :               int | list of int
-                        Segment ID(s) to fetch meshes for.
+    id  :               int | list of int | NeuronCriteria
+                        Root ID(s) to fetch meshes for.
     with_synapses :     bool
                         If True, will also load a connector table with
                         synapse predicted by Buhmann et al. (2020). This uses

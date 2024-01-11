@@ -32,19 +32,21 @@ import trimesh as tm
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+from .annotations import parse_neuroncriteria
 from .utils import get_cloudvolume, get_cave_client, retry, inject_dataset
 
 __all__ = ['get_l2_skeleton', 'get_l2_dotprops', 'get_l2_graph', 'get_l2_info',
            'find_anchor_loc']
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     """Fetch basic info for given neuron(s) using the L2 cache.
 
     Parameters
     ----------
-    root_ids  :     int | list of ints
+    root_ids  :     int | list of ints | NeuronCriteria
                     FlyWire root ID(s) for which to fetch L2 infos.
     progress :      bool
                     Whether to show a progress bar.
@@ -142,13 +144,14 @@ def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     return info_df
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     """Fetch info for given L2 chunks.
 
     Parameters
     ----------
-    l2_ids  :   int | list of ints
+    l2_ids  :   int | list of ints | NeuronCriteria
                 FlyWire root ID(s) for which to fetch L2 infos.
     progress :  bool
                 Whether to show a progress bar.
@@ -208,6 +211,7 @@ def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     return info_df
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def find_anchor_loc(root_ids,
                     validate=False,
@@ -222,7 +226,7 @@ def find_anchor_loc(root_ids,
 
     Parameters
     ----------
-    root_ids :      int | list thereof
+    root_ids :      int | list thereof | NeuronCriteria
                     Root ID(s) to get coordinate for.
     validate :      bool
                     If True, will validate the x/y/z position. I have yet to
@@ -324,6 +328,7 @@ def find_anchor_loc(root_ids,
     return df
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_l2_graph(root_ids, progress=True, *, dataset=None):
     """Fetch L2 graph(s).
@@ -383,6 +388,7 @@ def get_l2_graph(root_ids, progress=True, *, dataset=None):
     return G
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                 omit_failures=None, progress=True, max_threads=4,
@@ -391,7 +397,7 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
     Parameters
     ----------
-    root_id  :      int | list of ints
+    root_id  :      int | list of ints | NeuronCriteria
                     Root ID(s) of the FlyWire neuron(s) you want to
                     skeletonize.
     refine :        bool
@@ -604,6 +610,7 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     return tn
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
                 progress=True, max_threads=10, *, dataset=None, **kwargs):
@@ -614,7 +621,7 @@ def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
     Parameters
     ----------
-    root_ids  :     int | list of ints
+    root_ids  :     int | list of ints | NeuronCriteria
                     Root ID(s) of the FlyWire neuron(s) you want to
                     dotprops for.
     min_size :      int, optional
@@ -745,7 +752,7 @@ def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
         if not len(this_info):
             msg = ('Unable to create L2 dotprops: none of the L2 chunks for '
                    f'root ID {root} are present in the L2 cache.')
-            if omit_failures == None:
+            if omit_failures is None:
                 raise ValueError(msg)
 
             if not omit_failures:

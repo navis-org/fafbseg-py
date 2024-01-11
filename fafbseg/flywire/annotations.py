@@ -16,12 +16,21 @@
 """Functions to fetch and set annotations in FlyWire using the annotation
 framework and the materialization engine."""
 
+import os
 import navis
 import requests
+import functools
+import warnings
 
 import datetime as dt
 import numpy as np
 import pandas as pd
+
+# Catch some stupid warning about installing python-Levenshtein
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore')
+    import fuzzywuzzy as fw
+    import fuzzywuzzy.process
 
 from requests_futures.sessions import FuturesSession
 from typing import Optional
@@ -29,29 +38,101 @@ from functools import lru_cache
 from pathlib import Path
 
 from ..utils import make_iterable, download_cache_file, CACHE_DIR
-from .utils import (get_cave_client, retry, get_chunkedgraph_secret, find_mat_version, inject_dataset, _is_valid_version)
-from .segmentation import locs_to_segments, supervoxels_to_roots, is_latest_root
+from .utils import (get_cave_client, retry, get_chunkedgraph_secret,
+                    find_mat_version, inject_dataset, _is_valid_version,
+                    match_dtype)
+from . import segmentation  # this is to avoid circular imports
 
 ANNOT_REPO_URL = "https://api.github.com/repos/flyconnectome/flywire_annotations"
-FLYWIRE_ANNOT_URL = "https://github.com/flyconnectome/flywire_annotations/raw/main/supplemental_files/Supplemental_file1_annotations.tsv"
+FLYWIRE_ANNOT_URL = "https://github.com/flyconnectome/flywire_annotations/raw/{commit}/supplemental_files/Supplemental_file1_neuron_annotations.tsv"
+FLYWIRE_ANNOT_URL_OLD = "https://github.com/flyconnectome/flywire_annotations/raw/{commit}/supplemental_files/Supplemental_file1_annotations.tsv"
+AVAILABLE_FIELDS = [
+                    #'supervoxel_id',  # skipping this because it may imply that we can map any supervoxel
+                    'root_id',
+                    #'pos_x', 'pos_y', 'pos_z', 'soma_x',  # skipping because numeric
+                    #'soma_y', 'soma_z', 'nucleus_id',  # skipping because numeric
+                    'flow', 'super_class', 'cell_class',
+                    'cell_sub_class', 'cell_type', 'hemibrain_type', 'ito_lee_hemilineage',
+                    'hartenstein_hemilineage', 'morphology_group',
+                    'top_nt', 'known_nt', # 'top_nt_conf',  # skipping because numeric
+                    'side', 'nerve', 'fbbt_id', 'status'] \
+                    + ['type', 'community_annotation']  # these are special hard-coded cases
 
 __all__ = ['get_somas',
            'get_materialization_versions',
-           'get_annotations',
+           'get_cave_table',
            'get_user_information',
-           'list_annotation_tables',
-           'create_annotation_table',
-           'get_annotation_table_info',
+           'list_cave_tables',
+           'create_cave_table',
+           'get_cave_table_info',
            'delete_annotations', 'upload_annotations',
            'is_proofread',
            'search_community_annotations', 'search_annotations',
-           'get_hierarchical_annotations']
+           'get_hierarchical_annotations',
+           'NeuronCriteria',
+           'set_default_annotation_version']
 
 
 PR_TABLE = {}
 COMMUNITY_ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_tables = None
 _user_information = {}
+
+# The default annotation version
+DEFAULT_ANNOTATION_VERSION = os.environ.get('FLYWIRE_DEFAULT_ANNOTATION_VERSION', None)
+
+
+def parse_neuroncriteria(allow_all=True, allow_empty=False):
+    """Parse all NeuronCriteria arguments into an array of root IDs.
+
+    Parameters
+    ----------
+    allow_all :     bool
+                    When providing no criteria, _all_ neurons in the annotation
+                    table are returned. This flag determines whether the function
+                    allows that or whether it will raise an error.
+    allow_empty :   bool
+                    Whether to allow the NeuronCriteria to not match any neurons.
+    """
+    def outer(func):
+        @functools.wraps(func)
+        def inner(*args, **kwargs):
+            # Search through *args for NeuronCriteria
+            for i, nc in enumerate(args):
+                if isinstance(nc, NeuronCriteria):
+                    # First check if we're allowed to query all neurons
+                    if nc.is_empty and not allow_empty:
+                        raise ValueError('NeuronCriteria must contain filter conditions.')
+                    # See if materialization is defined in the function's signature
+                    # but not in the NeuronCriteria
+                    if nc.materialization in ('auto', None):
+                        if kwargs.get("materialization") not in ('auto', None):
+                            nc.materialization = kwargs['materialization']
+                    # TODO: we should probably also check for clashes, e.g. if
+                    # flywire.get_synapses(NC(type='ps009', materialization=123), materialiation=456)
+                    args = list(args)
+                    args[i] = nc.get_roots()
+            # Search through **kwargs for NeuronCriteria
+            for key, nc in kwargs.items():
+                if isinstance(nc, NeuronCriteria):
+                    # First check if we're allowed to query all neurons
+                    if nc.is_empty and not allow_empty:
+                        raise ValueError('NeuronCriteria must contain filter conditions.')
+                    # See if materialization is defined in the function's signature
+                    # but not in the NeuronCriteria
+                    if nc.materialization in ('auto', None):
+                        if kwargs.get("materialization") not in ('auto', None):
+                            nc.materialization = kwargs['materialization']
+                    kwargs[key] = nc.get_roots()
+            try:
+                return func(*args, **kwargs)
+            except NoMatchesError as e:
+                if allow_empty:
+                    return np.array([], dtype=np.int64)
+                else:
+                    raise e
+        return inner
+    return outer
 
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
@@ -94,7 +175,7 @@ def is_proofread(x, materialization='auto', cache=True, validate=True, *,
 
     # Check if any of the roots are outdated -> can't check those
     if validate and materialization == 'live':
-        il = is_latest_root(x)
+        il = segmentation.is_latest_root(x)
         if any(~il):
             print("At least some root ID(s) outdated and will therefore show up as "
                   f"not proofread: {x[~il]}")
@@ -182,7 +263,7 @@ def is_materialized_root(id, materialization='latest', *, dataset=None):
 
     # Check which of the old-enough roots are still up-to-date
     if any(older):
-        il = is_latest_root(id[older])
+        il = segmentation.is_latest_root(id[older])
 
         if any(il):
             is_mat[np.where(older)[0][il]] = True
@@ -244,7 +325,7 @@ def get_materialization_versions(*, dataset=None):
 
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
-def create_annotation_table(name: str,
+def create_cave_table(name: str,
                             schema: str,
                             description: str,
                             voxel_resolution=[1, 1, 1],
@@ -328,7 +409,7 @@ def create_annotation_table(name: str,
 
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
-def list_annotation_tables(*, dataset=None):
+def list_cave_tables(*, dataset=None):
     """Fetch available annotation tables.
 
     Parameters
@@ -359,7 +440,7 @@ def list_annotation_tables(*, dataset=None):
 
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
-def get_annotation_table_info(table_name: str,
+def get_cave_table_info(table_name: str,
                               *,
                               dataset=None):
     """Get info for given table.
@@ -385,14 +466,14 @@ def get_annotation_table_info(table_name: str,
 
 
 @inject_dataset()
-def get_annotations(table_name: str,
-                    materialization='latest',
-                    split_positions: bool = False,
-                    drop_invalid: bool = True,
-                    *,
-                    dataset: Optional[str] = None,
-                    **filters):
-    """Get annotations from given table.
+def get_cave_table(table_name: str,
+                   materialization='latest',
+                   split_positions: bool = False,
+                   drop_invalid: bool = True,
+                   *,
+                   dataset: Optional[str] = None,
+                   **filters):
+    """Get annotations from given CAVE table.
 
     Parameters
     ----------
@@ -425,12 +506,12 @@ def get_annotations(table_name: str,
 
     """
     if isinstance(materialization, (np.ndarray, tuple, list)):
-        return pd.concat([get_annotations(table_name,
-                                          materialization=v,
-                                          split_positions=split_positions,
-                                          drop_invalid=drop_invalid,
-                                          dataset=dataset,
-                                          **filters) for v in materialization],
+        return pd.concat([get_cave_table(table_name,
+                                         materialization=v,
+                                         split_positions=split_positions,
+                                         drop_invalid=drop_invalid,
+                                         dataset=dataset,
+                                         **filters) for v in materialization],
                          axis=0)
 
     # Get/Initialize the CAVE client
@@ -661,11 +742,11 @@ def get_somas(x=None,
                 materialization = tuple(np.unique(materialization[materialization != 0]).tolist())
         filter_in_dict = {'pt_root_id': root_ids}
 
-    nuc = get_annotations('nuclei_v1',
-                        materialization=materialization,
-                        split_positions=split_positions,
-                        dataset=dataset,
-                        filter_in_dict=filter_in_dict)
+    nuc = get_cave_table('nuclei_v1',
+                         materialization=materialization,
+                         split_positions=split_positions,
+                         dataset=dataset,
+                         filter_in_dict=filter_in_dict)
     nuc = nuc.drop_duplicates(['id', 'pt_root_id']).copy()
 
     # Add estimated radius based on nucleus
@@ -779,7 +860,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
                 raise ValueError(f'Missing required column: {c}')
 
     if validate:
-        roots = locs_to_segments(x[['x', 'y', 'z']].values)
+        roots = segmentation.locs_to_segments(x[['x', 'y', 'z']].values)
 
         is_zero = roots == 0
         if any(is_zero):
@@ -797,11 +878,11 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     session.headers['Authorization'] = f"Bearer {token}"
 
     if skip_existing:
-        existing = _get_cell_type_table(update_ids=True, dataset='production')
+        existing = _get_community_annotation_table(update_ids=True, dataset='production')
 
     futures = {}
     skipped = []
-    url = f'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
+    url = 'https://prod.flywire-daf.com/neurons/api/v1/submit_cell_identification'
 
     for i, (_, row) in enumerate(x.iterrows()):
         if split_tags:
@@ -868,30 +949,31 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     return submitted
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=['sandbox'])
 def search_annotations(x,
                        exact=False,
                        case=False,
                        regex=True,
                        clear_cache=False,
+                       annotation_version=None,
                        materialization='auto',
                        *,
                        dataset=None):
     """Search hierarchical annotations (super class, cell class, cell type, etc).
 
-    Annotations stem from Schlegel et al 2023 (bioRxiv); corresponds to entries
-    in the "Classification" column in Codex.
+    Annotations stem from Schlegel et al 2023 (bioRxiv); ~ corresponds to the
+    "Classification" column in Codex.
 
     This function downloads and caches the supplemental annotation table hosted
-    on Github at https://github.com/flyconnectome/flywire_annotations/. Updates
-    to the Github repository will trigger an update of the cached file. If you
-    find any issues with the annotations, please open an issue on Github.
+    on Github at https://github.com/flyconnectome/flywire_annotations. If you
+    find any errors with the annotations, please open an issue on Github.
 
     Parameters
     ----------
-    x :         str | int | Neuron/List | list of ints | None
-                Term (str) or root ID(s) to search for. See examples for details.
-                Use `None` to return all annotations.
+    x :         str | int | Neuron/List | list of ints | NeuronCriteria | None
+                Term (str) or root ID(s) to search for. Use `None` to return all
+                annotations. See examples and ``NeuronCriteria`` for details.
     exact :     bool
                 Whether term must be an exact match. For example, if
                 ``exact=False`` (default), 'sensory' will match to e.g.
@@ -903,31 +985,44 @@ def search_annotations(x,
                 Whether to interpret term as regex.
     clear_cache : bool
                 If True, will clear the cached annotation table(s).
-    materialization :   "auto" | "live" | "latest" | int | bool
+    annotation_version : str, optional
+                Which version of the annotations to use. This should
+                correspond to a tag (e.g. the "v1.1.0" release) or a branch
+                of the annotation repository (see URL above).
+                If ``None`` (default), will use in order:
+                 1. The version set by :func:`~fafbseg.flywire.set_default_annotation_version`
+                 2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
+                 3. The latest commit available on the "main" branch
+                Please see the online tutorial on annotations for details.
+    materialization : "auto" | "live" | "latest" | int | bool
                 Which materialization version to search:
-                 - "auto": if `x` is root ID(s), will try to find a version
+                 - "auto": if `x` are root ID(s), will try to find a version
                    at which all root IDs co-existed; if `x` is string will use
                    "latest" (see below)
-                 - "latest": uses the latest _already cached_ materialization
+                 - "latest": uses the latest available materialization
                  - integer: specifies a materialization version
                  - "live": looks up the most recent root IDs from the supervoxels
     dataset :   "public" | "production", optional
                 Against which FlyWire dataset to query. If ``None`` will fall
-                back to the default dataset (see also
-                :func:`~fafbseg.flywire.set_default_dataset`).
+                back to the default dataset - see
+                :func:`~fafbseg.flywire.set_default_dataset`.
 
     Returns
     -------
     pandas.DataFrame
                 DataFrame with annotations matching ``x``. Coordinates
-                are in 4x4x40nm voxel space.
+                are in 4x4x40nm voxel space. An explanation for each column
+                can be found `here <http://tinyurl.com/yc2cyrha>`_.
 
     See Also
     --------
     :func:`~fafbseg.flywire.get_hierarchical_annotations`
-                Use this to load a table with all hierarchical annotations.
+                Loads table with all hierarchical annotations.
     :func:`~fafbseg.flywire.search_community_annotations`
-                Use this to search the community annotations.
+                Searches specifically the community annotations.
+    :class:`~fafbseg.flywire.NeuronCriteria`
+                Helper to construct more complicated searches. Can also be
+                passed directly to various other functions.
 
     Examples
     --------
@@ -979,6 +1074,18 @@ def search_annotations(x,
     Use regex to refine search (here we try to find all "PSXXX" hemibrain types):
 
     >>> all_ps = flywire.search_annotations('hemibrain_type:PS[0-9]{3}', regex=True)
+    Using materialization version 630.
+
+    Use ``NeuronCriteria`` for more more complicated queries:
+
+    >>> from fafbseg.flywire import NeuronCriteria as NC
+    >>> ann = flywire.search_annotations(NC(type='PS009', side='left'))
+    Found 1 neuron matching the given criteria.
+    Using materialization version 630.
+
+    Note that `type` in the above example will search against all `*_type`
+    fields (e.g. both `cell_type` and `hemibrain_type`).
+    See :class:`~fafbseg.flywire.NeuronCriteria` for details.
 
     """
     # See if ``x`` is a root ID as string
@@ -1004,35 +1111,39 @@ def search_annotations(x,
         except ValueError:
             pass
 
+    # Map annotation version to commit
+    commit = version_to_commit(annotation_version)
+
     if materialization == 'auto':
         # If query is not a bunch of root IDs, just use the latest version
         if not isinstance(x, np.ndarray) or x.dtype not in (int, np.int64):
             materialization = 'latest'
         else:
             # First check among the available versions
-            cached_versions = _get_cached_annotation_materializations()
+            cached_versions = _get_cached_annotation_materializations(commit)
             if len(cached_versions):
                 for version in sorted(cached_versions)[::-1]:
                     if _is_valid_version(ids=x, version=version, dataset=dataset):
                         materialization = version
-                        print(f'Using cached materialization version {version}')
+                        print(f'Using materialization version {version}.')
                         break
             else:
                 materialization = find_mat_version(x, raise_missing=False, dataset=dataset)
 
     if materialization == 'latest':
         # Map to the latest cached version
-        cached_versions = _get_cached_annotation_materializations()
+        cached_versions = _get_cached_annotation_materializations(commit)
         available_version = get_cave_client(dataset=dataset).materialize.get_versions()
         available_and_cached = cached_versions[np.isin(cached_versions, available_version)]
         if len(available_and_cached):
             materialization = sorted(available_and_cached)[-1]
         else:
             materialization = sorted(available_version)[-1]
-        print(f'Using materialization version {materialization}')
+        print(f'Using materialization version {materialization}.')
 
     # Grab the table at the requested materialization
-    ann = get_hierarchical_annotations(mat=materialization,
+    ann = get_hierarchical_annotations(annotation_version=annotation_version,
+                                       materialization=materialization,
                                        dataset=dataset,
                                        force_reload=clear_cache)
 
@@ -1044,6 +1155,7 @@ def search_annotations(x,
     if isinstance(x, str):
         if ':' in x:
             col, x = x.split(':')
+            col, x = col.strip(), x.strip()  # strip accidental whitespaces
             if col not in ann.columns:
                 raise ValueError(f'Annotation table has no column called "{col}"')
             cols = [col]
@@ -1067,39 +1179,98 @@ def search_annotations(x,
         ann = ann[ann['root_id'].isin(x)]
 
     # Return copy to avoid setting-on-copy warning
-    return ann.copy()
+    return ann.copy().reset_index(drop=True)
+
+
+def version_to_commit(annotation_version):
+    """Map version to commit."""
+    # Get available tags for the repo
+    tags = _get_available_annotation_versions()
+
+    # If no version specified in this function
+    if annotation_version is None:
+        # If no default annotation version
+        if DEFAULT_ANNOTATION_VERSION is None:
+            # Use latest tagged release
+            annotation_version = tags[0]['name']
+        else:
+            annotation_version = DEFAULT_ANNOTATION_VERSION
+
+    # Map annotation version to commit
+    commit = None
+    # See if any of the tags match `annotation_version`
+    for t in tags:
+        if annotation_version == t['name']:
+            commit = t['commit']['sha']
+            break
+    # If no commit, look for a branch
+    if not commit:
+        branches = _get_available_branches()
+        for b in branches:
+            if annotation_version == b['name']:
+                commit = b['commit']['sha']
+                break
+    # If still no commit, raise error
+    if not commit:
+        raise ValueError(f'`annotation_version="{annotation_version}"` could not '
+                         'be mapped to a commit.\n'
+                         f'Available versions are: {", ".join([t["name"] for t in tags])}\n'
+                         f'Available branches are: {", ".join([b["name"] for b in branches])}')
+
+    return commit
+
+
+def clear_cached_annotations():
+    """Delete cached annotation tables."""
+    cache_dir = Path(CACHE_DIR).expanduser().absolute()
+
+    # Delete all files in cache_dir that match "flywire_annotations@*.tsv"
+    cached = [f.name.split('@')[-1].split('.')[0] for f in cache_dir.glob('flywire_annotations@*.tsv')]
+
+    for c in cached:
+        fp = cache_dir / c
+        if fp.exists():
+            fp.unlink()
+            print(f'Deleted {fp}.')
 
 
 @inject_dataset()
-def get_hierarchical_annotations(mat=None,
-                                 check_updates=True,
+def get_hierarchical_annotations(annotation_version=None,
+                                 materialization=None,
                                  force_reload=False,
                                  verbose=True,
                                  *,
                                  dataset=None):
     """Download (and cache) hierarchical annotations.
 
-    Annotations stem from Schlegel et al 2023 (bioRxiv); corresponds to entries
-    in the "Classification" column in Codex.
+    Annotations stem from Schlegel et al 2023 (bioRxiv); corresponds to largely
+    to the "Classification" column in Codex.
 
-    This function downloads and caches the supplemental annotation table hosted
+    This function downloads and caches the annotation table hosted
     on Github at https://github.com/flyconnectome/flywire_annotations/. Updates
     to the Github repository will trigger an update of the cached file. If you
     find any issues with the annotations, please open an issue on Github.
 
     Parameters
     ----------
-    mat :       "live" | "latest" | int, optional
-                Which materialization to fetch:
-                 - if int, will add a "root_{mat}" column with the respective IDs
-                 - if "live", will update the "root_id" column to be current
-                 - if `None` will return cached table as is
-    check_updates : bool
-                If True, will check the Github repository for updates of the
-                hierarchical annotations and download again if necessary.
-    force_reload :  bool
-                If True, will force fresh download of file even if already cached
-                locally.
+    annotation_version : str, optional
+                        Which version of the annotations to use. This should
+                        correspond to a tag (e.g. the "v1.1.0" release) or a branch
+                        of the annotation repository (https://github.com/flyconnectome/flywire_annotations).
+                        If `None` (default), will use in order:
+                          1. The version set by ``flywire.set_default_annotation_version()``
+                          2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
+                          3. The latest commit available on the "main" branch
+                        Please see the online tutorial on annotations for details.
+    materialization :   "live" | "latest" | int, optional
+                        Which materialization you want the root IDs to correspond to:
+                        - `int`, will map to a specific materialization version
+                        - "live", will update the "root_id" column to be current IDs
+                        - "latest" will update to the latest materialization version
+                        - if `None` will return table as found on Github
+    force_reload :      bool
+                        If True, will force fresh download of file even if already cached
+                        locally.
 
     Returns
     -------
@@ -1108,38 +1279,36 @@ def get_hierarchical_annotations(mat=None,
     See Also
     --------
     :func:`~fafbseg.flywire.search_annotations`
-                Use this to search for annotations for given neurons.
+            Searches for annotations for given neurons.
     :func:`~fafbseg.flywire.search_community_annotations`
-                Use this to search the community annotations.
+            Searches the community annotations.
+    :func:`~fafbseg.flywire.set_default_annotation_version`
+            Sets the default annotation version.
 
     """
-    # To-Do:
-    # - add option to check out specific release from Github repo
+    # Map annotation version to commit. This also takes care of parsing
+    # the default annotation version if `annotation_version` is None
+    commit = version_to_commit(annotation_version)
 
-    fp = Path(CACHE_DIR).expanduser().absolute() / Path(FLYWIRE_ANNOT_URL).name
+    # Load the file from cache or download it
+    fp = Path(CACHE_DIR).expanduser().absolute() / f"flywire_annotations@{commit}.tsv"
+    try:
+        fp = download_cache_file(
+            FLYWIRE_ANNOT_URL.format(commit=commit),
+            filename=fp,
+            force_reload=force_reload,
+            verbose=verbose
+        )
+    except requests.HTTPError:
+        # Prior to v2.0.0 the annotation file had a different name
+        fp = download_cache_file(
+            FLYWIRE_ANNOT_URL_OLD.format(commit=commit),
+            filename=fp,
+            force_reload=force_reload,
+            verbose=verbose
+        )
 
-    # If file already exists, check if we need to refresh the cache
-    if fp.exists() and check_updates and not force_reload:
-        r = requests.get(ANNOT_REPO_URL)
-        try:
-            r.raise_for_status()
-        except BaseException:
-            print("Failed to check annotation repo for updates")
-        # Last time anything was committed to the repo
-        last_upd = dt.datetime.fromisoformat(r.json()["pushed_at"][:-1])
-        # Last time the local file was modified
-        last_mod = dt.datetime.fromtimestamp(fp.stat().st_mtime)
-        if last_mod < last_upd:
-            force_reload = True
-            if verbose:
-                print(f"Updating annotation table from {ANNOT_REPO_URL}")
-
-    # This will only download file if it either doesn't exist or needs updating
-    fp = download_cache_file(
-        FLYWIRE_ANNOT_URL, force_reload=force_reload, verbose=verbose
-    )
-
-    # Read the actual table
+    # Read the actual table from disk
     table = pd.read_csv(fp, sep="\t", low_memory=False)
 
     # Turn supervoxel and all root ID columns into integers
@@ -1148,14 +1317,17 @@ def get_hierarchical_annotations(mat=None,
     table = table.astype(dtypes)
 
     # Map to the latest version
-    if mat == 'latest':
+    if materialization == 'latest':
         client = get_cave_client()
-        mat = sorted(client.materialize.get_versions())[-1]
+        materialization = sorted(client.materialize.get_versions())[-1]
 
     # If mat is live we need to check for outdated IDs
     save = False
-    if mat in ("live", "current") and (dataset == 'production'):
-        to_update = ~is_latest_root(table.root_id, progress=False)
+    if materialization in ("live", "current") and (dataset == 'production'):
+        if "root_live" not in table.columns:
+            table["root_live"] = table["root_id"]
+            root_col = "root_live"
+        to_update = ~segmentation.is_latest_root(table.root_live, progress=False)
         if any(to_update):
             if verbose:
                 print(
@@ -1163,25 +1335,30 @@ def get_hierarchical_annotations(mat=None,
                     end="",
                     flush=True,
                 )
-            table.loc[to_update, "root_id"] = supervoxels_to_roots(
+            table.loc[to_update, "root_live"] = segmentation.supervoxels_to_roots(
                 table.supervoxel_id.values[to_update], progress=False
             )
             save = True
-            root_col = 'root_id'
-    # If `mat` is not None
-    elif mat:
-        root_col = f"root_{mat}"
+    # If `materialization` is not None
+    # (if it is None, we will just use the existing 'root_id' column)
+    elif materialization:
+        root_col = f"root_{materialization}"
         if root_col not in table.columns:
             if verbose:
                 print(
-                    f"Updating root IDs for hierarchical annotations at mat '{mat}'... ",
+                    "Caching root IDs for hierarchical annotations at "
+                    f"materialization '{materialization}'... ",
                     end="",
                     flush=True,
                 )
             save = True
-            table[root_col] = supervoxels_to_roots(table.supervoxel_id,
-                                                   timestamp=f"mat_{mat}",
-                                                   progress=False)
+            table[root_col] = segmentation.supervoxels_to_roots(
+                table.supervoxel_id,
+                timestamp=f"mat_{materialization}",
+                progress=False
+            )
+    else:
+        root_col = 'root_id'
 
     # If me made changes (i.e. updated the root ID column) save this back to disk
     # so we don't have to do it again
@@ -1190,8 +1367,8 @@ def get_hierarchical_annotations(mat=None,
         if verbose:
             print('Done.', flush=True)
 
-    # Make sure "root_id" corresponds to the correct materialization and drop
-    # all others to avoid confusion
+    # Make sure "root_id" corresponds to the requested materialization and drop
+    # all others "root_xxx" columns to avoid confusion
     table['root_id'] = table[root_col]
     table = table.drop([c for c in table.columns if ('root_' in c) and (c != 'root_id')],
                        axis=1)
@@ -1199,9 +1376,9 @@ def get_hierarchical_annotations(mat=None,
     return table
 
 
-def _get_cached_annotation_materializations():
+def _get_cached_annotation_materializations(commit):
     """Which materialization versions have been cached for the annotation table."""
-    fp = Path(CACHE_DIR).expanduser().absolute() / Path(FLYWIRE_ANNOT_URL).name
+    fp = Path(CACHE_DIR).expanduser().absolute() / f"flywire_annotations@{commit}.tsv"
 
     # If file already exists, check if we need to refresh the cache
     if not fp.exists():
@@ -1222,6 +1399,22 @@ def _get_cached_annotation_materializations():
             pass
 
     return np.array(mats)
+
+
+@lru_cache
+def _get_available_annotation_versions():
+    # Get available tags
+    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/tags")
+    r.raise_for_status()
+    return r.json()
+
+
+@lru_cache
+def _get_available_branches():
+    # Get available tags
+    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/branches")
+    r.raise_for_status()
+    return r.json()
 
 
 def get_user_information(user_ids, field=None):
@@ -1259,8 +1452,8 @@ def search_community_annotations(x,
                    case=False,
                    regex=True,
                    clear_cache=False,
-                   materialization='auto',
                    *,
+                   materialization='auto',
                    dataset=None):
     """Search community cell identification annotations for given term/root IDs.
 
@@ -1371,12 +1564,12 @@ def search_community_annotations(x,
             materialization = 'latest'
 
     if clear_cache:
-        _get_cell_type_table.cache_clear()
+        _get_community_annotation_table.cache_clear()
 
     # Grab the table at the requested materialization
-    ct = _get_cell_type_table(dataset=dataset,
-                                 split_positions=True,
-                                 materialization=materialization)
+    ct = _get_community_annotation_table(dataset=dataset,
+                                         split_positions=True,
+                                         materialization=materialization)
 
     # If no query term, we'll just return the whole table
     if x is None:
@@ -1414,11 +1607,11 @@ def search_community_annotations(x,
                   'user',
                   ct.user_id.map(name_map))
 
-    return ct
+    return ct.reset_index(drop=True)
 
 
 @lru_cache
-def _get_cell_type_table(dataset, materialization, split_positions=False, verbose=True):
+def _get_community_annotation_table(dataset, materialization, split_positions=False, verbose=True):
     """Fetch (and cache) annotation tables."""
     if materialization == 'latest':
         versions = get_cave_client(dataset=dataset).materialize.get_versions()
@@ -1427,10 +1620,10 @@ def _get_cell_type_table(dataset, materialization, split_positions=False, verbos
     if verbose:
         print(f'Caching community annotations for materialization version "{materialization}"...',
               end='', flush=True)
-    table = get_annotations(table_name=COMMUNITY_ANNOTATION_TABLE,
-                            dataset=dataset,
-                            split_positions=split_positions,
-                            materialization=materialization)
+    table = get_cave_table(table_name=COMMUNITY_ANNOTATION_TABLE,
+                           dataset=dataset,
+                           split_positions=split_positions,
+                           materialization=materialization)
     if verbose:
         print(' Done.')
     return table
@@ -1491,7 +1684,7 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
                 raise ValueError(f'Missing required column: {c}')
 
     if validate:
-        roots = locs_to_segments(x[['x', 'y', 'z']].values)
+        roots = segmentation.locs_to_segments(x[['x', 'y', 'z']].values)
 
         is_zero = roots == 0
         if any(is_zero):
@@ -1579,3 +1772,315 @@ def mark_cell_completion(x, validate=True, skip_existing=True,
         navis.config.logger.info('SUCCESS!')
 
     return x
+
+
+class NeuronCriteria():
+    """Parses filter queries into root IDs.
+
+    This class is typically passed as an argument to a function and will
+    then be automatically converted into a list of root IDs.
+
+    Filtering for multiple criteria is done using a logical AND, i.e.
+    only neurons that match all criteria will be selected.
+
+    Not providing any criteria will return all neurons in the hierarchical
+    annotations table.
+
+    Parameters
+    ----------
+    root_id :   int | list of int
+                List of root IDs to select. Note that root IDs are not checked
+                for whether they actually existed at the requested materialization.
+    type :      str | list of str
+                Cell type(s) to select. Importantly this will search all
+                `*_type` columns (e.g. `cell_type`, `hemibrain_type`). Note that
+                you can also search against specific type columns directly
+                (see examples).
+    side :      str | list of str
+                Side(s) to select.
+    nerve :     str | list of str
+                Nerve(s) to select.
+    flow :      str | list of str
+                Flow(s) to select.
+    super_class : str | list of str
+                Super class(es) to select.
+    cell_class : str | list of str
+                Cell class(es) to select.
+    cell_sub_class : str | list of str
+                Cell sub class(es) to select.
+    ito_lee_hemilineage : str | list of str
+                Hemilineage(s) to select.
+    morphology_group : str | list of str
+                Morphology group(s) to select.
+    fbbt_id :   str | list of str
+                Virtual Fly Brain ID(s) to select.
+    community_annotation : str | list of str
+                Community annotation(s) to select. It is recommended to use
+                ``regex=True`` to search for partial matches (e.g. ".*Mi1.*").
+    regex :     bool
+                Whether to interpret string criteria as regex.
+    case :      bool
+                Whether to interpret string criteria as case sensitive.
+    annotation_version : str, optional
+                Which version of the annotations to use. This should correspond
+                to a tag (e.g. the "v1.1.0" release) or a branch of the
+                annotation repository (https://github.com/flyconnectome/flywire_annotations).
+                If `None`, will use the latest tagged release.
+    materialization :  "live" | "latest" | int | bool, optional
+                Which materialization version to search. By default, this
+                is set to `None` and will get automatically adjusted to reflect
+                the materialization version requested by the function the
+                `NeuronCriteria` is passed to.
+    dataset :   "public" | "production" | "sandbox", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see also
+                :func:`~fafbseg.flywire.set_default_dataset`).
+    verbose :   bool
+                Whether to print information on which annotations were used.
+
+    Examples
+    --------
+
+    >>> from fafbseg import flywire
+    >>> from fafbseg.flywire import NeuronCriteria as NC
+
+    Check which fields can be queried:
+
+    >>> NC.available_fields()
+    array(['root_id', 'flow', 'super_class', 'cell_class', 'cell_sub_class',
+           'cell_type', 'hemibrain_type', 'ito_lee_hemilineage',
+           'hartenstein_hemilineage', 'morphology_group', 'top_nt',
+           'known_nt', 'side', 'nerve', 'fbbt_id', 'status', 'type',
+           'community_annotation'], dtype='<U23')
+
+    Fetch all types for DA1 projection neurons (this searches all type columns):
+
+    >>> filter = NC(type='DA1_lPN')
+
+    Search specifically for a hemibrain type:
+
+    >>> filter = NC(hemibrain_type='DA1_lPN')
+
+    Search for multiple cell types:
+
+    >>> filter = NC(type=['DA1_lPN', 'DA1_vPN'])
+
+    Search for all ORNs:
+
+    >>> filter = NC(type='ORN_.*', regex=True)
+
+    Search for all ORNs on the left side of the brain:
+
+    >>> filter = NC(type='ORN_.*', side='left', regex=True)
+
+    Search for all neurons with a given community annotation:
+
+    >>> filter = NC(community_annotation='.*Mi1.*', regex=True)
+
+    Note that for community annotations you likely want to use regex to
+    search for partial matches.
+
+    ``NeuronCriteria`` can also be passed directly to functions that accept
+    multiple root IDs:
+
+    >>> cn = flywire.get_connectivity(NC(hemibrain_type='DA1_lPN'))
+    Found 15 neurons matching the given criteria.
+    Using materialization version 630.
+    >>> cn.head()
+                      pre                post  weight
+    0  720575940630610425  720575940637208718     106
+    1  720575940630610425  720575940605102694     106
+    2  720575940611174702  720575940630066007     104
+    3  720575940611174702  720575940621239679      89
+    4  720575940630610425  720575940619385765      87
+
+    """
+    @inject_dataset()
+    def __init__(self,
+                 *,
+                 regex=False,
+                 case=False,
+                 verbose=True,
+                 dataset=None,
+                 annotation_version=None,
+                 materialization=None,
+                 **criteria):
+        # If no criteria make sure this is intended
+        if not len(criteria):
+            navis.config.logger.warning('No criteria specified. This will query all neurons!')
+
+        # Make sure all criteria are valid fields
+        for field in criteria:
+            if field in self.available_fields():
+                break
+            bm = fw.process.extractBests(field,
+                                         self.available_fields().tolist(),
+                                         scorer=fw.fuzz.token_sort_ratio)[0][0]
+            raise ValueError(f'"{field}" is not a searchable field. '
+                             f'Did you mean "{bm}"?')
+        self.criteria = criteria
+        self.annotation_version = annotation_version
+        self.materialization = materialization
+        self.dataset = dataset
+        self.regex = regex
+        self.case = case
+        self.verbose = verbose
+        self._annotations = None
+
+    @classmethod
+    def available_fields(self):
+        """Return all available fields for selection."""
+        return np.asarray(AVAILABLE_FIELDS)
+
+    @property
+    def annotations(self):
+        """Return hierarchical annotations."""
+        if self._annotations is None:
+            self._annotations = get_hierarchical_annotations(materialization=self.materialization,
+                                                             dataset=self.dataset,
+                                                             annotation_version=self.annotation_version,
+                                                             verbose=self.verbose,
+                                                             force_reload=False)
+        return self._annotations
+
+    @property
+    def community_annotations(self):
+        """Return community annotations for the given materialization."""
+        return _get_community_annotation_table(dataset=self.dataset,
+                                               materialization=self.materialization,
+                                               split_positions=False,
+                                               verbose=self.verbose)
+
+    @property
+    def is_empty(self):
+        return len(self.criteria) == 0
+
+    def get_roots(self):
+        """Return all root IDs matching the given criteria."""
+        # Initialize as int64 to avoid issues on Windows machines
+        roots = np.array([], dtype=np.int64)
+
+        # If no criteria at all, just return all root IDs
+        if not len(self.criteria):
+            roots = self.annotations.root_id.unique()
+            if self.verbose:
+                print(f'Querying all {len(roots)} neurons!')
+            return roots
+
+        # If at least one criteria that's in the hierarchical annotations table
+        if len({k for k in self.criteria if k != 'community_annotation'}):
+            ann = self.annotations
+            # Apply our filters
+            for field, value in self.criteria.items():
+                # Skip community annotations (will deal with them later)
+                if field == 'community_annotation':
+                    continue
+                # For "type" we will filter on both "cell_type" and
+                # "hemibrain_type" columns and merge the results
+                elif field == 'type':
+                    ann = pd.concat((_filter_table(ann, 'cell_type', value, regex=self.regex, case=self.case),
+                                     _filter_table(ann, 'hemibrain_type', value, regex=self.regex, case=self.case)),
+                                     axis=0).drop_duplicates('root_id')
+                # Everything else is just a simple filter
+                else:
+                    ann = _filter_table(ann, field, value, regex=self.regex, case=self.case)
+
+            roots = ann.root_id.unique()
+
+        # If we have a community annotation
+        if 'community_annotation' in self.criteria:
+            # Make sure we're working with strings
+            value = match_dtype(self.criteria['community_annotation'], str)
+            # Get the community annotation table
+            cann = self.community_annotations
+
+            cann = _filter_table(cann, 'tag', value, regex=self.regex, case=self.case)
+
+            # Check if we need to intersect with hierarchical annotations
+            if len(self.criteria) > 1:
+                # Intersect with IDs from hierarchical annotations - e.g. if
+                # asked "give me all LHS neurons with given community tag(s)"
+                roots = roots[np.isin(roots, cann.pt_root_id)]
+            else:
+                # If no other criteria, just return the root IDs from the
+                # community annotations table
+                roots = cann.pt_root_id.unique()
+
+        if not len(roots):
+            raise NoMatchesError('No neurons found matching the given criteria.')
+        elif self.verbose:
+            print(f'Found {len(roots)} {"neurons" if len(roots) >1 else "neuron"} matching the given criteria.')
+
+        return np.unique(roots)
+
+
+class NoMatchesError(ValueError):
+    """Raised if no matches are found."""
+    pass
+
+
+def _filter_table(table, column, value, regex=False, case=False):
+    """Little helper function to filter given table."""
+    # Make sure the criteria and the field have the same data type
+    dt = table[column].dtype
+    is_str_col = hasattr(table[column], 'str')
+    try:
+        value = match_dtype(value, dt)
+    except BaseException:
+        raise ValueError(f'Unable to convert value for field "{column}" into type {dt}')
+    if navis.utils.is_iterable(value):
+        if regex and is_str_col:
+            table = table[table[column].str.match('|'.join(value), na=False, case=case)]
+        elif is_str_col and not case:
+            table = table[table[column].str.lower().isin([v.lower() for v in value])]
+        else:
+            table = table[table[column].isin(value)]
+    else:
+        if regex and is_str_col:
+            table = table[table[column].str.match(value, na=False, case=case)]
+        elif is_str_col and not case:
+            table = table[table[column].str.lower() == value.lower()]
+        else:
+            table = table[table[column] == value]
+    return table
+
+
+def set_default_annotation_version(version):
+    """Set the default annotation version for this session.
+
+    Alternatively, you can also use a FLYWIRE_DEFAULT_ANNOTATION_VERSION
+    environment variable (must be set before starting Python).
+
+    Parameters
+    ----------
+    version :   str, optional
+                Which version of the annotations to use. This should correspond
+                to a tag (e.g. the "v2.0.0" release) or a branch of the
+                annotation repository: https://github.com/flyconnectome/flywire_annotations.
+                If `None`, will use the latest release in the main branch.
+                Please see the annotation tutorial on readthedocs for details.
+
+    Examples
+    --------
+    >>> from fafbseg import flywire
+    >>> flywire.set_default_annotation_version('v2.0.0')
+    Default annotation version set to tag "v2.0.0".
+
+    """
+    branches = [b['name'] for b in _get_available_branches()]
+    tags = [t['name'] for t in _get_available_annotation_versions()]
+
+    if version:
+        if version in branches:
+            print(f'Default annotation version set to latest commit in branch "{version}".')
+        elif version in tags:
+            print(f'Default annotation version set to tag "{version}".')
+        else:
+            raise ValueError(f'`version="{version}" not found.\n'
+                            f'Available tags: {", ".join(tags)}\n'
+                            f'Available branches: {", ".join(branches)}\n')
+    else:
+        print('Default annotation version set to `None` (will use latest release on "main" branch).')
+
+    global FLYWIRE_DEFAULT_ANNOTATION_VERSION
+    FLYWIRE_DEFAULT_ANNOTATION_VERSION = version

@@ -31,7 +31,7 @@ from .utils import (
     find_mat_version,
     inject_dataset,
 )
-from .annotations import is_proofread
+from .annotations import is_proofread, parse_neuroncriteria
 
 from ..utils import make_iterable
 from ..synapses.utils import catmaid_table
@@ -46,6 +46,7 @@ __all__ = [
 ]
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def get_synapse_counts(
     x,
@@ -62,7 +63,7 @@ def get_synapse_counts(
 
     Parameters
     ----------
-    x :             int | list of int | Neuron/List
+    x :             int | list of int | Neuron/List | NeuronCriteria
                     Either a FlyWire segment ID (i.e. root ID), a list thereof or
                     a Neuron/List. For neurons, the ``.id`` is assumed to be the
                     root ID. If you have a neuron (in FlyWire space) but don't
@@ -181,6 +182,7 @@ def get_synapse_counts(
     return counts
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def get_transmitter_predictions(
     x,
@@ -204,7 +206,7 @@ def get_transmitter_predictions(
 
     Parameters
     ----------
-    x :             int | list of int | Neuron/List
+    x :             int | list of int | Neuron/List | NeuronCriteria
                     Either a FlyWire segment ID (i.e. root ID), a list thereof or
                     a Neuron/List. For neurons, the ``.id`` is assumed to be the
                     root ID. If you have a neuron (in FlyWire space) but don't
@@ -321,6 +323,7 @@ def get_transmitter_predictions(
         return pred
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def get_synapses(
     x,
@@ -342,7 +345,7 @@ def get_synapses(
 
     Parameters
     ----------
-    x :             int | list of int | Neuron/List
+    x :             int | list of int | Neuron/List | NeuronCriteria
                     Either a FlyWire segment ID (i.e. root ID), a list thereof
                     or a Neuron/List. For neurons, the ``.id`` is assumed to be
                     the root ID. If you have a neuron (in FlyWire space) but
@@ -660,6 +663,7 @@ def get_synapses(
     return syn
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def get_adjacency(
     sources,
@@ -687,13 +691,13 @@ def get_adjacency(
 
     Parameters
     ----------
-    sources :       int | list of int | Neuron/List
+    sources :       int | list of int | Neuron/List | NeuronCriteria
                     Either FlyWire segment ID (i.e. root ID), a list thereof
                     or a Neuron/List. For neurons, the ``.id`` is assumed to be
                     the root ID. If you have a neuron (in FlyWire space) but
                     don't know its ID, use :func:`fafbseg.flywire.neuron_to_segments`
                     first.
-    targets :       int | list of int | Neuron/List, optional
+    targets :       int | list of int | Neuron/List | NeuronCriteria, optional
                     Either FlyWire segment ID (i.e. root ID), a list thereof
                     or a Neuron/List. For neurons, the ``.id`` is assumed to be
                     the root ID. If you have a neuron (in FlyWire space) but
@@ -928,6 +932,7 @@ def get_adjacency(
     return adj
 
 
+@parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def get_connectivity(
     x,
@@ -961,7 +966,7 @@ def get_connectivity(
 
     Parameters
     ----------
-    x :             int | list of int | Neuron/List
+    x :             int | list of int | Neuron/List | NeuronCriteria
                     Either a FlyWire root ID, a list thereof or a Neuron/List.
                     For neurons, the ``.id`` is assumed to be the root ID. If
                     you have a neuron (in FlyWire space) but don't know its ID,

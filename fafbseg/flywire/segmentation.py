@@ -36,17 +36,37 @@ from .. import spine
 from .. import xform
 
 from ..utils import make_iterable, GSPointLoader
-from .utils import (get_cloudvolume, FLYWIRE_DATASETS, get_chunkedgraph_secret,
-                    retry, get_cave_client, parse_bounds, package_timestamp,
-                    inject_dataset)
+from .utils import (
+    get_cloudvolume,
+    FLYWIRE_DATASETS,
+    get_chunkedgraph_secret,
+    retry,
+    get_cave_client,
+    parse_bounds,
+    package_timestamp,
+    inject_dataset,
+)
+from .annotations import parse_neuroncriteria
 
 
-__all__ = ['fetch_edit_history', 'fetch_leaderboard', 'locs_to_segments',
-           'locs_to_supervoxels', 'skid_to_id', 'update_ids',
-           'roots_to_supervoxels', 'supervoxels_to_roots',
-           'neuron_to_segments', 'is_latest_root', 'is_valid_root',
-           'is_valid_supervoxel', 'get_voxels', 'get_lineage_graph',
-           'find_common_time', 'get_segmentation_cutout']
+__all__ = [
+    "get_edit_history",
+    "get_leaderboard",
+    "locs_to_segments",
+    "locs_to_supervoxels",
+    "skid_to_id",
+    "update_ids",
+    "roots_to_supervoxels",
+    "supervoxels_to_roots",
+    "neuron_to_segments",
+    "is_latest_root",
+    "is_valid_root",
+    "is_valid_supervoxel",
+    "get_voxels",
+    "get_lineage_graph",
+    "find_common_time",
+    "get_segmentation_cutout",
+]
 
 
 @inject_dataset()
@@ -144,10 +164,12 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
         nx.set_node_attributes(G, n_syn, name='synapses')
 
     if proofreading_status:
-        from .annotations import get_annotations
+        from .annotations import get_cave_table
+
         nodes = np.array(list(G.nodes), dtype=np.int64)
-        pr = get_annotations('proofreading_status_public_v1',
-                             filter_in_dict=dict(valid_id=nodes))
+        pr = get_cave_table(
+            "proofreading_status_public_v1", filter_in_dict=dict(valid_id=nodes)
+        )
         if len(pr):
             user = pr.groupby('valid_id').user_id.apply(list).to_dict()
             nx.set_node_attributes(G, {n: user[n] for n in pr.valid_id}, name='proofread_by')
@@ -227,6 +249,7 @@ def get_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     return df.loc[df.sum(axis=1).sort_values(ascending=False).index]
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset=None):
     """Fetch edit history for given neuron(s).
@@ -236,7 +259,7 @@ def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset
 
     Parameters
     ----------
-    x :             int | list of int
+    x :             int | list of int | NeuronCriteria
                     Segmentation (root) ID(s).
     progress :      bool
                     If True, show progress bar.
@@ -323,13 +346,14 @@ def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset
     return df
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@parse_neuroncriteria()
+@inject_dataset(disallowed=["flat_630", "flat_571"])
 def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     """Get supervoxels making up given neurons.
 
     Parameters
     ----------
-    x :             int | list of int
+    x :             int | list of int | NeuronCriteria
                     Segmentation (root) ID(s).
     use_cache :     bool
                     Whether to use disk cache to avoid repeated queries for the
@@ -939,13 +963,14 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
     return is_latest
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@parse_neuroncriteria()
+@inject_dataset(disallowed=["flat_630", "flat_571"])
 def find_common_time(root_ids, progress=True, *, dataset=None):
     """Find a time at which given root IDs co-existed.
 
     Parameters
     ----------
-    root_ids :      list | np.ndarray
+    root_ids :      list | np.ndarray | NeuronCriteria
                     Root IDs to check.
     progress :      bool
                     If True, shows progress bar.
@@ -995,15 +1020,18 @@ def find_common_time(root_ids, progress=True, *, dataset=None):
     return latest_birth + (earliest_death - latest_birth) / 2
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
-def update_ids(id,
-               stop_layer=2,
-               supervoxels=None,
-               timestamp=None,
-               progress=True,
-               *,
-               dataset=None,
-               **kwargs):
+@parse_neuroncriteria()
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def update_ids(
+    id,
+    stop_layer=2,
+    supervoxels=None,
+    timestamp=None,
+    progress=True,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Retrieve the most recent version of given FlyWire (root) ID(s).
 
     This function works by:
@@ -1017,7 +1045,7 @@ def update_ids(id,
 
     Parameters
     ----------
-    id :            int | list-like | DataFrame
+    id :            int | list-like | DataFrame | NeuronCriteria
                     Single ID or list of FlyWire (root) IDs. If DataFrame must
                     contain either a `root_id` or `root` column and optionally
                     a `supervoxel_id` or `supervoxel` column.

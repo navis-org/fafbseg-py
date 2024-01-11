@@ -15,3 +15,4 @@ requests-futures
 skeletor>=1.0.0
 trimesh
 tqdm
+fuzzywuzzy

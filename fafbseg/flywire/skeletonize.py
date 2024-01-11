@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .segmentation import snap_to_id, is_latest_root
 from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
-from .annotations import get_somas
+from .annotations import get_somas, parse_neuroncriteria
 
 SKELETON_BASE_URL = {'630': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_630",
                      '783': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_783",}
@@ -43,6 +43,7 @@ SKELETON_INFO = {"@type": "neuroglancer_skeletons", "transform": [1, 0, 0, 0, 0,
 __all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel', 'get_skeletons']
 
 
+@parse_neuroncriteria()
 @inject_dataset()
 def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                        assert_id_match=False, threads=2, save_to=None,
@@ -56,7 +57,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
     Parameters
     ----------
-    x  :                 int | trimesh.TriMesh | list thereof
+    x  :                 int | trimesh.TriMesh | list thereof | NeuronCriteria
                          ID(s) or trimesh of the FlyWire neuron(s) you want to
                          skeletonize.
     shave_skeleton :     bool
@@ -271,7 +272,10 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # See if we can find a soma based on the nucleus segmentation
         try:
             with silence_find_mat_version():
-                soma = get_somas(id, raise_missing=False, dataset=dataset, materialization='auto')
+                soma = get_somas(id,
+                                 raise_missing=False,
+                                 dataset=dataset,
+                                 materialization='auto')
         except KeyboardInterrupt:
             raise
         except requests.HTTPError:
@@ -429,7 +433,6 @@ def divide_local_neighbourhood(mesh, radius):
 
     All nodes will be assigned to a patches but patches will be overlapping.
 
-
     Parameters
     ----------
     mesh :      trimesh.Trimesh
@@ -546,19 +549,20 @@ def _worker_wrapper(x):
         return args[0]
 
 
+@parse_neuroncriteria()
 def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
                   dataset=783, progress=True):
     """Fetch precomputed skeletons.
 
-    Currently this only works for proofread 630 and 783 roots (i.e. the first
-    two public releases of FlyWire).
+    Currently this only works for proofread (!) 630 and 783 root IDs
+    (i.e. the first two public releases of FlyWire).
 
     Parameters
     ----------
-    root_id  :          int | list of ints
+    root_id  :          int | list of ints | NeuronCriteria
                         Root ID(s) of the FlyWire neuron(s) you want to
                         skeletonize. Must be root IDs that existed at
-                        materialization 630 or 783 (see dataset parameter).
+                        materialization 630 or 783 (see `dataset` parameter).
     omit_failures :     bool, optional
                         Determine behaviour when skeleton generation fails
                         (e.g. if the neuron has only a single chunk):

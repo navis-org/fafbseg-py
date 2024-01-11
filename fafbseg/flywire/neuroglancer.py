@@ -32,6 +32,7 @@ from urllib.parse import urlparse, parse_qs, quote, unquote
 
 from . import utils
 from .segmentation import neuron_to_segments
+from .annotations import parse_neuroncriteria
 from ..utils import make_iterable
 
 __all__ = ["decode_url", "encode_url"]
@@ -42,6 +43,7 @@ data_path = fp.parent / "data"
 session = None
 
 
+@parse_neuroncriteria()
 @utils.inject_dataset()
 def encode_url(
     segments=None,
@@ -64,7 +66,7 @@ def encode_url(
 
     Parameters
     ----------
-    segments :      int | list of int, optional
+    segments :      int | list of int | NeuronCriteria, optional
                     Segment IDs to have selected.
     annotations :   (N, 3) array or dict of {name: (N, 3) array}, optional
                     Array or dict of xyz coordinates that will be added as
