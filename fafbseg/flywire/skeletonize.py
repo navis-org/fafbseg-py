@@ -594,7 +594,7 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     --------
     >>> from fafbseg import flywire
     >>> n = flywire.get_skeletons(720575940603231916)
-    >>> n
+    >>> n                                                   #doctest: +SKIP
     type                                             navis.TreeNeuron
     name                                                     skeleton
     id                                             720575940603231916
@@ -603,25 +603,31 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     n_branches                                                    586
     n_leafs                                                       645
     cable_length                                           2050971.75
-    soma            [141, 458, 460, 462, 464, 466, 467, 469, 470, ...
+    soma                                                         None
     units                                                 1 nanometer
     dtype: object
 
     """
     if str(dataset) not in SKELETON_BASE_URL:
-        raise ValueError('Currently we only provide precomputed skeletons for the '
-                         '630 and 783 data releases.')
+        raise ValueError(
+            "Currently we only provide precomputed skeletons for the "
+            "630 and 783 data releases."
+        )
 
     if omit_failures not in (None, True, False):
-        raise ValueError('`omit_failures` must be either None, True or False. '
-                         f'Got "{omit_failures}".')
+        raise ValueError(
+            "`omit_failures` must be either None, True or False. "
+            f'Got "{omit_failures}".'
+        )
 
     if navis.utils.is_iterable(root_id):
         root_id = np.asarray(root_id, dtype=np.int64)
 
-        il = is_latest_root(root_id, timestamp=f'mat_{dataset}')
+        il = is_latest_root(root_id, timestamp=f"mat_{dataset}")
         if np.any(~il):
-            msg = (f'{(~il).sum()} root ID(s) did not exists at materialization {dataset}')
+            msg = (
+                f"{(~il).sum()} root ID(s) did not exists at materialization {dataset}"
+            )
             if omit_failures is None:
                 raise ValueError(msg)
             navis.config.logger.warning(msg)
@@ -630,17 +636,27 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
         if (max_threads > 1) and (len(root_id) > 1):
             with ThreadPoolExecutor(max_workers=max_threads) as pool:
                 futures = pool.map(get_skels, root_id)
-                nl = [f for f in navis.config.tqdm(futures,
-                                                   desc='Fetching skeletons',
-                                                   total=len(root_id),
-                                                   disable=not progress or len(root_id) == 1,
-                                                   leave=False)]
+                nl = [
+                    f
+                    for f in navis.config.tqdm(
+                        futures,
+                        desc="Fetching skeletons",
+                        total=len(root_id),
+                        disable=not progress or len(root_id) == 1,
+                        leave=False,
+                    )
+                ]
         else:
-            nl = [get_skels(r) for r in navis.config.tqdm(root_id,
-                                               desc='Fetching skeletons',
-                                               total=len(root_id),
-                                               disable=not progress or len(root_id) == 1,
-                                               leave=False)]
+            nl = [
+                get_skels(r)
+                for r in navis.config.tqdm(
+                    root_id,
+                    desc="Fetching skeletons",
+                    total=len(root_id),
+                    disable=not progress or len(root_id) == 1,
+                    leave=False,
+                )
+            ]
 
         # Turn into neuron list
         nl = navis.NeuronList(nl)

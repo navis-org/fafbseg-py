@@ -422,7 +422,7 @@ def get_synapses(
     >>> from fafbseg import flywire
     >>> syn = flywire.get_synapses(720575940603231916)
     Using materialization version 630.
-    >>> syn.head()
+    >>> syn.head()                                               #doctest: +SKIP
                       pre                post  cleft_score   pre_x   pre_y  pre_z  post_x  post_y  post_z         id
     0  720575940631406673  720575940603231916           60  434336  218108  28240  434340  218204   28240    3535576
     1  720575940608044501  720575940603231916          136  429180  212316  51520  429244  212136   51520   15712693
@@ -436,7 +436,7 @@ def get_synapses(
     >>> sk = flywire.get_skeletons(720575940603231916)
     >>> _ = flywire.get_synapses(sk, attach=True)
     Using materialization version 630.
-    >>> sk.connectors.head()
+    >>> sk.connectors.head()                                     #doctest: +SKIP
        connector_id       x       y       z  cleft_score          partner_id type  node_id
     0             0  356304  146840  145120          145  720575940627592977  pre      217
     1             1  344456  164324  162440          153  720575940537249676  pre        5

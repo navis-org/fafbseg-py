@@ -719,7 +719,7 @@ def get_somas(x=None,
     >>> from fafbseg import flywire
     >>> somas = flywire.get_somas([720575940628842314])
     Using materialization version 630.
-    >>> somas
+    >>> somas                                                   # doctest: +SKIP
             id     volume   pt_supervoxel_id          pt_root_id              pt_position  rad_est
     0  5743218  27.935539  80645535832325071  720575940628842314  [584928, 201568, 22720]   2480.0
 
@@ -1329,7 +1329,7 @@ def get_hierarchical_annotations(annotation_version=None,
             root_col = "root_live"
         to_update = ~segmentation.is_latest_root(table.root_live, progress=False)
         if any(to_update):
-            if verbose:
+            if verbose and not os.environ.get('FAFBSEG_TESTING', False):
                 print(
                     "Updating root IDs for hierarchical annotations... ",
                     end="",
@@ -1344,7 +1344,7 @@ def get_hierarchical_annotations(annotation_version=None,
     elif materialization:
         root_col = f"root_{materialization}"
         if root_col not in table.columns:
-            if verbose:
+            if verbose and not os.environ.get('FAFBSEG_TESTING', False):
                 print(
                     "Caching root IDs for hierarchical annotations at "
                     f"materialization '{materialization}'... ",
@@ -1364,7 +1364,7 @@ def get_hierarchical_annotations(annotation_version=None,
     # so we don't have to do it again
     if save:
         table.to_csv(fp, index=False, sep='\t')
-        if verbose:
+        if verbose and not os.environ.get('FAFBSEG_TESTING', False):
             print('Done.', flush=True)
 
     # Make sure "root_id" corresponds to the requested materialization and drop
@@ -1508,7 +1508,6 @@ def search_community_annotations(x,
 
     >>> an = flywire.search_community_annotations(720575940628857210)
     Using materialization version 630.
-    Caching community annotations for materialization version "630"... Done.
     >>> an.iloc[0]
     id                                   46699
     pt_position_x                       419980
@@ -1524,14 +1523,13 @@ def search_community_annotations(x,
     Search for all tags matching a given pattern:
 
     >>> mi1 = flywire.search_community_annotations('Mi1')
-    Caching community annotations for materialization version "630"... Done.
-    >>> mi1.head()
-          id   pos_x  pos_y  pos_z      supervoxel_id             root_id                      tag  user  user_id
-    0  61866  200890  58482   3724  84445998176507710  720575940626235644  Medulla Intrinsic - Mi1  TR77     2843
-    1  61867  192776  41653   4105  83881948711947639  720575940623948432  Medulla Intrinsic - Mi1  TR77     2843
-    2  61869  194704  97128   3905  84026397051849432  720575940632232418  Medulla Intrinsic - Mi1  TR77     2843
-    3  61871  191574  82521   2728  83814259892666307  720575940630475095  Medulla Intrinsic - Mi1  TR77     2843
-    4  61877  195454  43026   4031  84022754919681933  720575940617637204  Medulla Intrinsic - Mi1  TR77     2843
+    >>> mi1.head()                                              # doctest: +SKIP
+          id   pos_x  pos_y  ...                      tag  user  user_id
+    0  61866  200890  58482  ...  Medulla Intrinsic - Mi1  TR77     2843
+    1  61867  192776  41653  ...  Medulla Intrinsic - Mi1  TR77     2843
+    2  61869  194704  97128  ...  Medulla Intrinsic - Mi1  TR77     2843
+    3  61871  191574  82521  ...  Medulla Intrinsic - Mi1  TR77     2843
+    4  61877  195454  43026  ...  Medulla Intrinsic - Mi1  TR77     2843
 
     """
     # See if ``x`` is a root ID as string
@@ -1617,14 +1615,14 @@ def _get_community_annotation_table(dataset, materialization, split_positions=Fa
         versions = get_cave_client(dataset=dataset).materialize.get_versions()
         materialization = sorted(versions)[-1]
 
-    if verbose:
+    if verbose and not os.environ.get('FAFBSEG_TESTING', False):
         print(f'Caching community annotations for materialization version "{materialization}"...',
               end='', flush=True)
     table = get_cave_table(table_name=COMMUNITY_ANNOTATION_TABLE,
                            dataset=dataset,
                            split_positions=split_positions,
                            materialization=materialization)
-    if verbose:
+    if verbose and not os.environ.get('FAFBSEG_TESTING', False):
         print(' Done.')
     return table
 

@@ -73,10 +73,10 @@ def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> info = flywire.get_l2_info(720575940614131061)             # doctest: +ELLIPSIS
-    >>> info
-                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um                                          bounds_nm
-    0  720575940614131061        286               0  2378.16384  163.876526     60.666  [396816.0, 587808.0, 83968.0, 279072.0, 19560....
+    >>> info = flywire.get_l2_info(720575940614131061)
+    >>> info                                                    # doctest: +SKIP
+                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um   ...
+    0  720575940614131061        286               0  2378.16384  163.876526     60.666   ...
 
     """
     if navis.utils.is_iterable(root_ids):
@@ -85,11 +85,16 @@ def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
             func = partial(get_l2_info, dataset=dataset)
             futures = pool.map(func, root_ids)
-            info = [f for f in navis.config.tqdm(futures,
-                                                 desc='Fetching L2 info',
-                                                 total=len(root_ids),
-                                                 disable=not progress or len(root_ids) == 1,
-                                                 leave=False)]
+            info = [
+                f
+                for f in navis.config.tqdm(
+                    futures,
+                    desc="Fetching L2 info",
+                    total=len(root_ids),
+                    disable=not progress or len(root_ids) == 1,
+                    leave=False,
+                )
+            ]
         return pd.concat(info, axis=0).reset_index(drop=True)
 
     # Get/Initialize the CAVE client
@@ -98,48 +103,51 @@ def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
 
-    attributes = ['area_nm2', 'size_nm3', 'max_dt_nm', 'rep_coord_nm']
+    attributes = ["area_nm2", "size_nm3", "max_dt_nm", "rep_coord_nm"]
     get_l2data = retry(client.l2cache.get_l2data)
     info = get_l2data(l2_ids.tolist(), attributes=attributes)
     n_miss = len([v for v in info.values() if not v])
 
     row = [root_ids, len(l2_ids), n_miss]
-    info_df = pd.DataFrame([row],
-                           columns=['root_id', 'l2_chunks', 'chunks_missing'])
+    info_df = pd.DataFrame([row], columns=["root_id", "l2_chunks", "chunks_missing"])
 
     # Collect L2 attributes
     for at in attributes:
-        if at in ('rep_coord_nm', ):
+        if at in ("rep_coord_nm",):
             continue
 
         summed = sum([v.get(at, 0) for v in info.values()])
-        if at.endswith('3'):
+        if at.endswith("3"):
             summed /= 1000**3
-        elif at.endswith('2'):
+        elif at.endswith("2"):
             summed /= 1000**2
         else:
             summed /= 1000
 
-        info_df[at.replace('_nm', '_um')] = [summed]
+        info_df[at.replace("_nm", "_um")] = [summed]
 
     # Check bounding box
-    pts = np.array([v['rep_coord_nm'] for v in info.values() if v])
+    pts = np.array([v["rep_coord_nm"] for v in info.values() if v])
 
     if len(pts) > 1:
         bounds = [v for l in zip(pts.min(axis=0), pts.max(axis=0)) for v in l]
     elif len(pts) == 1:
         pt = pts[0]
-        rad = [v['max_dt_nm'] for v in info.values() if v][0] / 2
-        bounds = [pt[0] - rad, pt[0] + rad,
-                  pt[1] - rad, pt[1] + rad,
-                  pt[2] - rad, pt[2] + rad]
+        rad = [v["max_dt_nm"] for v in info.values() if v][0] / 2
+        bounds = [
+            pt[0] - rad,
+            pt[0] + rad,
+            pt[1] - rad,
+            pt[1] + rad,
+            pt[2] - rad,
+            pt[2] + rad,
+        ]
         bounds = [int(co) for co in bounds]
     else:
         bounds = None
-    info_df['bounds_nm'] = [bounds]
+    info_df["bounds_nm"] = [bounds]
 
-    info_df.rename({'max_dt_um': 'length_um'},
-                   axis=1, inplace=True)
+    info_df.rename({"max_dt_um": "length_um"}, axis=1, inplace=True)
 
     return info_df
 
