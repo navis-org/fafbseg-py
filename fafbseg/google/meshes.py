@@ -173,7 +173,7 @@ def autoreview_edges(x, conf_threshold=1, vol=None, remote_instance=None):
     ...                   cache=True,
     ...                   progress=False)
     >>> # Autoreview edges
-    >>> _ = fafbseg.autoreview_edges(14401884, vol=vol, remote_instance=manual)
+    >>> _ = fafbseg.autoreview_edges(14401884, vol=vol, remote_instance=manual) # doctest: +SKIP
 
     """
     # Fetch neuron(s)

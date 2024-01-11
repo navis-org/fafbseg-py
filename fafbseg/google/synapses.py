@@ -81,13 +81,13 @@ def fetch_connectivity(x, segmentation='fafb-ffn1-20200412', clean=True, style='
 
     Examples
     --------
-    >>> import fafbseg
-    >>> import pymaid
-    >>> rm = pymaid.connect_catmaid()
+    >>> import fafbseg                                          # doctest: +SKIP
+    >>> import pymaid                                           # doctest: +SKIP
+    >>> rm = pymaid.connect_catmaid()                           # doctest: +SKIP
     >>> # Load a neuron
-    >>> n = pymaid.get_neurons(16)
+    >>> n = pymaid.get_neurons(16)                              # doctest: +SKIP
     >>> # Get this neuron's synaptic partners
-    >>> cn_table = fafbseg.google.fetch_connectivity(n)
+    >>> cn_table = fafbseg.google.get_connectivity(n)           # doctest: +SKIP
 
     """
     # First we need to map the query to IDs

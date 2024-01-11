@@ -90,15 +90,16 @@ def set_default_dataset(dataset):
     --------
     >>> from fafbseg import flywire
     >>> flywire.set_default_dataset('public')
+    Default dataset set to "public".
 
     """
     if dataset not in FLYWIRE_URLS and dataset not in get_cave_datastacks():
         datasets = np.unique(list(FLYWIRE_URLS) + get_cave_datastacks())
-        raise ValueError(f'`dataset` must be one of: {", ".join(datasets)}')
+        raise ValueError(f'`dataset` must be one of: {", ".join(datasets)}.')
 
     global DEFAULT_DATASET
     DEFAULT_DATASET = dataset
-    print(f'Default dataset set to "{dataset}"')
+    print(f'Default dataset set to "{dataset}".')
 
 
 def inject_dataset(allowed=None, disallowed=None):
@@ -625,7 +626,7 @@ def find_mat_version(ids,
 
         if all(is_valid):
             if verbose and not SILENCE_FIND_MAT_VERSION:
-                print(f'Using materialization version {version}')
+                print(f'Using materialization version {version}.')
             return version
 
     # If no single materialized version can be found, see if we can get
@@ -641,7 +642,7 @@ def find_mat_version(ids,
         if all(latest_valid != 0):
             if verbose and not SILENCE_FIND_MAT_VERSION:
                 print(f"Found root IDs spread across {len(np.unique(latest_valid))} "
-                    "materialization versions.")
+                      "materialization versions.")
             return latest_valid
 
         msg = (f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
@@ -656,11 +657,11 @@ def find_mat_version(ids,
             raise ValueError(msg)
 
     if dataset not in ('public, '):
-        raise ValueError('Given root IDs do not co-exist in any of the available '
+        raise ValueError('Given root IDs do not (co-)exist in any of the available '
                         'materialization versions (including live). Try updating '
                         'root IDs and rerun your query.')
     else:
-        raise ValueError('Given root IDs do not co-exist in any of the available '
+        raise ValueError('Given root IDs do not (co-)exist in any of the available '
                         'public materialization versions. Please make sure that '
                         'the root IDs do exist and rerun your query.')
 

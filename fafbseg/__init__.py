@@ -17,5 +17,5 @@ from . import flywire, google, xform, move
 
 from .__version__ import __version__, __version_vector__
 
-# Register FAFB v14 <-> v14.1 transforms
+# Register FAFB v14 <-> v14.1 transforms in navis
 xform.register_transforms()

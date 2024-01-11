@@ -137,27 +137,29 @@ def merge_into_catmaid(x, target_instance, tag, min_node_overlap=4, min_overlap_
     --------
     Setup
 
-    >>> import fafbseg
-    >>> import pymaid
+    >>> import fafbseg                                          # doctest: +SKIP
+    >>> import pymaid                                           # doctest: +SKIP
 
     >>> # Set up connections to manual and autoseg CATMAID
-    >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
-    >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER', 'HTTP_PW', 'API_TOKEN')
+    >>> manual = pymaid.CatmaidInstance('URL', 'HTTP_USER',     # doctest: +SKIP
+    ...                                 'HTTP_PW', 'API_TOKEN') # doctest: +SKIP
+    >>> auto = pymaid.CatmaidInstance('URL', 'HTTP_USER',       # doctest: +SKIP
+    ...                               'HTTP_PW', 'API_TOKEN')   # doctest: +SKIP
 
     >>> # Set a segmentation data source
-    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation")
+    >>> fafbseg.google.use_google_storage("https://storage.googleapis.com/fafb-ffn1-20190805/segmentation") # doctest: +SKIP
 
     Merge a neuron from autoseg into v14
 
     >>> # Fetch the autoseg neuron to transfer to v14
-    >>> x = pymaid.get_neuron(267355161, remote_instance=auto)
+    >>> x = pymaid.get_neuron(267355161, remote_instance=auto)  # doctest: +SKIP
 
     >>> # Get the neuron's annotations so that they can be merged too
-    >>> x.get_annotations(remote_instance=auto)
+    >>> x.get_annotations(remote_instance=auto)                 # doctest: +SKIP
 
     >>> # Start the commit
     >>> # See online documentation for video of merge process
-    >>> resp = fafbseg.move.merge_neuron(x, target_instance=manual)
+    >>> resp = fafbseg.move.merge_neuron(x, target_instance=manual) # doctest: +SKIP
 
     """
     if not isinstance(x, navis.NeuronList):

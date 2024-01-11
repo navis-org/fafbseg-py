@@ -82,7 +82,7 @@ def make_url(*args, **GET):
                 Keyword arguments are assumed to be GET request queries
                 and will be encoded in the url. For example::
 
-                    >>> make_url('http://my-server.com', 'skeleton', node_gt: 100)
+                    >>> make_url('http://my-server.com', 'skeleton', node_gt=100)
                     'http://my-server.com/skeleton?node_gt=100'
 
     Returns
@@ -106,17 +106,6 @@ def make_iterable(x, force_type=None) -> np.ndarray:
     """Force input into a numpy array.
 
     For dicts, keys will be turned into array.
-
-    Examples
-    --------
-    >>> from navis.utils import make_iterable
-    >>> make_iterable(1)
-    array([1])
-    >>> make_iterable([1])
-    array([1])
-    >>> make_iterable({'a': 1})
-    array(['a'], dtype='<U1')
-
     """
     if not isinstance(x, Iterable) or isinstance(x, six.string_types):
         x = [x]

@@ -77,9 +77,9 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     --------
     Import a FlyWire neuron:
 
-    >>> _ = fafbseg.flywire.merge_flywire_neuron(id=720575940610453042,
-    ...                                          target_instance=manual,
-    ...                                          tag='WTCam')
+    >>> _ = fafbseg.flywire.merge_flywire_neuron(id=720575940610453042,     # doctest: +SKIP
+    ...                                          target_instance=manual,    # doctest: +SKIP
+    ...                                          tag='WTCam')               # doctest: +SKIP
 
     """
     if not sk:

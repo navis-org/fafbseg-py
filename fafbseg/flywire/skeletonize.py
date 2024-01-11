@@ -103,15 +103,19 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     :func:`fafbseg.flywire.skeletonize_neuron_parallel`
                         Use this if you want to skeletonize many neurons in
                         parallel.
-    :func:`fafbseg.flywire.l2_skeleton`
+    :func:`fafbseg.flywire.get_l2_skeleton`
                         Generate a skeleton using the L2 cache. Much faster than
                         skeletonization from scratch but the skeleton will be
                         coarser.
+    :func:`~fafbseg.flywire.get_skeletons`
+                        Use this function to fetch precomputed skeletons. Only
+                        available for proofread neurons and for specific
+                        materialization versions.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> n = flywire.skeletonize_neuron(720575940614131061)
+    >>> n = flywire.skeletonize_neuron(720575940603231916)
 
     """
     if save_to is not None:
@@ -572,12 +576,32 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
 
     Returns
     -------
-    skeletons :         navis.NeuronList of navis.TreeNeurons
+    skeletons :         navis.NeuronList | navis.TreeNeurons
+                        Either a single neuron or a list thereof.
+
+    See Also
+    --------
+    :func:`~fafbseg.flywire.skeletonize_neuron`
+                        Use this function to skeletonize neurons from scratch,
+                        e.g. if there aren't any precomputed skeletons
+                        available.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> n = flywire.fetch_skeleton(720575940614131061)
+    >>> n = flywire.get_skeletons(720575940603231916)
+    >>> n
+    type                                             navis.TreeNeuron
+    name                                                     skeleton
+    id                                             720575940603231916
+    n_nodes                                                      3588
+    n_connectors                                                 None
+    n_branches                                                    586
+    n_leafs                                                       645
+    cable_length                                           2050971.75
+    soma            [141, 458, 460, 462, 464, 466, 467, 469, 470, ...
+    units                                                 1 nanometer
+    dtype: object
 
     """
     if str(dataset) not in SKELETON_BASE_URL:

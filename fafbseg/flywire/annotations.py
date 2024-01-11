@@ -161,7 +161,7 @@ def is_materialized_root(id, materialization='latest', *, dataset=None):
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> flywire.is_materialized_root(720575940621039145)
+    >>> flywire.annotations.is_materialized_root(720575940621039145)
     array([False])
 
     """
@@ -563,15 +563,15 @@ def upload_annotations(table_name: str,
 
     Upload that data to a (fictional) table:
 
-    >>> flywire.upload_annotations('my_table', data)
+    >>> flywire.upload_annotations('my_table', data)            # doctest: +SKIP
 
     To update annotations we can do the same thing but provide IDs:
 
     >>> # Look up IDs of annotations to update and add to DataFrame
     >>> data['id'] = [0, 1]
-    >>> Make some changes to the data
+    >>> # Make some changes to the data
     >>> data.loc[0, 'tag'] = 'new tag1'
-    >>> flywire.upload_annotations('my_table', data)
+    >>> flywire.upload_annotations('my_table', data)            # doctest: +SKIP
 
     """
     # Get/Initialize the CAVE client
@@ -636,11 +636,11 @@ def get_somas(x=None,
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> info = flywire.get_somas([720575940614131061])
-    >>> info
-            id valid   pt_supervoxel_id          pt_root_id     volume              pt_position  rad_est
-    0  7393349     t  82827379285852979  720575940630194247  26.141245  [709888, 227744, 57160]   2260.0
-    1  7415013     t  83038760463398837  720575940632921242  53.711176  [722912, 244032, 65200]   2640.0
+    >>> somas = flywire.get_somas([720575940628842314])
+    Using materialization version 630.
+    >>> somas
+            id     volume   pt_supervoxel_id          pt_root_id              pt_position  rad_est
+    0  5743218  27.935539  80645535832325071  720575940628842314  [584928, 201568, 22720]   2480.0
 
     """
     if isinstance(x, navis.BaseNeuron):
@@ -716,7 +716,7 @@ def get_somas(x=None,
 def submit_cell_identification(x, split_tags=False, validate=True,
                                skip_existing=False, max_threads=4,
                                progress=True):
-    """Submit a identification for given cells.
+    """Submit community annotation(s) for given cell(s).
 
     Requires access to production dataset. Use this bulk submission of cell
     identification with great care!
@@ -932,9 +932,12 @@ def search_annotations(x,
     Examples
     --------
 
-    Find info for given root ID(s)
+    >>> from fafbseg import flywire
+
+    Find info for given root ID(s):
 
     >>> an = flywire.search_annotations(720575940628857210)
+    Using materialization version 630.
     >>> an.iloc[0]
     supervoxel_id               78112261444987077
     root_id                    720575940628857210
@@ -953,23 +956,27 @@ def search_annotations(x,
     hemibrain_type                          PS180
     ito_lee_hemilineage            SMPpv2_ventral
     hartenstein_hemilineage           CP1_ventral
-    morphology_group             SMPpv2_ventral_3
+    morphology_group                          NaN
     top_nt                          acetylcholine
-    top_nt_conf                          0.914499
+    top_nt_conf                          0.917977
     side                                     left
     nerve                                     NaN
+    vfb_id                               fw138205
     fbbt_id                         FBbt_20001935
     status                                    NaN
+    Name: 0, dtype: object
 
-    Search for a cell type
+    Search a term among all fields (this is a cell type):
 
     >>> ps009 = flywire.search_annotations('PS009', exact=True)
+    Using materialization version 630.
 
-    Use "colum:value" to search for a specific field
+    You can use "colum:value" as shorthand to search a specific field:
 
     >>> phn = flywire.search_annotations('nerve:PhN')
+    Using materialization version 630.
 
-    Use regex to refine search (here we try finding all "PSXXX" hemibrain types)
+    Use regex to refine search (here we try to find all "PSXXX" hemibrain types):
 
     >>> all_ps = flywire.search_annotations('hemibrain_type:PS[0-9]{3}', regex=True)
 
@@ -1302,32 +1309,36 @@ def search_community_annotations(x,
     Examples
     --------
 
-    Search for annotations for given root ID(s)
+    >>> from fafbseg import flywire
+
+    Search for annotations for given root ID(s):
 
     >>> an = flywire.search_community_annotations(720575940628857210)
+    Using materialization version 630.
+    Caching community annotations for materialization version "630"... Done.
     >>> an.iloc[0]
-    id                                             46699
-    created             2022-04-20 17:26:55.132886+00:00
-    superceded_id                                    NaN
-    pt_position_x                                 419980
-    pt_position_y                                 189644
-    pt_position_z                                 217360
-    tag                           unclassified_IN_FW_112
-    user                                 Stefanie Hampel
-    user_id                                          125
-    pt_supervoxel_id                   77830580511126708
-    pt_root_id                        720575940628857210
+    id                                   46699
+    pt_position_x                       419980
+    pt_position_y                       189644
+    pt_position_z                       217360
+    pt_supervoxel_id         77830580511126708
+    pt_root_id              720575940628857210
+    tag                 unclassified_IN_FW_112
+    user                       Stefanie Hampel
+    user_id                                125
+    Name: 0, dtype: object
 
-    Search for all tags matching a given pattern
+    Search for all tags matching a given pattern:
 
-    >>> ps009 = flywire.search_community_annotations('PS009')
-    >>> ps009
-                id                          created  ...      supervoxel_id             root_id
-    132997  150510 2023-09-11 18:15:40.698227+00:00  ...  82194060924379865  720575940624142995
-    134029  150511 2023-09-11 18:15:51.786862+00:00  ...  82194060924285875  720575940640133941
-    134456  150514 2023-09-11 18:27:45.745936+00:00  ...  82123692180213748  720575940624142995
-    134502  150515 2023-09-11 18:27:55.483635+00:00  ...  82053392222021289  720575940640133941
-    154788  156322 2023-09-13 20:18:26.050154+00:00  ...  82123829686174290  720575940615799697
+    >>> mi1 = flywire.search_community_annotations('Mi1')
+    Caching community annotations for materialization version "630"... Done.
+    >>> mi1.head()
+          id   pos_x  pos_y  pos_z      supervoxel_id             root_id                      tag  user  user_id
+    0  61866  200890  58482   3724  84445998176507710  720575940626235644  Medulla Intrinsic - Mi1  TR77     2843
+    1  61867  192776  41653   4105  83881948711947639  720575940623948432  Medulla Intrinsic - Mi1  TR77     2843
+    2  61869  194704  97128   3905  84026397051849432  720575940632232418  Medulla Intrinsic - Mi1  TR77     2843
+    3  61871  191574  82521   2728  83814259892666307  720575940630475095  Medulla Intrinsic - Mi1  TR77     2843
+    4  61877  195454  43026   4031  84022754919681933  720575940617637204  Medulla Intrinsic - Mi1  TR77     2843
 
     """
     # See if ``x`` is a root ID as string

@@ -107,6 +107,10 @@ def synapse_counts(
                     If ``by_neuropil=True`` returns counts indexed by root ID
                     and neuropil.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.get_synapses`
+                    Use this function to fetch the actual synapses.
     """
     # Parse root IDs
     ids = parse_root_ids(x).astype(np.int64)
@@ -385,7 +389,7 @@ def fetch_synapses(
     Examples
     --------
 
-    Fetch synapses for a given root ID
+    Fetch synapses for a given root ID:
 
     >>> from fafbseg import flywire
     >>> syn = flywire.fetch_synapses(720575940642744480)
@@ -397,7 +401,7 @@ def fetch_synapses(
     7   176752216     t  455640  214792  ...  0.000039  0.066771  0.086935
     10  178997778     t  473376  239832  ...  0.006675  0.000100  0.002978
 
-    Skeletonize a neuron and attach its synapses
+    Skeletonize a neuron and attach its synapses:
 
     >>> from fafbseg import flywire
     >>> sk = flywire.skeletonize_neuron(720575940642744480)
@@ -705,6 +709,11 @@ def fetch_adjacency(
                     Adjacency matrix. Rows (sources) and columns (targets) are
                     in the same order as input.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.get_connectivity`
+                    Use this function to fetch all up- and/or downstream partners
+                    for a set of neurons.
     """
     if isinstance(targets, type(None)):
         targets = sources
@@ -976,6 +985,11 @@ def fetch_connectivity(
     pd.DataFrame
                 Connectivity table.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.get_adjacency`
+                    Use this function to fetch connections between two sets
+                    of neurons.
     """
     if not upstream and not downstream:
         raise ValueError("`upstream` and `downstream` must not both be False")

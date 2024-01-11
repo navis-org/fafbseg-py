@@ -177,9 +177,9 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     --------
     >>> from fafbseg import flywire
     >>> # Fetch leaderboard with edits per day
-    >>> hist = flywire.fetch_leaderboard(by_day=True)
+    >>> hist = flywire.get_leaderboard(by_day=True)              #doctest: +SKIP
     >>> # Plot user actions over time
-    >>> hist.T.plot()
+    >>> hist.T.plot()                                            #doctest: +SKIP
 
     """
     assert isinstance(days, (int, np.integer))
@@ -345,15 +345,15 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     Returns
     -------
     dict
-                    ``{root_id: [svoxel_id1, svoxelid2, ...], ...}``
+                    ``{root_id: [supervoxel_id1, ssupervoxel_id2, ...], ...}``
 
     Examples
     --------
     >>> from fafbseg import flywire
     >>> flywire.roots_to_supervoxels(720575940619164912)[720575940619164912]
-    array([78180637324085660, 78180706043394027, 78180706043400870, ...,
-           78743587210799793, 78743587210799781, 78743587210818108],
-          dtype=uint64)
+    array([78251074787604983, 78251074787607484, 78251074787605192, ...,
+           78673699569883003, 78673699569870455, 78673699569887289],
+           dtype=uint64)
 
     """
     # Make sure we are working with an array of integers
@@ -450,6 +450,7 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     --------
     >>> from fafbseg import flywire
     >>> flywire.supervoxels_to_roots(78321855915861142)
+    array([720575940594028562])
 
     """
     # Make sure we are working with an array of integers
@@ -531,6 +532,12 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
     numpy.array
                 List of segmentation IDs in the same order as ``locs``. Invalid
                 locations will be returned with ID 0.
+
+    See Also
+    --------
+    :func:`~fafbseg.flywire.locs_to_segments`
+                Takes locations and returns root IDs. Can also map to a specific
+                time or materialization.
 
     Examples
     --------
@@ -617,6 +624,12 @@ def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
                             12345   103366809155     0.87665
                             412314  103366821325     0.65233
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.skid_to_id`
+                    Takes a CATMAID (FAFB) skeleton ID or annotations and returns
+                    corresponding FlyWire root IDs.
+
     """
     if isinstance(x, navis.TreeNeuron):
         x = navis.NeuronList(x)
@@ -695,13 +708,18 @@ def locs_to_segments(locs, timestamp=None, backend='spine',
     numpy.array
                     List of segmentation IDs in the same order as ``locs``.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.locs_to_supervoxels`
+                    Takes locations and returns supervoxel IDs.
+
     Examples
     --------
     >>> from fafbseg import flywire
     >>> # Fetch root IDs at two locations
     >>> locs = [[133131, 55615, 3289], [132802, 55661, 3289]]
     >>> flywire.locs_to_segments(locs)
-    array([720575940621039145, 720575940621039145])
+    array([720575940631693610, 720575940631693610])
 
     """
     svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend)
@@ -746,9 +764,15 @@ def skid_to_id(x,
     Returns
     -------
     pandas.DataFrame
-                    Mapping of skeleton IDs to FlyWire root IDs with. Confidence
+                    Mapping of skeleton IDs to FlyWire root IDs. Confidence
                     is the difference between the frequency of the root ID that
                     was seen most often and the second most seen ID.
+
+    See Also
+    --------
+    :func:`~fafbseg.flywire.neuron_to_segments`
+                    Takes already downloaded and transformed neuron(s) and
+                    returns corresponding FlyWire root IDs.
 
     Examples
     --------
@@ -847,19 +871,20 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
     See Also
     --------
     :func:`~fafbseg.flywire.update_ids`
-                    If you want the new ID.
+                    If you want the new ID. Also allows mapping to a specific
+                    time or materialization.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> flywire.is_latest_root(720575940621039145)
-    array([True])
+    >>> flywire.is_latest_root(720575940631693610)
+    array([ True])
 
     """
     id = make_iterable(id, force_type=str)
 
     # The server doesn't like being asked for zeros
-    not_zero = id != '0'
+    not_zero = id != "0"
 
     # Check if all other IDs are valid
     is_valid_root(id[not_zero], raise_exc=True)
@@ -868,17 +893,19 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
 
     session = requests.Session()
     token = get_chunkedgraph_secret()
-    session.headers['Authorization'] = f"Bearer {token}"
-    url = ('https://prod.flywire-daf.com/segmentation/api/v1/table/'
-           f'{FLYWIRE_DATASETS.get(dataset, dataset)}/is_latest_roots?int64_as_str=1')
+    session.headers["Authorization"] = f"Bearer {token}"
+    url = (
+        "https://prod.flywire-daf.com/segmentation/api/v1/table/"
+        f"{FLYWIRE_DATASETS.get(dataset, dataset)}/is_latest_roots?int64_as_str=1"
+    )
 
-    if isinstance(timestamp, str) and timestamp.startswith('mat'):
+    if isinstance(timestamp, str) and timestamp.startswith("mat"):
         client = get_cave_client(dataset=dataset)
-        if timestamp == 'mat' or timestamp == 'mat_latest':
+        if timestamp == "mat" or timestamp == "mat_latest":
             timestamp = client.materialize.get_timestamp()
         else:
             # Split e.g. 'mat_432' to extract version and query timestamp
-            version = int(timestamp.split('_')[1])
+            version = int(timestamp.split("_")[1])
             timestamp = client.materialize.get_timestamp(version)
 
     if isinstance(timestamp, np.datetime64):
@@ -1027,13 +1054,17 @@ def update_ids(id,
     --------
     :func:`~fafbseg.flywire.is_latest_root`
                     If all you want is to know whether a (root) ID is up-to-date.
+    :func:`~fafbseg.flywire.supervoxels_to_roots`
+                    Maps supervoxels to roots. If you have supervoxel IDs for
+                    your neurons this function will be significantly faster for
+                    updating/mapping root IDs.
 
     Examples
     --------
     >>> from fafbseg import flywire
     >>> flywire.update_ids(720575940621039145)
                    old_id              new_id  confidence  changed
-    0  720575940621039145  720575940621039145           1    False
+    0  720575940621039145  720575940631693610         1.0     True
 
     """
     assert stop_layer > 0, '`stop_layer` must be > 0'
@@ -1437,6 +1468,11 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
     array
             If ``x`` is iterable.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.is_valid_supervoxel`
+                    Use this function to check if a supervoxel ID is valid.
+
     """
     vol = get_cloudvolume(dataset)
 
@@ -1480,6 +1516,11 @@ def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
             If ``x`` is a single ID.
     array
             If ``x`` is iterable.
+
+    See Also
+    --------
+    :func:`~fafbseg.flywire.is_valid_root`
+                    Use this function to check if a root ID is valid.
 
     """
     vol = get_cloudvolume(dataset)
