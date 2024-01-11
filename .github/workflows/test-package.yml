@@ -33,7 +33,7 @@ jobs:
         pip install --upgrade pip
         pip install zstandard==0.16.0
         pip install numpy
-        pip install flybrains --no-deps
+        pip install flybrains
         pip install pyarrow
     - name: Install fafbseb
       run: pip install -e .
