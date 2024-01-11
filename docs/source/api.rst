@@ -50,9 +50,9 @@ Connectivity:
 .. autosummary::
     :toctree: generated/
 
-    fafbseg.flywire.synapses.fetch_adjacency
-    fafbseg.flywire.synapses.fetch_connectivity
-    fafbseg.flywire.synapses.fetch_synapses
+    fafbseg.flywire.synapses.get_adjacency
+    fafbseg.flywire.synapses.get_connectivity
+    fafbseg.flywire.synapses.get_synapses
     fafbseg.flywire.synapses.synapse_counts
     fafbseg.flywire.synapses.predict_transmitter
 
@@ -61,31 +61,34 @@ L2-related functions:
 .. autosummary::
     :toctree: generated/
 
-    fafbseg.flywire.l2_info
-    fafbseg.flywire.l2_graph
-    fafbseg.flywire.l2_dotprops
-    fafbseg.flywire.l2_skeleton
+    fafbseg.flywire.get_l2_info
+    fafbseg.flywire.get_l2_graph
+    fafbseg.flywire.get_l2_dotprops
+    fafbseg.flywire.get_l2_skeleton
 
 Misc:
 
 .. autosummary::
     :toctree: generated/
 
-    fafbseg.flywire.fetch_edit_history
-    fafbseg.flywire.fetch_leaderboard
+    fafbseg.flywire.get_edit_history
+    fafbseg.flywire.get_leaderboard
     fafbseg.flywire.get_neuropil_volumes
     fafbseg.flywire.get_lineage_graph
     fafbseg.flywire.get_lr_position
     fafbseg.flywire.get_voxels
+
+.. _api_annotations:
 
 For fetching annotations:
 
 .. autosummary::
     :toctree: generated/
 
-    fafbseg.flywire.search_community_annotations
     fafbseg.flywire.search_annotations
+    fafbseg.flywire.search_community_annotations
     fafbseg.flywire.get_hierarchical_annotations
+    fafbseg.flywire.NeuronCriteria
 
 For interaction with the CAVE engine:
 
@@ -93,10 +96,10 @@ For interaction with the CAVE engine:
     :toctree: generated/
 
     fafbseg.flywire.get_materialization_versions
-    fafbseg.flywire.create_annotation_table
-    fafbseg.flywire.list_annotation_tables
-    fafbseg.flywire.get_annotation_table_info
-    fafbseg.flywire.get_annotations
+    fafbseg.flywire.create_cave_table
+    fafbseg.flywire.list_cave_tables
+    fafbseg.flywire.get_cave_table_info
+    fafbseg.flywire.get_cave_table
     fafbseg.flywire.delete_annotations
     fafbseg.flywire.upload_annotations
 
@@ -107,6 +110,7 @@ Utility functions:
     :toctree: generated/
 
     fafbseg.flywire.set_default_dataset
+    fafbseg.flywire.set_default_annotation_version
     fafbseg.flywire.get_user_information
 
 
