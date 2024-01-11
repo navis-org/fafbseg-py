@@ -155,7 +155,7 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
     return G
 
 
-def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
+def get_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
     """Fetch leader board (# of edits).
 
     Parameters
@@ -228,8 +228,7 @@ def fetch_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
 
 
 @inject_dataset()
-def fetch_edit_history(x, progress=True, errors='raise',
-                       max_threads=4, *, dataset=None):
+def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset=None):
     """Fetch edit history for given neuron(s).
 
     Note that neurons that haven't seen any edits will simply not show up in
@@ -256,7 +255,7 @@ def fetch_edit_history(x, progress=True, errors='raise',
     --------
     >>> from fafbseg import flywire
     >>> # Fetch edits
-    >>> edits = flywire.fetch_edit_history(720575940621039145)
+    >>> edits = flywire.get_edit_history(720575940621039145)
     >>> # Group by user
     >>> edits.groupby('user_name').size()
     user_name

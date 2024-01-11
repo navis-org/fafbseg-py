@@ -38,19 +38,19 @@ from ..synapses.utils import catmaid_table
 from ..synapses.transmitters import collapse_nt_predictions
 
 __all__ = [
-    "fetch_synapses",
-    "fetch_connectivity",
-    "predict_transmitter",
-    "fetch_adjacency",
-    "synapse_counts",
+    "get_synapses",
+    "get_connectivity",
+    "get_transmitter_predictions",
+    "get_adjacency",
+    "get_synapse_counts",
 ]
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
-def synapse_counts(
+def get_synapse_counts(
     x,
     by_neuropil=False,
-    mat="auto",
+    materialization="auto",
     filtered=True,
     min_score=None,
     batch_size=10,
@@ -98,7 +98,7 @@ def synapse_counts(
                     :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
                     Keyword arguments are passed through to
-                    :func:`fafbseg.flywire.fetch_synapses`.
+                    :func:`fafbseg.flywire.get_synapses`.
 
     Returns
     -------
@@ -111,12 +111,26 @@ def synapse_counts(
     --------
     :func:`~fafbseg.flywire.get_synapses`
                     Use this function to fetch the actual synapses.
+
+    Examples
+    --------
+
+    Get synapse counts for a given root ID:
+
+    >>> from fafbseg import flywire
+    >>> n_syn = flywire.get_synapse_counts(720575940603231916)
+    Using materialization version 630.
+    >>> n_syn
+                        pre  post
+    id
+    720575940603231916  4571   887
+
     """
     # Parse root IDs
     ids = parse_root_ids(x).astype(np.int64)
 
     # First get the synapses
-    syn = fetch_synapses(
+    syn = get_synapses(
         ids,
         pre=True,
         post=True,
@@ -168,7 +182,7 @@ def synapse_counts(
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
-def predict_transmitter(
+def get_transmitter_predictions(
     x,
     single_pred=False,
     weighted=True,
@@ -229,7 +243,7 @@ def predict_transmitter(
                     :func:`~fafbseg.flywire.set_default_dataset`).
     **kwargs
                     Keyword arguments are passed through to
-                    :func:`fafbseg.flywire.fetch_synapses`.
+                    :func:`fafbseg.flywire.get_synapses`.
 
 
     Returns
@@ -246,23 +260,28 @@ def predict_transmitter(
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> # Single neuron
-    >>> flywire.predict_transmitter(720575940613941475)
-    root_id        720575940613941475
-    gaba                     0.007765
-    acetylcholine            0.936613
-    glutamate                0.009453
-    octopamine               0.014961
-    serotonin                0.001858
-    dopamine                 0.029349
-    >>> # Return only highest transmitter
-    >>> flywire.predict_transmitter(720575940613941475, single_pred=True)
-    {720575940613941475: prediction(transmitter='acetylcholine', probability=0.9366134904655998)}
 
+    Get per-transmitter predictions for a single neuron:
+
+    >>> flywire.get_transmitter_predictions(720575940603231916)
+    Using materialization version 630.
+    root_id        720575940603231916
+    gaba                     0.011677
+    acetylcholine            0.938961
+    glutamate                0.017902
+    octopamine               0.012861
+    serotonin                0.012467
+    dopamine                 0.006132
+
+    Return only the most likely transmitter:
+
+    >>> flywire.get_transmitter_predictions(720575940603231916, single_pred=True)
+    Using materialization version 630.
+    {720575940603231916: prediction(transmitter='acetylcholine', probability=0.9389612897479809)}
 
     """
     # First get the synapses
-    syn = fetch_synapses(
+    syn = get_synapses(
         x,
         pre=True,
         post=False,
@@ -303,7 +322,7 @@ def predict_transmitter(
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
-def fetch_synapses(
+def get_synapses(
     x,
     pre=True,
     post=True,
@@ -385,6 +404,12 @@ def fetch_synapses(
                     (`x`), a given row might represent a presynapse for one and
                     a postsynapse for another neuron.
 
+    See Also
+    --------
+    :func:`~fafbseg.flywire.get_connectivity`
+                    Use this function to fetch the edges between neurons instead
+                    of individual synapses.
+
 
     Examples
     --------
@@ -392,27 +417,29 @@ def fetch_synapses(
     Fetch synapses for a given root ID:
 
     >>> from fafbseg import flywire
-    >>> syn = flywire.fetch_synapses(720575940642744480)
+    >>> syn = flywire.get_synapses(720575940603231916)
+    Using materialization version 630.
     >>> syn.head()
-               id valid   pre_x   pre_y  ...       oct       ser        da
-    0   178959090     t  488248  238240  ...  0.000532  0.000015  0.000346
-    2   205400582     t  469592  240224  ...  0.001383  0.005552  0.023057
-    4    68853638     t  442348   86348  ...  0.000002  0.000441  0.023308
-    7   176752216     t  455640  214792  ...  0.000039  0.066771  0.086935
-    10  178997778     t  473376  239832  ...  0.006675  0.000100  0.002978
+                      pre                post  cleft_score   pre_x   pre_y  pre_z  post_x  post_y  post_z         id
+    0  720575940631406673  720575940603231916           60  434336  218108  28240  434340  218204   28240    3535576
+    1  720575940608044501  720575940603231916          136  429180  212316  51520  429244  212136   51520   15712693
+    2  720575940627777265  720575940603231916          142  440272  215372  35240  440152  215392   35200   29684635
+    3  720575940606227890  720575940603231916          147  429932  224436  41120  429968  224584   41120  111586446
+    4  720575940627777265  720575940603231916          146  423856  216648  51280  423844  216528   51240   15689207
 
     Skeletonize a neuron and attach its synapses:
 
     >>> from fafbseg import flywire
-    >>> sk = flywire.skeletonize_neuron(720575940642744480)
-    >>> _ = flywire.fetch_synapses(sk, attach=True)
+    >>> sk = flywire.get_skeletons(720575940603231916)
+    >>> _ = flywire.get_synapses(sk, attach=True)
+    Using materialization version 630.
     >>> sk.connectors.head()
        connector_id       x       y       z  cleft_score          partner_id type  node_id
-    0             0  438416   95608  150240          117  720575940385508863  pre     2896
-    1             1  439776   89464  159680          152  720575940386246908  pre     3009
-    2             2  435140   94556  151640          139  720575940613778326  pre     2562
-    3             3  384384  100996  160960          146  720575940451774747  pre      843
-    4             4  448676   97180  148160          141  720575940637824189  pre     4344
+    0             0  356304  146840  145120          145  720575940627592977  pre      217
+    1             1  344456  164324  162440          153  720575940537249676  pre        5
+    2             2  373200  149464  162440           52  720575940599849357  pre      390
+    3             3  355220  156784  151000          144  720575940537605841  pre      171
+    4             4  346320  154520  151720          142  720575940635161060  pre       30
 
     """
     if not pre and not post:
@@ -634,7 +661,7 @@ def fetch_synapses(
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
-def fetch_adjacency(
+def get_adjacency(
     sources,
     targets=None,
     mat="auto",
@@ -714,6 +741,21 @@ def fetch_adjacency(
     :func:`~fafbseg.flywire.get_connectivity`
                     Use this function to fetch all up- and/or downstream partners
                     for a set of neurons.
+
+    Examples
+    --------
+
+    Get connections between given root IDs:
+
+    >>> from fafbseg import flywire
+    >>> adj = flywire.get_adjacency(sources=720575940631406673,
+    ...                             targets=720575940603231916)
+    Using materialization version 630.
+    >>> adj
+    target              720575940603231916
+    source
+    720575940631406673                   5
+
     """
     if isinstance(targets, type(None)):
         targets = sources
@@ -887,7 +929,7 @@ def fetch_adjacency(
 
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
-def fetch_connectivity(
+def get_connectivity(
     x,
     clean=True,
     style="simple",
@@ -990,6 +1032,23 @@ def fetch_connectivity(
     :func:`~fafbseg.flywire.get_adjacency`
                     Use this function to fetch connections between two sets
                     of neurons.
+
+    Examples
+    --------
+
+    Get connections from/to given root ID(s):
+
+    >>> from fafbseg import flywire
+    >>> edges = flywire.get_connectivity(720575940603231916)
+    Using materialization version 630.
+    >>> edges.head()
+                      pre                post  weight
+    0  720575940630610425  720575940603231916      83
+    1  720575940620541349  720575940603231916      58
+    2  720575940603231916  720575940629163931      50
+    3  720575940603231916  720575940630610425      46
+    4  720575940603231916  720575940646122804      42
+
     """
     if not upstream and not downstream:
         raise ValueError("`upstream` and `downstream` must not both be False")
@@ -1206,7 +1265,7 @@ def fetch_connectivity(
 
 
 @inject_dataset()
-def fetch_supervoxel_synapses(
+def get_supervoxel_synapses(
     x, pre=True, post=True, batch_size=300, progress=True, *, dataset=None
 ):
     """Fetch Buhmann et al. (2019) synapses for given supervoxels.
@@ -1313,7 +1372,7 @@ def synapse_contributions(x, *, dataset=None):
     """Return synapse contributions to given neuron."""
 
     # Grab synapses for this neuron
-    syn = fetch_synapses(x)
+    syn = get_synapses(x)
     pre = syn[syn.pre == x]
     post = syn[syn.post == x]
 

@@ -18,7 +18,6 @@
 import math
 import navis
 
-import seaborn as sns
 import numpy as np
 import pandas as pd
 
@@ -171,7 +170,7 @@ def plot_nt_predictions(pred, bins=20, id_col=None, ax=None, legend=True, **kwar
     pred :      pandas.DataFrame
                 Table with synapse neurotransmitter predictions.
                 For example as returned from
-                ``fafbseg.flywire.fetch_synapses(..., transmitters=True)``.
+                ``fafbseg.flywire.get_synapses(..., transmitters=True)``.
     bins :      int | sequence of scalars
                 Either number of bins or a sequence of bin edges.
     id_col :    str, optional

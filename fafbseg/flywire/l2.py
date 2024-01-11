@@ -34,12 +34,12 @@ from functools import partial
 
 from .utils import get_cloudvolume, get_cave_client, retry, inject_dataset
 
-__all__ = ['l2_skeleton', 'l2_dotprops', 'l2_graph', 'l2_info',
+__all__ = ['get_l2_skeleton', 'get_l2_dotprops', 'get_l2_graph', 'get_l2_info',
            'find_anchor_loc']
 
 
 @inject_dataset()
-def l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
+def get_l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     """Fetch basic info for given neuron(s) using the L2 cache.
 
     Parameters
@@ -71,17 +71,17 @@ def l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> info = flywire.l2_info(720575940614131061)
+    >>> info = flywire.get_l2_info(720575940614131061)             # doctest: +ELLIPSIS
     >>> info
-                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um   bounds_nm
-    0  720575940614131061        286               2  2364.39616  132.467837     60.271   [305456, 311184, ...
+                  root_id  l2_chunks  chunks_missing    area_um2    size_um3  length_um                                          bounds_nm
+    0  720575940614131061        286               0  2378.16384  163.876526     60.666  [396816.0, 587808.0, 83968.0, 279072.0, 19560....
 
     """
     if navis.utils.is_iterable(root_ids):
         root_ids = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
-            func = partial(l2_info, dataset=dataset)
+            func = partial(get_l2_info, dataset=dataset)
             futures = pool.map(func, root_ids)
             info = [f for f in navis.config.tqdm(futures,
                                                  desc='Fetching L2 info',
@@ -143,7 +143,7 @@ def l2_info(root_ids, progress=True, max_threads=4, *, dataset=None):
 
 
 @inject_dataset()
-def l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
+def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     """Fetch info for given L2 chunks.
 
     Parameters
@@ -296,7 +296,7 @@ def find_anchor_loc(root_ids,
     get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
     l2_ids = get_l2_ids(root_ids)
 
-    get_l2data = retry(l2_chunk_info)
+    get_l2data = retry(get_l2_chunk_info)
     info = get_l2data(l2_ids, progress=progress)
 
     if info.empty:
@@ -325,12 +325,12 @@ def find_anchor_loc(root_ids,
 
 
 @inject_dataset()
-def l2_graph(root_ids, progress=True, *, dataset=None):
+def get_l2_graph(root_ids, progress=True, *, dataset=None):
     """Fetch L2 graph(s).
 
     Parameters
     ----------
-    root_ids  : int | list of ints
+    root_ids  : int | list of ints | NeuronCriteria
                 FlyWire root ID(s) for which to fetch the L2 graphs.
     progress :  bool
                 Whether to show a progress bar.
@@ -347,7 +347,7 @@ def l2_graph(root_ids, progress=True, *, dataset=None):
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> G = flywire.l2_graph(720575940614131061)
+    >>> G = flywire.get_l2_graph(720575940614131061)
 
     """
     if navis.utils.is_iterable(root_ids):
@@ -355,7 +355,7 @@ def l2_graph(root_ids, progress=True, *, dataset=None):
         for id in navis.config.tqdm(root_ids, desc='Fetching',
                                     disable=not progress or len(root_ids) == 1,
                                     leave=False):
-            n = l2_graph(id, dataset=dataset)
+            n = get_l2_graph(id, dataset=dataset)
             graphs.append(n)
         return graphs
 
@@ -384,7 +384,7 @@ def l2_graph(root_ids, progress=True, *, dataset=None):
 
 
 @inject_dataset()
-def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
+def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
                 omit_failures=None, progress=True, max_threads=4,
                 *, dataset=None, **kwargs):
     """Generate skeleton from L2 graph.
@@ -397,7 +397,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     refine :        bool
                     If True, will refine skeleton nodes by moving them in
                     the center of their corresponding chunk meshes. This
-                    uses the L2 cache (see :func:`fafbseg.flywire.l2_info`).
+                    uses the L2 cache (see :func:`fafbseg.flywire.get_l2_info`).
     drop_missing :  bool
                     Only relevant if ``refine=True``: If True, will drop
                     chunks that don't exist in the L2 cache. These are
@@ -434,16 +434,20 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
     See Also
     --------
-    :func:`fafbseg.flywire.l2_dotprops`
+    :func:`fafbseg.flywire.get_l2_dotprops`
                         Create dotprops instead of skeletons (faster and
                         possibly more accurate).
+    :func:`~fafbseg.flywire.get_skeletons`
+                        Fetch precomputed full resolution skeletons. Only
+                        available for proofread neurons and for certain
+                        materialization versions.
     :func:`fafbseg.flywire.skeletonize_neuron`
                         Skeletonize the full resolution mesh.
 
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> n = flywire.l2_skeleton(720575940614131061)
+    >>> n = flywire.get_l2_skeleton(720575940614131061)
 
     """
     if omit_failures not in (None, True, False):
@@ -453,7 +457,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
     if navis.utils.is_iterable(root_id):
         root_id = np.asarray(root_id, dtype=np.int64)
 
-        get_l2_skels = partial(l2_skeleton, refine=refine, drop_missing=drop_missing,
+        get_l2_skels = partial(get_l2_skeleton, refine=refine, drop_missing=drop_missing,
                                omit_failures=omit_failures, dataset=dataset, **kwargs)
         if (max_threads > 1) and (len(root_id) > 1):
             with ThreadPoolExecutor(max_workers=max_threads) as pool:
@@ -601,7 +605,7 @@ def l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
 
 @inject_dataset()
-def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
+def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
                 progress=True, max_threads=10, *, dataset=None, **kwargs):
     """Generate dotprops from L2 chunks.
 
@@ -650,8 +654,8 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
     See Also
     --------
-    :func:`fafbseg.flywire.l2_skeleton`
-                    Create skeletons instead of dotprops using the L2
+    :func:`fafbseg.flywire.get_l2_skeleton`
+                    Fetch skeletons instead of dotprops using the L2
                     edges to infer connectivity.
     :func:`fafbseg.flywire.skeletonize_neuron`
                     Skeletonize the full resolution mesh.
@@ -659,7 +663,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
     Examples
     --------
     >>> from fafbseg import flywire
-    >>> n = flywire.l2_dotprops(720575940614131061)
+    >>> n = flywire.get_l2_dotprops(720575940614131061)
 
     """
     if omit_failures not in (None, True, False):
@@ -769,7 +773,7 @@ def l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
 
 @inject_dataset()
-def l2_meshes(x, threads=10, progress=True, *, dataset=None):
+def get_l2_meshes(x, threads=10, progress=True, *, dataset=None):
     """Fetch L2 meshes for a given neuron.
 
     Parameters

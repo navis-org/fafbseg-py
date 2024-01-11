@@ -23,8 +23,8 @@ import cloudvolume as cv
 from cloudvolume.mesh import Mesh
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .l2 import l2_graph
-from .synapses import fetch_synapses
+from .l2 import get_l2_graph
+from .synapses import get_synapses
 from .utils import get_cloudvolume, inject_dataset
 
 __all__ = ['get_mesh_neuron']
@@ -42,7 +42,7 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
     with_synapses :     bool
                         If True, will also load a connector table with
                         synapse predicted by Buhmann et al. (2020). This uses
-                        the default parameters for ``flywire.fetch_synapses``.
+                        the default parameters for ``flywire.get_synapses``.
                         Use that function directly (with ``attach=True``) to
                         have more control over which synapses get pulled.
     omit_failures :     bool, optional
@@ -162,8 +162,9 @@ def get_mesh_neuron(id, with_synapses=False, omit_failures=None, threads=5,
     n = navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
 
     if with_synapses:
-        _ = fetch_synapses(n.id, attach=True, min_score=30, dataset=dataset,
-                           progress=False)
+        _ = get_synapses(
+            n.id, attach=True, min_score=30, dataset=dataset, progress=False
+        )
 
     return n
 
@@ -221,7 +222,7 @@ def _get_mesh(seg_id, vol):
 
         ix += n_verts
 
-    G = l2_graph(seg_id)
+    G = get_l2_graph(seg_id)
 
     edges = [e for e in G.edges if e[0] in l2_map and e[1] in l2_map]
     edges = [[l2_map[e[0]], l2_map[e[1]]] for e in edges]
