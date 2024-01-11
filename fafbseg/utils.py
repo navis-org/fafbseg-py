@@ -14,18 +14,19 @@
 #    GNU General Public License for more details.
 """Collection of utility functions."""
 
-import collections
-import requests
+import os
 import six
+import requests
+import collections
 
 import numpy as np
 
-from concurrent import futures
+from pathlib import Path
 from tqdm.auto import tqdm
 from functools import wraps
-from urllib.parse import urlparse, urlencode
+from concurrent import futures
 from collections.abc import Iterable
-from pathlib import Path
+from urllib.parse import urlparse, urlencode
 
 use_pbars = True
 
@@ -34,10 +35,11 @@ CACHE_DIR = "~/.fafbseg/cache/"
 
 def never_cache(function):
     """Decorate to prevent caching of server responses."""
+
     @wraps(function)
     def wrapper(*args, **kwargs):
         # Find CATMAID instances
-        instances = [v for k, v in kwargs.items() if '_instance' in k]
+        instances = [v for k, v in kwargs.items() if "_instance" in k]
 
         # Keep track of old caching settings
         old_values = [i.caching for i in instances]
@@ -55,6 +57,7 @@ def never_cache(function):
                 rm.caching = old
         # Return result
         return res
+
     return wrapper
 
 
@@ -269,7 +272,7 @@ def download_cache_file(url, filename=None, force_reload=False, verbose=True):
         fp = cache_dir / Path(url).name
 
     if not fp.exists() or force_reload:
-        if verbose:
+        if verbose and not os.environ.get("FAFBSEG_TESTING", False):
             print(
                 f"Caching {fp.name} from {urlparse(url).netloc}... ", end="", flush=True
             )
