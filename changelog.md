@@ -1,5 +1,67 @@
 # Changelog
 
+## [3.0.0] - 2024-01-10
+The default dataset is now the "public" dataset!
+
+This release allows you to work with annotations (classes, types, etc) instead of
+having to shuttle root IDs in and out of `fafbseg` functions.
+
+Annotation queries will download (and cache) data from https://github.com/flyconnectome/flywire_annotations
+which is currently principally based on Schlegel et al. (2023). We are planning
+to keep updating these annotations in the future.
+
+We also renamed a bunch of functions to make things more consistent (see
+section on **Breaking changes**).
+
+### Working with annotations
+With this version, `fafbseg` introduces a `NeuronCriteria` class. It works
+similar to that in `neuprint-python` and can be passed to many functions that
+previously only accepted root IDs:
+
+```python
+>>> from fafbseg import flywire
+>>> NC = flywire.NeuronCriteria
+>>> flywire.search_annotations(NC(type='ps009', side='left'))
+           supervoxel_id             root_id   ...  side  nerve
+0      78886867319895457  720575940620322497   ...  left     CV
+>>> flywire.get_connectivity(NC(type='ps009', side='left'))
+                     pre                post  weight
+0     720575940635179359  720575940620322497     181
+1     720575940631446855  720575940620322497     125
+2     720575940608118283  720575940620322497     109
+```
+
+Please see the updated annotation [tutorial](https://fafbseg-py.readthedocs.io/en/latest/source/gallery.html)
+for details.
+
+### Breaking changes
+- prior to version `3.0.0`, some functions accepted a materialization version as
+  `mat` and some as `materialization` argument; with this version this argument
+  is consistently named `materialization`; this mostly affects
+  connectivity-related functions
+- the following functions have been renamed to avoid confusion:
+  - `list_annotation_tables()` -> `list_cave_tables()`
+  - `get_annotations()` -> `get_cave_table()`
+  - `create_annotation_table()` -> `create_cave_table()`
+  - `get_annotation_table_info()` -> `get_cave_table_info()`
+- the following function have been renamed for consistency:
+  - `fetch_synapses()` -> `get_synapses()`
+  - `fetch_adjacency()` -> `get_adjacency()`
+  - `fetch_connectivity()` -> `get_connectivity()`
+  - `synapse_counts()` -> `get_synapse_counts()`
+  - `predict_transmitter()` -> `get_transmitter_predictions`
+  - `fetch_leaderboard()` -> `get_leaderboard()`
+  - `fetch_edit_history()` -> `get_edit_history()`
+  - `l2_graph` -> `get_l2_graph`
+  - `l2_skeleton` -> `get_l2_skeleton`
+  - `l2_dotprops` -> `get_l2_dotprops`
+  - `l2_info` -> `get_l2_info`
+
+### Other fixes/improvemnts
+- you can now query the flat `783` segmentation by using `dataset="flat_783"`
+- precomputed high-res skeletons for `783` have been made available; see
+  `flywire.get_skeletons`
+
 ## [2.0.3] - 2023-11-29
 One fix, one improvement:
 - `flywire.fetch_connectivity` now allows `neuropils=True` to return edges broken
@@ -21,7 +83,6 @@ Minor fixes and improvements:
 - improve `flywire.search_annotations`
 
 ## [2.0.0] - 2023-10-09
-
 This is a major release with lots of under-the-hood reworks to accompany the
 public release of FlyWire.
 
