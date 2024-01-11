@@ -45,7 +45,6 @@ jobs:
       run: |
         python -c "from fafbseg import flywire;flywire.set_chunkedgraph_secret('$CAVE_TOKEN')"
     - name: Test with pytest
-      with:
-        run: |
-          export NAVIS_HEADLESS=TRUE
-          pytest --verbose
+      run: |
+        export NAVIS_HEADLESS=TRUE
+        pytest --verbose
