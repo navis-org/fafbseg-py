@@ -58,27 +58,29 @@ FlyWire datasets
 
 FlyWire actually has three different datasets/versions:
 
-1. The "Public release" is the static snapshot made available alongside the preprints
-   and corresponds to materialization version ``630`` (see below for an explanation
-   of materializations). Anyone has access to this dataset after signing up.
-2. The "Sandbox" is a training ground that has seen minimal proofreading (i.e.
-   is close to the bsae segmentation). Anyone has access to this dataset.
-3. The "Production" dataset is where people do the actual proofreading/annotation.
-   As such it is ahead of the public release dataset. To get access to the
+1. The "Public release" contains static snapshots of the segmentation which
+   correspond to specific materialization version (see below for an explanation
+   of materializations). For example, the first ever public release was
+   materialization ``630``. Anyone has access to this dataset after signing up
+   through the FlyWire website.
+2. The "Production" dataset is where people do the actual proofreading/annotation.
+   As such it is ahead of the publicly released snapshots. To get access to the
    production dataset you have to be approved by one of the community managers.
+3. Last but not least, "Sandbox" is a training ground that has seen minimal
+   proofreading (i.e. is close to the bsae segmentation). Anyone has access to
+   this dataset after signing up.
 
-Most functions in ``fafbseg.flywire`` accept a ``dataset`` parameter. If not
-specified it will fall back to the production dataset!
+Most functions in ``fafbseg.flywire`` accept a ``dataset`` parameter. As of
+``fafbseg`` version ``3.0.0`` the default dataset is the public one.
 
 .. code-block:: python
 
   >>> from fafbseg import flywire
   >>> # Defaults to production
-  >>> flywire.supervoxels_to_roots(79801523353597754)
+  >>> flywire.supervoxels_to_roots(79801523353597754, dataset='production')
   array([720575940631274967])
   >>> flywire.supervoxels_to_roots(79801523353597754, dataset='public')
   array([720575940621675174])
-
 
 You can change this default by running this at the beginning of each session:
 
@@ -156,22 +158,24 @@ Fortunately, all of this is done for you by CAVE, the *c*onnectome *a*nnotation
 *v*ersioning *e*ngine. The gist is this: (almost) every night CAVE looks up
 the current root IDs for the synaptic connections, the community annotations and
 the various other tables it stores. These snapshots are called "materializations".
+Note that the public dataset only contains a limited set of these materializations.
 
-If we make sure that our query neurons were current at one of the available
+If we make sure that our root IDs were "alive" at one of the available
 materialization versions, we can query those tables with very little overhead on
 our end. Things get tricky if:
 
-- the root IDs are more recent than the latest materialization
-- the root IDs did only exist briefly *in between* materializations
-- the root IDs never co-existed at any of the materializations
+- root IDs are more recent than the latest materialization
+- root IDs only existed briefly *in between* materializations
+- root IDs never co-existed at any of the materializations
 
 ``fafbseg`` tries to abstract away a lot of the complications - in fact the
-relevant functions such as :func:`~fafbseg.flywire.fetch_synapses` accept a
-``materialization`` or ``mat`` that defaults to "auto" which will try to find
+relevant functions such as :func:`~fafbseg.flywire.get_synapses` accept a
+``materialization`` parameter that defaults to "auto" which will try to find
 a matching materialization version and complain if that isn't possible.
 
-The safe bet is to "pin" the neurons you work with to one of the long-term
-materialization versions and stick to those - see
-:func:`~fafbseg.flywire.get_materialization_versions` for a list of available
-versions.
+In practice, the safe bet is to pick a materialization to work with and stick
+with it for your analyses. If you are working with the public release data, this
+isn't much of a problem since you have only very few versions and no "live" data
+to work with anyway. Use :func:`~fafbseg.flywire.get_materialization_versions` to
+get a list of available versions.
 
