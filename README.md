@@ -2,7 +2,17 @@
 
 <img src="https://github.com/navis-org/fafbseg-py/blob/master/docs/_static/logo2.png?raw=true" height="60">
 
-Tools to work with manually generated and auto-segmented data in FAFB.
+Tools to work with the FlyWire and Google segmentations of the FAFB EM dataset. Fully interoperable with navis.
+
+## Features
+Here are just some of the things you can do with ``fafbseg``:
+
+* map locations or supervoxels to segmentation IDs
+* load neuron meshes and skeletons
+* generate high quality neuron meshes and skeletons from scratch
+* query connectivity and annotations
+* parse and generate FlyWire neuroglancer URLs
+* transform neurons from FAFB/FlyWire space to other brains spaces (e.g. hemibrain)
 
 ## Documentation
 FAFBseg is on [readthedocs](https://fafbseg-py.readthedocs.io/en/latest/).
@@ -11,7 +21,7 @@ FAFBseg is on [readthedocs](https://fafbseg-py.readthedocs.io/en/latest/).
 Install latest stable version
 
 ```bash
-pip3 install fafbseg
+pip3 install fafbseg -U
 ```
 
 Install from Github

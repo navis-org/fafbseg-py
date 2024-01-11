@@ -11,12 +11,11 @@ brain imaged by Zhihao Zheng and Davi Bock
 (see `Zheng et al., 2018 <https://www.sciencedirect.com/science/article/pii/S0092867418307876>`_).
 The raw image data can be downloaded from https://temca2data.org/.
 
-A consortium of labs has been *manually* reconstructing neurons and their connectivity
-in this data set since 2016 using `CATMAID <https://catmaid.readthedocs.io/en/stable/>`_.
+From around 2016, a consortium of labs *manually* reconstructed neurons and their connectivity
+in this dataset using `CATMAID <https://catmaid.readthedocs.io/en/stable/>`_.
 Published data from this effort is hosted by `Virtual Fly Brain <https://catmaid.virtualflybrain.org/>`_.
-Unpublished data from ongoing work is hosted in a "walled garden" CATMAID instance.
-Labs have to apply to join this community and agree to guidelines that ensure a
-fair and respectful treatment of each other's unpublished data.
+That manual reconstruction effort has now been superseded by the automatic
+segmentations described below.
 
 FAFB segmentations
 ------------------
@@ -26,24 +25,25 @@ neurons but also ultrastructural structures such as synapses.
 
 FlyWire neuron segmentation
 ***************************
-As of mid 2020, the Seung and Murthy labs at Princeton have made their
-segmentation of FAFB public through `"FlyWire" <https://flywire.ai/>`_. The
-data was publicly released in July 2023 (see `Dorkenwald et al. <https://www.biorxiv.org/content/10.1101/2023.06.27.546656v2>`_
+In mid 2020, the Seung and Murthy labs at Princeton made their
+segmentation of FAFB public through `"FlyWire" <https://flywire.ai/>`_ and
+many labs have since contributed to proofreading the dataset.
+
+A first version of the proofread dataset was publicly released in July 2023 as
+version "630". A second version with additional proofreading will be made
+available in early 2024 as version "783".
+See `Dorkenwald et al. <https://www.biorxiv.org/content/10.1101/2023.06.27.546656v2>`_
 and `Schlegel et al. <https://www.biorxiv.org/content/10.1101/2023.06.27.546055v2>`_
-for reference).
+for reference.
 
-Anyone can join this project but community guidelines similar to those for the
-"walled garden" apply. Importantly, newly joined users will be confined to a
-"sandbox" dataset for training and only be admitted to the production dataset
-after passing a quick test.
+.. note::
+    On a sidenote: the FAFB image data was realigned for the FlyWire segmentation.
+    This means that x/y/z coordinates typically vary by a micron or so
+    between original FAFB (also called "FAFB v14" or just "FAFB14") and FlyWire
+    (also called "FAFB v14.1" or "FAFB14.1"). Keep that in mind when comparing data.
 
-Important to note is that the FAFB image data was realigned for the FlyWire
-segmentation. This is why x/y/z coordinates typically vary by a micron or so
-between original FAFB (also called "FAFB v14" or just "FAFB14") and FlyWire
-(also called "FAFB v14.1" or "FAFB14.1").
-
-Deformation fields mapping between FAFB14 and FlyWire have been kindly provided
-by the Seung lab.
+    Deformation fields mapping between FAFB14 and FlyWire have been kindly provided
+    by the Seung lab and can be used via `fafbseg` (see tutorials).
 
 Google neuron segmentation
 **************************
@@ -52,14 +52,6 @@ filling algorithm. See `this <http://fafb-ffn1.storage.googleapis.com/landing.ht
 website for the paper, examples and data. Peter kindly shared skeletons derived
 from the segmentation with the FAFB tracing community early on. These skeletons
 were loaded into CATMAID instances by Tom Kazimiers and Eric Perlman.
-
-To summarize, there are currently 5 "walled garden" FAFB CATMAID instances:
-
-1. The main instance at ``fafb/v14/`` (neuropil)
-2. The first Google segmentation at ``fafb/v14-seg`` (neuropil)
-3. A second iteration of the Google segmentation at ``fafb/v14seg-Li-190411.0`` (neuropil)
-4. A third iteration of the Google segmentation at ``fafb/v14-seg-li-190805.0`` (neuropil)
-5. The most recent iteration of the Google segmentation at ``catmaid/fafb-v14-seg-li-200412.0/`` (spine)
 
 Synaptic partner predictions
 ****************************
@@ -75,8 +67,8 @@ neurons to compile connectivity tables.
 
 The raw data is publicly available: see
 `this <https://github.com/funkelab/synful_fafb>`_ repository by the Funke lab.
-However, to make it easier for researcher to access, Sven Dorkenwald, Forrest
-Collman et al. have loaded the data into their annotation backend.
+To make it easier for researcher to access, Sven Dorkenwald, Forrest
+Collman et al. have loaded the data into their CAVE annotation backend.
 
 Bringing it all together
 ------------------------
