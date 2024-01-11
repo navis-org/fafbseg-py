@@ -70,9 +70,16 @@ __all__ = [
 
 
 @inject_dataset()
-def get_lineage_graph(x, size=False, user=False, synapses=False,
-                      proofreading_status=False, progress=True, *,
-                      dataset=None):
+def get_lineage_graph(
+    x,
+    size=False,
+    user=False,
+    synapses=False,
+    proofreading_status=False,
+    progress=True,
+    *,
+    dataset=None,
+):
     """Get lineage graph for given neuron.
 
     This piggy-backs on the CAVEclient but importantly we remap users and
@@ -114,54 +121,52 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
     for n in G:
         pred = list(G.predecessors(n))
         if pred:
-            op_remapped[n] = G.nodes[pred[0]]['operation_id']
+            op_remapped[n] = G.nodes[pred[0]]["operation_id"]
 
     # Remove existing operation IDs
     for n in G.nodes:
-        G.nodes[n].pop('operation_id', None)
+        G.nodes[n].pop("operation_id", None)
     # Apply new IDs
-    nx.set_node_attributes(G, op_remapped, name='operation_id')
+    nx.set_node_attributes(G, op_remapped, name="operation_id")
 
     if user:
         op_ids = nx.get_node_attributes(G, "operation_id")
         details = client.chunkedgraph.get_operation_details(list(op_ids.values()))
-        users = {n: details[str(o)]['user'] for n, o in op_ids.items()}
-        nx.set_node_attributes(G, users, name='user')
+        users = {n: details[str(o)]["user"] for n, o in op_ids.items()}
+        nx.set_node_attributes(G, users, name="user")
 
     if size:
         sv = roots_to_supervoxels(list(G.nodes), dataset=dataset, progress=progress)
         sizes = {n: len(sv[n]) for n in G.nodes}
-        nx.set_node_attributes(G, sizes, name='size')
+        nx.set_node_attributes(G, sizes, name="size")
 
         survivors = {n: int(np.isin(sv[n], sv[x]).sum()) for n in G.nodes}
-        nx.set_node_attributes(G, survivors, name='survivors')
+        nx.set_node_attributes(G, survivors, name="survivors")
     else:
         sv = None
 
     if synapses:
         pre = client.materialize.live_query(
-                        table=client.materialize.synapse_table,
-                        filter_equal_dict=dict(pre_pt_root_id=x),
-                        timestamp=dt.datetime.now(),
-                        select_columns=['pre_pt_supervoxel_id',
-                                        'post_pt_supervoxel_id']
-                                        )
+            table=client.materialize.synapse_table,
+            filter_equal_dict=dict(pre_pt_root_id=x),
+            timestamp=dt.datetime.now(),
+            select_columns=["pre_pt_supervoxel_id", "post_pt_supervoxel_id"],
+        )
         post = client.materialize.live_query(
-                        table=client.materialize.synapse_table,
-                        filter_equal_dict=dict(post_pt_root_id=x),
-                        timestamp=dt.datetime.now(),
-                        select_columns=['pre_pt_supervoxel_id',
-                                        'post_pt_supervoxel_id']
-                                        )
+            table=client.materialize.synapse_table,
+            filter_equal_dict=dict(post_pt_root_id=x),
+            timestamp=dt.datetime.now(),
+            select_columns=["pre_pt_supervoxel_id", "post_pt_supervoxel_id"],
+        )
         if isinstance(sv, type(None)):
             sv = roots_to_supervoxels(list(G.nodes), dataset=dataset, progress=progress)
 
         n_pre = {n: int(pre.pre_pt_supervoxel_id.isin(sv[n]).sum()) for n in G.nodes}
         n_post = {n: int(post.post_pt_supervoxel_id.isin(sv[n]).sum()) for n in G.nodes}
         n_syn = {n: n_pre[n] + n_post[n] for n in G.nodes}
-        nx.set_node_attributes(G, n_pre, name='presynapses')
-        nx.set_node_attributes(G, n_post, name='postsynapses')
-        nx.set_node_attributes(G, n_syn, name='synapses')
+        nx.set_node_attributes(G, n_pre, name="presynapses")
+        nx.set_node_attributes(G, n_post, name="postsynapses")
+        nx.set_node_attributes(G, n_syn, name="synapses")
 
     if proofreading_status:
         from .annotations import get_cave_table
@@ -171,8 +176,10 @@ def get_lineage_graph(x, size=False, user=False, synapses=False,
             "proofreading_status_public_v1", filter_in_dict=dict(valid_id=nodes)
         )
         if len(pr):
-            user = pr.groupby('valid_id').user_id.apply(list).to_dict()
-            nx.set_node_attributes(G, {n: user[n] for n in pr.valid_id}, name='proofread_by')
+            user = pr.groupby("valid_id").user_id.apply(list).to_dict()
+            nx.set_node_attributes(
+                G, {n: user[n] for n in pr.valid_id}, name="proofread_by"
+            )
 
     return G
 
@@ -209,33 +216,38 @@ def get_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
 
     session = requests.Session()
     if not by_day:
-        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={days-1}'
+        url = f"https://pyrdev.eyewire.org/flywire-leaderboard?days={days-1}"
         resp = session.get(url, params=None)
         resp.raise_for_status()
-        return pd.DataFrame.from_records(resp.json()['entries']).set_index('name')
+        return pd.DataFrame.from_records(resp.json()["entries"]).set_index("name")
 
     future_session = FuturesSession(session=session, max_workers=max_threads)
     futures = []
     for i in range(0, days):
-        url = f'https://pyrdev.eyewire.org/flywire-leaderboard?days={i}'
+        url = f"https://pyrdev.eyewire.org/flywire-leaderboard?days={i}"
         futures.append(future_session.get(url, params=None))
 
     # Get the responses
-    resp = [f.result() for f in navis.config.tqdm(futures,
-                                                  desc='Fetching',
-                                                  disable=not progress or len(futures) == 1,
-                                                  leave=False)]
+    resp = [
+        f.result()
+        for f in navis.config.tqdm(
+            futures,
+            desc="Fetching",
+            disable=not progress or len(futures) == 1,
+            leave=False,
+        )
+    ]
 
     df = None
     for i, r in enumerate(resp):
         date = dt.date.today() - dt.timedelta(days=i)
         r.raise_for_status()
-        this_df = pd.DataFrame.from_records(r.json()['entries']).set_index('name')
+        this_df = pd.DataFrame.from_records(r.json()["entries"]).set_index("name")
         this_df.columns = [date]
         if isinstance(df, type(None)):
             df = this_df
         else:
-            df = pd.merge(df, this_df, how='outer', left_index=True, right_index=True)
+            df = pd.merge(df, this_df, how="outer", left_index=True, right_index=True)
 
     # Make sure we don't have NAs
     df = df.fillna(0).astype(int)
@@ -296,20 +308,25 @@ def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset
     future_session = FuturesSession(session=session, max_workers=max_threads)
 
     token = get_chunkedgraph_secret()
-    session.headers['Authorization'] = f"Bearer {token}"
+    session.headers["Authorization"] = f"Bearer {token}"
 
     futures = []
     for id in x:
         dataset = FLYWIRE_DATASETS.get(dataset, dataset)
-        url = f'https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/root/{id}/tabular_change_log'
+        url = f"https://prod.flywire-daf.com/segmentation/api/v1/table/{dataset}/root/{id}/tabular_change_log"
         f = future_session.get(url, params=None)
         futures.append(f)
 
     # Get the responses
-    resp = [f.result() for f in navis.config.tqdm(futures,
-                                                  desc='Fetching',
-                                                  disable=not progress or len(futures) == 1,
-                                                  leave=False)]
+    resp = [
+        f.result()
+        for f in navis.config.tqdm(
+            futures,
+            desc="Fetching",
+            disable=not progress or len(futures) == 1,
+            leave=False,
+        )
+    ]
 
     df = []
     for r, i in zip(resp, x):
@@ -317,20 +334,20 @@ def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset
         if r.status_code == 500:
             # If server responds a time-out, it means that the root ID has not
             # seen any edits from base segmentation.
-            if 'Read timed out' in r.json().get('message', ''):
+            if "Read timed out" in r.json().get("message", ""):
                 continue
 
         try:
             r.raise_for_status()
         except BaseException:
-            if errors == 'raise':
+            if errors == "raise":
                 raise
             else:
-                print(f'Error fetching logs for {i}')
+                print(f"Error fetching logs for {i}")
                 continue
 
         this_df = pd.DataFrame(r.json())
-        this_df['segment'] = i
+        this_df["segment"] = i
         df.append(this_df)
 
     # Concat if any edits at all
@@ -338,7 +355,7 @@ def get_edit_history(x, progress=True, errors="raise", max_threads=4, *, dataset
         # Drop neurons without edits
         df = [f for f in df if not f.empty]
         df = pd.concat(df, axis=0, sort=True)
-        df['timestamp'] = pd.to_datetime(df.timestamp, unit='ms')
+        df["timestamp"] = pd.to_datetime(df.timestamp, unit="ms")
     else:
         # Return the first empty data frame
         df = df[0]
@@ -396,7 +413,7 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     if use_cache:
         # Cache for root -> supervoxels
         # Grows to max 1Gb by default and persists across sessions
-        with Cache(directory='~/.fafbseg/svoxel_cache/') as sv_cache:
+        with Cache(directory="~/.fafbseg/svoxel_cache/") as sv_cache:
             # See if we have any of these roots cached
             with sv_cache.transact():
                 is_cached = np.isin(x, sv_cache)
@@ -413,10 +430,9 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     # -> I think that's because of the way disk cache works
     miss = x[~np.isin(x, np.array(list(svoxels.keys()), dtype=np.int64))]
     get_leaves = retry(vol.get_leaves)
-    with navis.config.tqdm(desc='Querying',
-                           total=len(x),
-                           disable=not progress,
-                           leave=False) as pbar:
+    with navis.config.tqdm(
+        desc="Querying", total=len(x), disable=not progress, leave=False
+    ) as pbar:
         # Update for those for which we had cached data
         pbar.update(len(svoxels))
 
@@ -426,7 +442,7 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
 
     # Update cache
     if use_cache:
-        with Cache(directory='~/.fafbseg/svoxel_cache/') as sv_cache:
+        with Cache(directory="~/.fafbseg/svoxel_cache/") as sv_cache:
             with sv_cache.transact():
                 for i in miss:
                     sv_cache[i] = svoxels[i]
@@ -434,9 +450,17 @@ def roots_to_supervoxels(x, use_cache=True, progress=True, *, dataset=None):
     return svoxels
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
-def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
-                         retry=True, progress=True, *, dataset=None):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def supervoxels_to_roots(
+    x,
+    timestamp=None,
+    batch_size=10_000,
+    stop_layer=10,
+    retry=True,
+    progress=True,
+    *,
+    dataset=None,
+):
     """Get root(s) for given supervoxel(s).
 
     Parameters
@@ -488,49 +512,50 @@ def supervoxels_to_roots(x, timestamp=None, batch_size=10_000, stop_layer=10,
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
 
-    if isinstance(timestamp, str) and timestamp.startswith('mat'):
+    if isinstance(timestamp, str) and timestamp.startswith("mat"):
         client = get_cave_client(dataset=dataset)
-        if timestamp == 'mat' or timestamp == 'mat_latest':
+        if timestamp == "mat" or timestamp == "mat_latest":
             timestamp = client.materialize.get_timestamp()
         else:
             # Split e.g. 'mat_432' to extract version and query timestamp
-            version = int(timestamp.split('_')[1])
+            version = int(timestamp.split("_")[1])
             timestamp = client.materialize.get_timestamp(version)
 
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
 
-    with tqdm(desc='Fetching roots',
-              leave=False,
-              total=len(x),
-              disable=not progress or len(x) < batch_size) as pbar:
-
+    with tqdm(
+        desc="Fetching roots",
+        leave=False,
+        total=len(x),
+        disable=not progress or len(x) < batch_size,
+    ) as pbar:
         for i in range(0, len(x), int(batch_size)):
             # This batch
-            batch = x[i:i+batch_size]
+            batch = x[i : i + batch_size]
 
             # get_roots() doesn't like to be asked for zeros - causes server error
             not_zero = batch != 0
             try:
-                roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
-                                                                stop_layer=stop_layer,
-                                                                timestamp=timestamp)
+                roots[i : i + batch_size][not_zero] = vol.get_roots(
+                    batch[not_zero], stop_layer=stop_layer, timestamp=timestamp
+                )
             except KeyboardInterrupt:
                 raise
             except BaseException:
                 if not retry:
                     raise
                 time.sleep(1)
-                roots[i:i+batch_size][not_zero] = vol.get_roots(batch[not_zero],
-                                                                stop_layer=stop_layer,
-                                                                timestamp=timestamp)
+                roots[i : i + batch_size][not_zero] = vol.get_roots(
+                    batch[not_zero], stop_layer=stop_layer, timestamp=timestamp
+                )
 
             pbar.update(len(batch))
 
     return roots
 
 
-def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
+def locs_to_supervoxels(locs, mip=2, coordinates="voxel", backend="spine"):
     """Retrieve FlyWire supervoxel IDs at given location(s).
 
     Parameters
@@ -571,46 +596,47 @@ def locs_to_supervoxels(locs, mip=2, coordinates='voxel', backend='spine'):
     array([79801454835332154, 79731086091150780], dtype=uint64)
 
     """
-    if backend not in ('spine', 'cloudvolume'):
-        raise ValueError(f'`backend` not recognised: {backend}')
+    if backend not in ("spine", "cloudvolume"):
+        raise ValueError(f"`backend` not recognised: {backend}")
 
     if isinstance(locs, pd.DataFrame):
-        if np.all(np.isin(['fw.x', 'fw.y', 'fw.z'], locs.columns)):
-            locs = locs[['fw.x', 'fw.y', 'fw.z']].values
-        elif np.all(np.isin(['x', 'y', 'z'], locs.columns)):
-            locs = locs[['x', 'y', 'z']].values
+        if np.all(np.isin(["fw.x", "fw.y", "fw.z"], locs.columns)):
+            locs = locs[["fw.x", "fw.y", "fw.z"]].values
+        elif np.all(np.isin(["x", "y", "z"], locs.columns)):
+            locs = locs[["x", "y", "z"]].values
         else:
-            raise ValueError('`locs` as pandas.DataFrame must have either [fw.x'
-                             ', fw.y, fw.z] or [x, y, z] columns.')
+            raise ValueError(
+                "`locs` as pandas.DataFrame must have either [fw.x"
+                ", fw.y, fw.z] or [x, y, z] columns."
+            )
 
         # Make sure we are working with numbers
         if not np.issubdtype(locs.dtype, np.number):
             locs = locs.astype(np.float64)
 
-    if backend == 'spine':
-        return spine.transform.get_segids(locs, segmentation='flywire_190410',
-                                          coordinates=coordinates, mip=mip)
+    if backend == "spine":
+        return spine.transform.get_segids(
+            locs, segmentation="flywire_190410", coordinates=coordinates, mip=mip
+        )
     else:
-        vol = copy.deepcopy(get_cloudvolume('production'))
+        vol = copy.deepcopy(get_cloudvolume("production"))
         # Lower mips appear to cause inconsistencies despite spine also only
         # using mip 2 (IIRC?)
         # vol.mip = 2
         pl = GSPointLoader(vol)
 
-        if coordinates in ('voxel', 'voxels'):
+        if coordinates in ("voxel", "voxels"):
             locs = locs * [4, 4, 40]
 
         pl.add_points(locs)
 
-        points, data = pl.load_all(max_workers=4,
-                                   progress=True,
-                                   return_sorted=True)
+        points, data = pl.load_all(max_workers=4, progress=True, return_sorted=True)
 
         return data
 
 
 @inject_dataset()
-def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
+def neuron_to_segments(x, short=False, coordinates="voxel", *, dataset=None):
     """Get root IDs overlapping with a given neuron.
 
     Parameters
@@ -663,20 +689,20 @@ def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
     nodes = x.nodes
 
     # Get segmentation IDs
-    nodes['root_id'] = locs_to_segments(nodes[['x', 'y', 'z']].values,
-                                        coordinates=coordinates,
-                                        dataset=dataset)
+    nodes["root_id"] = locs_to_segments(
+        nodes[["x", "y", "z"]].values, coordinates=coordinates, dataset=dataset
+    )
 
     # Count segment IDs
-    seg_counts = nodes.groupby(['neuron', 'root_id'], as_index=False).node_id.count()
-    seg_counts.columns = ['id', 'root_id', 'counts']
+    seg_counts = nodes.groupby(["neuron", "root_id"], as_index=False).node_id.count()
+    seg_counts.columns = ["id", "root_id", "counts"]
 
     # Remove seg IDs 0
     seg_counts = seg_counts[seg_counts.root_id != 0]
 
     # Turn into matrix where columns are skeleton IDs, segment IDs are rows
     # and values are the overlap counts
-    matrix = seg_counts.pivot(index='root_id', columns='id', values='counts')
+    matrix = seg_counts.pivot(index="root_id", columns="id", values="counts")
 
     if not short:
         return matrix
@@ -690,17 +716,18 @@ def neuron_to_segments(x, short=False, coordinates='voxel', *, dataset=None):
     conf = (top_score - sec_score) / matrix.sum(axis=0).values
 
     summary = pd.DataFrame([])
-    summary['id'] = matrix.columns
-    summary['match'] = top_id
-    summary['confidence'] = conf
+    summary["id"] = matrix.columns
+    summary["match"] = top_id
+    summary["confidence"] = conf
 
     return summary
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
-def locs_to_segments(locs, timestamp=None, backend='spine',
-                     coordinates='voxel', *, dataset=None):
-    """Retrieve FlyWire segment IDs (root IDs) at given location(s).
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def locs_to_segments(
+    locs, timestamp=None, backend="spine", coordinates="voxel", *, dataset=None
+):
+    """Retrieve FlyWire segment (i.e. root) IDs at given location(s).
 
     Parameters
     ----------
@@ -751,12 +778,7 @@ def locs_to_segments(locs, timestamp=None, backend='spine',
 
 
 @inject_dataset()
-def skid_to_id(x,
-               sample=None,
-               catmaid_instance=None,
-               progress=True,
-               *,
-               dataset=None):
+def skid_to_id(x, sample=None, catmaid_instance=None, progress=True, *, dataset=None):
     """Find the FlyWire root ID for a given (FAFB) CATMAID neuron.
 
     This function works by:
@@ -819,13 +841,13 @@ def skid_to_id(x,
 
     if isinstance(x, navis.NeuronList):
         res = []
-        for n in navis.config.tqdm(x, desc='Searching',
-                                   disable=not progress,
-                                   leave=False):
+        for n in navis.config.tqdm(
+            x, desc="Searching", disable=not progress, leave=False
+        ):
             res.append(skid_to_id(n, dataset=dataset))
         return pd.concat(res, axis=0).reset_index(drop=True)
     elif isinstance(x, navis.TreeNeuron):
-        nodes = x.nodes[['x', 'y', 'z']]
+        nodes = x.nodes[["x", "y", "z"]]
         if sample:
             if sample < 1:
                 nodes = nodes.sample(frac=sample, random_state=1985)
@@ -835,11 +857,10 @@ def skid_to_id(x,
         raise TypeError(f'Unable to use data of type "{type(x)}"')
 
     # XForm coordinates from FAFB14 to FAFB14.1
-    xformed = xform.fafb14_to_flywire(nodes[['x', 'y', 'z']].values,
-                                      coordinates='nm')
+    xformed = xform.fafb14_to_flywire(nodes[["x", "y", "z"]].values, coordinates="nm")
 
     # Get the root IDs for each of these locations
-    roots = locs_to_segments(xformed, coordinates='nm', dataset=dataset)
+    roots = locs_to_segments(xformed, coordinates="nm", dataset=dataset)
 
     # Drop zeros
     roots = roots[roots != 0]
@@ -860,11 +881,12 @@ def skid_to_id(x,
     else:
         conf = 1
 
-    return pd.DataFrame([[x.id, new_id, conf]],
-                        columns=['skeleton_id', 'flywire_id', 'confidence'])
+    return pd.DataFrame(
+        [[x.id, new_id, conf]], columns=["skeleton_id", "flywire_id", "confidence"]
+    )
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@inject_dataset(disallowed=["flat_630", "flat_571"])
 @retry
 def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs):
     """Check if root is the current one.
@@ -943,13 +965,15 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
         params = None
 
     batch_size = 100_000
-    with navis.config.tqdm(desc='Checking',
-                           total=not_zero.sum(),
-                           disable=(not_zero.sum() <= batch_size) or not progress,
-                           leave=False) as pbar:
+    with navis.config.tqdm(
+        desc="Checking",
+        total=not_zero.sum(),
+        disable=(not_zero.sum() <= batch_size) or not progress,
+        leave=False,
+    ) as pbar:
         for i in range(0, not_zero.sum(), batch_size):
-            batch = id[not_zero][i:i+batch_size]
-            post = {'node_ids': batch.tolist()}
+            batch = id[not_zero][i : i + batch_size]
+            post = {"node_ids": batch.tolist()}
 
             # Update progress bar
             pbar.update(len(batch))
@@ -958,7 +982,9 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
 
             r.raise_for_status()
 
-            is_latest[np.where(not_zero)[0][i:i+batch_size]] = np.array(r.json()['is_latest'])
+            is_latest[np.where(not_zero)[0][i : i + batch_size]] = np.array(
+                r.json()["is_latest"]
+            )
 
     return is_latest
 
@@ -998,9 +1024,9 @@ def find_common_time(root_ids, progress=True, *, dataset=None):
     deaths = np.array([dt.datetime.now(tz=dt.timezone.utc) for r in root_ids])
 
     # Get lineage graph for outdated root IDs
-    G = client.chunkedgraph.get_lineage_graph(root_ids[~is_latest],
-                                              timestamp_past=min(creations),
-                                              as_nx_graph=True)
+    G = client.chunkedgraph.get_lineage_graph(
+        root_ids[~is_latest], timestamp_past=min(creations), as_nx_graph=True
+    )
 
     # Get the immediate successors
     succ = np.array([next(G.successors(r)) for r in root_ids[~is_latest]])
@@ -1015,7 +1041,7 @@ def find_common_time(root_ids, progress=True, *, dataset=None):
     earliest_death = min(deaths)
 
     if latest_birth > earliest_death:
-        raise ValueError('Given root IDs never existed at the same time.')
+        raise ValueError("Given root IDs never existed at the same time.")
 
     return latest_birth + (earliest_death - latest_birth) / 2
 
@@ -1094,77 +1120,89 @@ def update_ids(
     0  720575940621039145  720575940631693610         1.0     True
 
     """
-    assert stop_layer > 0, '`stop_layer` must be > 0'
+    assert stop_layer > 0, "`stop_layer` must be > 0"
 
     # See if we already check if this was the latest root
-    is_latest = kwargs.pop('is_latest', None)
+    is_latest = kwargs.pop("is_latest", None)
 
     vol = get_cloudvolume(dataset, **kwargs)
 
     if isinstance(id, pd.DataFrame):
         if isinstance(supervoxels, type(None)):
-            if 'supervoxel_id' in id.columns:
-                supervoxels = id['supervoxel_id'].values
-            elif 'supervoxel' in id.columns:
-                supervoxels = id['supervoxel'].values
+            if "supervoxel_id" in id.columns:
+                supervoxels = id["supervoxel_id"].values
+            elif "supervoxel" in id.columns:
+                supervoxels = id["supervoxel"].values
 
-        if 'root_id' in id.columns:
-            id = id['root_id'].values
-        elif 'root' in id.columns:
-            id = id['root'].values
+        if "root_id" in id.columns:
+            id = id["root_id"].values
+        elif "root" in id.columns:
+            id = id["root"].values
         else:
-            raise ValueError('DataFrame must contain either `root_id` or '
-                             '`root` column.')
+            raise ValueError(
+                "DataFrame must contain either `root_id` or " "`root` column."
+            )
     elif isinstance(id, pd.Series):
         id = id.values
     elif isinstance(id, pd.core.arrays.string_.StringArray):
         id = np.asarray(id)
 
-    if isinstance(timestamp, str) and timestamp.startswith('mat'):
+    if isinstance(timestamp, str) and timestamp.startswith("mat"):
         client = get_cave_client(dataset=dataset)
-        if timestamp == 'mat' or timestamp == 'mat_latest':
+        if timestamp == "mat" or timestamp == "mat_latest":
             timestamp = client.materialize.get_timestamp()
         else:
             # Split e.g. 'mat_432' to extract version and query timestamp
-            version = int(timestamp.split('_')[1])
+            version = int(timestamp.split("_")[1])
             timestamp = client.materialize.get_timestamp(version)
 
     if isinstance(id, (list, set, np.ndarray)):
         # Run is_latest once for all roots
-        is_latest = is_latest_root(id, dataset=dataset, timestamp=timestamp)
+        is_latest = is_latest_root(
+            id, dataset=dataset, timestamp=timestamp, progress=progress
+        )
 
         if isinstance(supervoxels, type(None)):
-            res = [update_ids(x,
-                              dataset=dataset,
-                              is_latest=il,
-                              supervoxels=None,
-                              timestamp=timestamp,
-                              stop_layer=stop_layer) for x, il, in navis.config.tqdm(zip(id, is_latest),
-                                                                               desc='Updating',
-                                                                               leave=False,
-                                                                               total=len(id),
-                                                                               disable=not progress or len(id) == 1)]
+            res = [
+                update_ids(
+                    x,
+                    dataset=dataset,
+                    is_latest=il,
+                    supervoxels=None,
+                    timestamp=timestamp,
+                    stop_layer=stop_layer,
+                )
+                for x, il, in navis.config.tqdm(
+                    zip(id, is_latest),
+                    desc="Updating",
+                    leave=False,
+                    total=len(id),
+                    disable=not progress or len(id) == 1,
+                )
+            ]
             res = pd.concat(res, axis=0, sort=False, ignore_index=True)
         else:
             supervoxels = np.asarray(supervoxels)
             if len(supervoxels) != len(id):
-                raise ValueError(f'Number of supervoxels ({len(supervoxels)}) does '
-                                 f'not match number of root IDs ({len(id)})')
+                raise ValueError(
+                    f"Number of supervoxels ({len(supervoxels)}) does "
+                    f"not match number of root IDs ({len(id)})"
+                )
             elif any(pd.isnull(supervoxels)):
-                raise ValueError('`supervoxels` must not contain `None`')
+                raise ValueError("`supervoxels` must not contain `None`")
             elif any(pd.isnull(id)):
-                raise ValueError('`id` must not contain `None`')
+                raise ValueError("`id` must not contain `None`")
 
             id = np.array(id, dtype=np.int64)
 
             res = pd.DataFrame()
-            res['old_id'] = id
-            res['new_id'] = id
-            res.loc[~is_latest, 'new_id'] = supervoxels_to_roots(supervoxels[~is_latest],
-                                                                 timestamp=timestamp,
-                                                                 dataset=dataset)
-            res['conf'] = 1
-            res['changed'] = res['new_id'] != res['old_id']
+            res["old_id"] = id
+            res["new_id"] = id
+            res.loc[~is_latest, "new_id"] = supervoxels_to_roots(
+                supervoxels[~is_latest], timestamp=timestamp, dataset=dataset
+            )
+            res["conf"] = 1
+            res["changed"] = res["new_id"] != res["old_id"]
         return res
 
     try:
@@ -1173,13 +1211,16 @@ def update_ids(
         raise ValueError(f'"{id} does not look like a valid root ID.')
 
     if id == 0 or pd.isnull(id):
-        navis.config.logger.warning(f'Unable to update ID "{id}" - returning '
-                                    'unchanged.')
+        navis.config.logger.warning(
+            f'Unable to update ID "{id}" - returning ' "unchanged."
+        )
         return id
 
     # Check if outdated
     if isinstance(is_latest, type(None)):
-        is_latest = is_latest_root(id, dataset=dataset, timestamp=timestamp)[0]
+        is_latest = is_latest_root(
+            id, dataset=dataset, timestamp=timestamp, progress=progress
+        )[0]
 
     if isinstance(timestamp, np.datetime64):
         timestamp = str(timestamp)
@@ -1222,8 +1263,9 @@ def update_ids(
                 try:
                     supervoxels = np.int64(supervoxels)
                 except ValueError:
-                    raise ValueError(f'"{supervoxels}" does not look like a valid '
-                                    'supervoxel ID.')
+                    raise ValueError(
+                        f'"{supervoxels}" does not look like a valid ' "supervoxel ID."
+                    )
                 get_root_id = retry(client.chunkedgraph.get_root_id)
                 new_id = get_root_id(supervoxels_to_roots)
                 conf = 1
@@ -1252,14 +1294,24 @@ def update_ids(
         new_id = id
         conf = 1
 
-    return pd.DataFrame([[id, new_id, conf, id != new_id]],
-                        columns=['old_id', 'new_id', 'confidence', 'changed']
-                        ).astype({'old_id': np.int64, 'new_id': np.int64})
+    return pd.DataFrame(
+        [[id, new_id, conf, id != new_id]],
+        columns=["old_id", "new_id", "confidence", "changed"],
+    ).astype({"old_id": np.int64, "new_id": np.int64})
 
 
 @inject_dataset()
-def snap_to_id(locs, id, snap_zero=False, search_radius=160, coordinates='nm',
-               max_workers=4, verbose=True, *, dataset=None):
+def snap_to_id(
+    locs,
+    id,
+    snap_zero=False,
+    search_radius=160,
+    coordinates="nm",
+    max_workers=4,
+    verbose=True,
+    *,
+    dataset=None,
+):
     """Snap locations to the correct segmentation ID.
 
     Works by:
@@ -1295,20 +1347,20 @@ def snap_to_id(locs, id, snap_zero=False, search_radius=160, coordinates='nm',
                 x/y/z locations that are guaranteed to map to the correct ID.
 
     """
-    assert coordinates in ['nm', 'nanometer', 'nanometers', 'voxel', 'voxels']
+    assert coordinates in ["nm", "nanometer", "nanometers", "voxel", "voxels"]
 
     if isinstance(locs, navis.TreeNeuron):
-        locs = locs.nodes[['x', 'y', 'z']].values
+        locs = locs.nodes[["x", "y", "z"]].values
 
     # This also makes sure we work on a copy
     locs = np.array(locs, copy=True)
     assert locs.ndim == 2 and locs.shape[1] == 3
 
     # From hereon out we are working with nanometers
-    if coordinates in ('voxel', 'voxels'):
+    if coordinates in ("voxel", "voxels"):
         locs *= [4, 4, 40]
 
-    root_ids = locs_to_segments(locs, dataset=dataset, coordinates='nm')
+    root_ids = locs_to_segments(locs, dataset=dataset, coordinates="nm")
 
     id_wrong = root_ids != id
     not_zero = root_ids != 0
@@ -1319,13 +1371,18 @@ def snap_to_id(locs, id, snap_zero=False, search_radius=160, coordinates='nm',
         to_fix = to_fix & not_zero
 
     # Use parallel processes to go over the to-fix nodes
-    with navis.config.tqdm(desc='Snapping', total=to_fix.sum(), leave=False) as pbar:
+    with navis.config.tqdm(desc="Snapping", total=to_fix.sum(), leave=False) as pbar:
         with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
-            loc_futures = [ex.submit(_process_cutout,
-                                     id=id,
-                                     loc=locs[ix],
-                                     dataset=dataset,
-                                     radius=search_radius) for ix in np.where(to_fix)[0]]
+            loc_futures = [
+                ex.submit(
+                    _process_cutout,
+                    id=id,
+                    loc=locs[ix],
+                    dataset=dataset,
+                    radius=search_radius,
+                )
+                for ix in np.where(to_fix)[0]
+            ]
             for f in futures.as_completed(loc_futures):
                 pbar.update(1)
 
@@ -1353,7 +1410,7 @@ def snap_to_id(locs, id, snap_zero=False, search_radius=160, coordinates='nm',
     return locs
 
 
-def _process_cutout(loc, id, radius=160, dataset='production'):
+def _process_cutout(loc, id, radius=160, dataset="production"):
     """Process single cutout for snap_to_id."""
     # Get this location
     loc = loc.round()
@@ -1369,10 +1426,9 @@ def _process_cutout(loc, id, radius=160, dataset='production'):
     bbox = np.vstack((mn, mx))
 
     # Get the cutout, the resolution and offset
-    cutout, res, offset_nm = get_segmentation_cutout(bbox,
-                                                     dataset=dataset,
-                                                     root_ids=True,
-                                                     coordinates='nm')
+    cutout, res, offset_nm = get_segmentation_cutout(
+        bbox, dataset=dataset, root_ids=True, coordinates="nm"
+    )
 
     # Generate a mask
     mask = (cutout == id).astype(int, copy=False)
@@ -1399,7 +1455,9 @@ def _process_cutout(loc, id, radius=160, dataset='production'):
 
 
 @inject_dataset()
-def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, dataset=None):
+def get_segmentation_cutout(
+    bbox, root_ids=True, mip=0, coordinates="voxel", *, dataset=None
+):
     """Fetch cutout of segmentation.
 
     Parameters
@@ -1431,7 +1489,7 @@ def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, 
                     to the absolute coordinates.
 
     """
-    assert coordinates in ['nm', 'nanometer', 'nanometers', 'voxel', 'voxels']
+    assert coordinates in ["nm", "nanometer", "nanometers", "voxel", "voxels"]
 
     bbox = np.asarray(bbox)
     assert bbox.ndim == 2
@@ -1441,24 +1499,24 @@ def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, 
     elif bbox.shape == (3, 2):
         bbox = bbox.T
     else:
-        raise ValueError(f'`bbox` must have shape (2, 3) or (3, 2), got {bbox.shape}')
+        raise ValueError(f"`bbox` must have shape (2, 3) or (3, 2), got {bbox.shape}")
 
     vol = get_cloudvolume(dataset)
     vol.mip = mip
 
     # First convert to nanometers
-    if coordinates in ('voxel', 'voxels'):
+    if coordinates in ("voxel", "voxels"):
         bbox = bbox * np.array([4, 4, 40])
 
     # Now convert (back to) to [16, 16, 40] voxel
-    bbox = (bbox / vol.scale['resolution']).round().astype(int)
+    bbox = (bbox / vol.scale["resolution"]).round().astype(int)
 
-    offset_nm = bbox[0] * vol.scale['resolution']
+    offset_nm = bbox[0] * vol.scale["resolution"]
 
     # Get cutout
-    cutout = vol[bbox[0][0]:bbox[1][0],
-                 bbox[0][1]:bbox[1][1],
-                 bbox[0][2]:bbox[1][2]]
+    cutout = vol[
+        bbox[0][0] : bbox[1][0], bbox[0][1] : bbox[1][1], bbox[0][2] : bbox[1][2]
+    ]
 
     if root_ids and ("flat" not in dataset):
         svoxels = np.unique(cutout.flatten())
@@ -1469,10 +1527,10 @@ def get_segmentation_cutout(bbox, root_ids=True, mip=0, coordinates='voxel', *, 
         for k, v in sv2r.items():
             cutout[cutout == k] = v
 
-    return cutout[:, :, :, 0], np.asarray(vol.scale['resolution']), offset_nm
+    return cutout[:, :, :, 0], np.asarray(vol.scale["resolution"]), offset_nm
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@inject_dataset(disallowed=["flat_630", "flat_571"])
 def is_valid_root(x, raise_exc=False, *, dataset=None):
     """Check if ID is (potentially) valid root ID.
 
@@ -1504,10 +1562,10 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
     vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(x):
-        is_valid =  np.array([is_valid_root(r, dataset=vol) for r in x])
+        is_valid = np.array([is_valid_root(r, dataset=vol) for r in x])
         if raise_exc and not all(is_valid):
             invalid = set(np.asarray(x)[~is_valid].tolist())
-            raise ValueError(f'Invalid root IDs found: {invalid}')
+            raise ValueError(f"Invalid root IDs found: {invalid}")
         return is_valid
 
     try:
@@ -1516,12 +1574,12 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
         is_valid = False
 
     if raise_exc and not is_valid:
-        raise ValueError(f'{x} is not a valid root ID')
+        raise ValueError(f"{x} is not a valid root ID")
 
     return is_valid
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
+@inject_dataset(disallowed=["flat_630", "flat_571"])
 def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
     """Check if ID is (potentially) valid supervoxel ID.
 
@@ -1553,10 +1611,10 @@ def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
     vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(x):
-        is_valid =  np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
+        is_valid = np.array([is_valid_supervoxel(r, dataset=vol) for r in x])
         if raise_exc and not all(is_valid):
             invalid = set(np.asarray(x)[~is_valid].tolist())
-            raise ValueError(f'Invalid supervoxel IDs found: {invalid}')
+            raise ValueError(f"Invalid supervoxel IDs found: {invalid}")
         return is_valid
 
     try:
@@ -1565,14 +1623,24 @@ def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
         is_valid = False
 
     if raise_exc and not is_valid:
-        raise ValueError(f'{x} is not a valid supervoxel ID')
+        raise ValueError(f"{x} is not a valid supervoxel ID")
 
     return is_valid
 
 
-@inject_dataset(disallowed=['flat_630', 'flat_571'])
-def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
-               use_mirror=True, threads=4, *, dataset=None):
+@inject_dataset(disallowed=["flat_630", "flat_571"])
+def get_voxels(
+    x,
+    mip=0,
+    sv_map=False,
+    bounds=None,
+    thin=False,
+    progress=True,
+    use_mirror=True,
+    threads=4,
+    *,
+    dataset=None,
+):
     """Fetch voxels making a up given root ID.
 
     Parameters
@@ -1628,10 +1696,14 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     client = get_cave_client()
 
     if use_mirror:
-        sv_vol = cv.CloudVolume('precomputed://https://seungdata.princeton.edu/'
-                                'sseung-archive/fafbv14-ws/'
-                                'ws_190410_FAFB_v02_ws_size_threshold_200',
-                                 use_https=True, progress=False, fill_missing=True)
+        sv_vol = cv.CloudVolume(
+            "precomputed://https://seungdata.princeton.edu/"
+            "sseung-archive/fafbv14-ws/"
+            "ws_190410_FAFB_v02_ws_size_threshold_200",
+            use_https=True,
+            progress=False,
+            fill_missing=True,
+        )
     else:
         sv_vol = vol
 
@@ -1670,13 +1742,14 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
     try:
         sv_vol.mip = mip
         sv_vol.parallel = threads
-        for ch in tqdm(l2_vxl,
-                       disable=not progress,
-                       leave=False,
-                       desc='Fetching voxels'):
-            ct = sv_vol[ch[0]:ch[0] + ch_size[0],
-                        ch[1]:ch[1] + ch_size[1],
-                        ch[2]:ch[2] + ch_size[2]][:, :, :, 0]
+        for ch in tqdm(
+            l2_vxl, disable=not progress, leave=False, desc="Fetching voxels"
+        ):
+            ct = sv_vol[
+                ch[0] : ch[0] + ch_size[0],
+                ch[1] : ch[1] + ch_size[1],
+                ch[2] : ch[2] + ch_size[2],
+            ][:, :, :, 0]
             is_root = np.isin(ct, sv)
             this_vxl = np.dstack(np.where(is_root))[0]
             this_vxl = this_vxl + ch
@@ -1692,12 +1765,12 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
 
     # uint 16 should be sufficient because even at mip 0 the volume has
     # shape (54100, 28160, 7046) -> doesn't exceed 65_535
-    voxels = np.vstack(voxels).astype('uint16')
+    voxels = np.vstack(voxels).astype("uint16")
     if len(svids):
         svids = np.concatenate(svids)
 
     if thin:
-        from .l2 import l2_graph
+        from .l2 import get_l2_graph
 
         try:
             from pykdtree.kdtree import KDTree
@@ -1709,7 +1782,7 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
         l2_dict = dict(zip(svids, l2_ids))
 
         # Get the l2 graph
-        G = l2_graph(x)
+        G = get_l2_graph(x)
 
         # Create KD tree for all voxels
         tree = KDTree(voxels)
@@ -1718,10 +1791,9 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
         invalid = np.zeros(len(voxels), dtype=bool)
 
         # Now go over each supervoxel
-        for sv in tqdm(np.unique(svids),
-                       disable= not progress,
-                       desc='Thinning',
-                       leave=False):
+        for sv in tqdm(
+            np.unique(svids), disable=not progress, desc="Thinning", leave=False
+        ):
             # Get the voxels for this supervoxel
             is_this_sv = svids == sv
 
@@ -1739,9 +1811,9 @@ def get_voxels(x, mip=0, sv_map=False, bounds=None, thin=False, progress=True,
             mask = is_this_l2 | is_connected_l2 | invalid
 
             # Find "other" voxels that touch voxels for this supervoxel
-            dist, ix = tree.query(voxels[is_this_sv],
-                                  mask=mask,
-                                  distance_upper_bound=1.75)
+            dist, ix = tree.query(
+                voxels[is_this_sv], mask=mask, distance_upper_bound=1.75
+            )
             is_touching = dist < np.inf
 
             if not np.any(is_touching):

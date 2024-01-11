@@ -207,8 +207,9 @@ def plot_nt_predictions(pred, bins=20, id_col=None, ax=None, legend=True, **kwar
             axes = [a for l in axes for a in l]
 
         for v, ax in zip(uni, axes):
-            _ = plot_nt_predictions(pred[pred[id_col] == v], ax=ax, bins=bins,
-                                    id_col=None)
+            _ = plot_nt_predictions(
+                pred[pred[id_col] == v], ax=ax, bins=bins, id_col=None
+            )
             ax.set_title(v)
 
         return axes
@@ -226,15 +227,75 @@ def plot_nt_predictions(pred, bins=20, id_col=None, ax=None, legend=True, **kwar
     x = [ix.left + (ix.right - ix.left) / 2 for ix in mn.index]
     for t, c in zip(trans, colors):
         ax.plot(x, mn[t].values, c=c, label=t, lw=1.5)
-        ax.fill_between(x,
-                        mn[t].values + sem[t],
-                        mn[t].values - sem[t],
-                        color=c, alpha=.2)
+        ax.fill_between(
+            x, mn[t].values + sem[t], mn[t].values - sem[t], color=c, alpha=0.2
+        )
 
-    ax.set_xlabel('cleft score')
-    ax.set_ylabel('mean confidence')
+    ax.set_xlabel("cleft score")
+    ax.set_ylabel("mean confidence")
 
     if legend:
         ax.legend()
 
     return ax
+
+
+def paint_neuron(x, pred, max_dist=None):
+    """Paint neuron by its neurotransmitter.
+
+    For each vertex / skeleton node we ask what the closest transmitter is.
+
+    Parameters
+    ----------
+    x :         TreeNeuron | MeshNeuron
+    pred :      pandas.DataFrame
+                Table with synapse neurotransmitter predictions.
+                For example as returned from
+                ``fafbseg.flywire.get_synapses(..., transmitters=True)``.
+
+    Returns
+    -------
+    None
+                For ``TreeNeuron``: adds a `transmitter` column to the node
+                table. For ``MeshNeuron`` adds an array as `.transmitter`
+                property.
+
+    Examples
+    --------
+    >>> import navis                                            # doctest: +SKIP
+    >>> from fafbseg import flywire, synapses                   # doctest: +SKIP
+    >>> m = flywire.get_mesh_neuron(720575940608508996)         # doctest: +SKIP
+    >>> x = m.skeleton                                          # doctest: +SKIP
+    >>> pred = flywire.get_synapses(720575940608508996,         # doctest: +SKIP
+    ...                             post=False, pre=True,       # doctest: +SKIP
+    ...                             transmitters=True)          # doctest: +SKIP
+    >>> synapses.paint_neuron(x, pred)                          # doctest: +SKIP
+    >>> colors = {'gaba': (0.8352941176470589, 0.6588235294117647, 0.2823529411764706),
+    ...           'acetylcholine': (0.5843137254901961, 0.6392156862745098, 0.807843137254902),
+    ...           'glutamate': (0.5254901960784314, 0.6588235294117647, 0.34901960784313724),
+    ...           'octopamine': (0.4470588235294118, 0.3607843137254902, 0.596078431372549),
+    ...           'serotonin': (0.5490196078431373, 0.3843137254901961, 0.5843137254901961),
+    ...           'dopamine': (0.7215686274509804, 0.4745098039215686, 0.4117647058823529)}
+    >>> navis.plot3d(x, color_by='transmitter', palette=colors) # doctest: +SKIP
+
+    """
+    # Snap to nodes/vertices
+    ix, _ = x.snap(pred[["pre_x", "pre_y", "pre_z"]].values)
+    tr = np.array(trans)[np.argmax(pred[trans].values, axis=1)]
+    tr_dict = dict(zip(ix, tr))
+
+    # Get the geodesic distance from all nodes/vertices to synapse bearing
+    # nodes/vertices
+    dist = navis.geodesic_matrix(x, from_=ix)
+    closest = dist.index[np.argmin(dist.values, axis=0)]
+    closest_tr = np.array([tr_dict[i] for i in closest])
+
+    if max_dist:
+        closest_tr[dist.min(axis=0) > max_dist] = "NA"
+
+    if isinstance(x, navis.TreeNeuron):
+        x.nodes["transmitter"] = x.nodes.node_id.map(
+            dict(zip(dist.columns, closest_tr))
+        )
+    else:
+        x.transmitter = closest_tr

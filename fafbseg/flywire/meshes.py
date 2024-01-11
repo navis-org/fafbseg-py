@@ -96,41 +96,59 @@ def get_mesh_neuron(
 
     """
     if omit_failures not in (None, True, False):
-        raise ValueError('`omit_failures` must be either None, True or False. '
-                         f'Got "{omit_failures}".')
+        raise ValueError(
+            "`omit_failures` must be either None, True or False. "
+            f'Got "{omit_failures}".'
+        )
 
     vol = get_cloudvolume(dataset)
 
     if navis.utils.is_iterable(id):
         id = np.asarray(id, dtype=np.int64)
         if 0 in id:
-            raise ValueError('Root ID 0 among the queried IDs')
+            raise ValueError("Root ID 0 among the queried IDs")
 
         if not threads or threads == 1:
-            return navis.NeuronList([get_mesh_neuron(n, dataset=dataset,
-                                                     omit_failures=omit_failures,
-                                                     lod=lod,
-                                                     with_synapses=with_synapses)
-                                     for n in navis.config.tqdm(id,
-                                                                desc='Fetching',
-                                                                disable=not progress,
-                                                                leave=False)])
+            return navis.NeuronList(
+                [
+                    get_mesh_neuron(
+                        n,
+                        dataset=dataset,
+                        omit_failures=omit_failures,
+                        lod=lod,
+                        with_synapses=with_synapses,
+                    )
+                    for n in navis.config.tqdm(
+                        id, desc="Fetching", disable=not progress, leave=False
+                    )
+                ]
+            )
         else:
             if not isinstance(threads, int):
-                raise TypeError(f'`threads` must be int or `None`, got "{type(threads)}".')
+                raise TypeError(
+                    f'`threads` must be int or `None`, got "{type(threads)}".'
+                )
             with ThreadPoolExecutor(max_workers=threads) as executor:
-                futures = {executor.submit(get_mesh_neuron, n,
-                                           dataset=dataset,
-                                           omit_failures=omit_failures,
-                                           threads=None,  # no need for threads in inner function
-                                           with_synapses=with_synapses): n for n in id}
+                futures = {
+                    executor.submit(
+                        get_mesh_neuron,
+                        n,
+                        dataset=dataset,
+                        omit_failures=omit_failures,
+                        threads=None,  # no need for threads in inner function
+                        with_synapses=with_synapses,
+                    ): n
+                    for n in id
+                }
 
                 results = []
-                for f in navis.config.tqdm(as_completed(futures),
-                                           total=len(futures),
-                                           desc='Fetching',
-                                           disable=not progress,
-                                           leave=False):
+                for f in navis.config.tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc="Fetching",
+                    disable=not progress,
+                    leave=False,
+                ):
                     results.append(f.result())
             return navis.NeuronList(results)
 
@@ -141,9 +159,9 @@ def get_mesh_neuron(
     try:
         old_parallel = vol.parallel  # note: this seems to be reset by cloudvolume
         vol.parallel = threads if threads else old_parallel
-        if vol.path.startswith('graphene'):
+        if vol.path.startswith("graphene"):
             mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
-        elif vol.path.startswith('precomputed'):
+        elif vol.path.startswith("precomputed"):
             lod_ = lod if lod is not None else 2
             while lod_ >= 0:
                 try:
@@ -154,7 +172,7 @@ def get_mesh_neuron(
                 except BaseException:
                     raise
             if lod_ < 0:
-                raise ValueError(f'No mesh for id {id} found')
+                raise ValueError(f"No mesh for id {id} found")
     except KeyboardInterrupt:
         raise
     except BaseException:
@@ -164,12 +182,12 @@ def get_mesh_neuron(
             return navis.NeuronList([])
         # If no omission, return empty MeshNeuron
         else:
-            return navis.MeshNeuron(None, id=id, units='1 nm', dataset=dataset)
+            return navis.MeshNeuron(None, id=id, units="1 nm", dataset=dataset)
     finally:
         vol.parallel = old_parallel
 
     # Turn into meshneuron
-    n = navis.MeshNeuron(mesh, id=id, units='nm', dataset=dataset)
+    n = navis.MeshNeuron(mesh, id=id, units="nm", dataset=dataset)
 
     if with_synapses:
         _ = get_synapses(
@@ -184,12 +202,13 @@ def _get_mesh(seg_id, vol):
     import DracoPy
 
     level = vol.mesh.meta.meta.decode_layer_id(seg_id)
-    fragment_filenames = vol.mesh.get_fragment_filenames(seg_id,
-                                                         level=level,
-                                                         bbox=None,
-                                                         bypass=False)
+    fragment_filenames = vol.mesh.get_fragment_filenames(
+        seg_id, level=level, bbox=None, bypass=False
+    )
     fragments = vol.mesh._get_mesh_fragments(fragment_filenames)
-    fragments = sorted(fragments, key=lambda frag: frag[0])  # make decoding deterministic
+    fragments = sorted(
+        fragments, key=lambda frag: frag[0]
+    )  # make decoding deterministic
 
     for i, (filename, frag) in enumerate(fragments):
         mesh = None
@@ -201,13 +220,13 @@ def _get_mesh(seg_id, vol):
             except DracoPy.FileTypeException:
                 mesh = Mesh.from_precomputed(frag)
 
-        mesh.segid = np.int64(filename.split('/')[1].split(':')[0])
+        mesh.segid = np.int64(filename.split("/")[1].split(":")[0])
 
         fragments[i] = mesh
 
     fragments = [f for f in fragments if f is not None]
     if len(fragments) == 0:
-        raise IndexError('No mesh fragments found for segment {}'.format(seg_id))
+        raise IndexError("No mesh fragments found for segment {}".format(seg_id))
 
     # Concatenate the mesh
     mesh = Mesh.concatenate(*fragments)
@@ -267,19 +286,23 @@ def detect_soma(x, min_rad=800, N=3, progress=True, *, dataset=None):
 
     """
     if navis.utils.is_iterable(x):
-        return np.vstack([detect_soma(n, dataset=dataset)
-                          for n in navis.config.tqdm(x,
-                                                     desc='Detecting',
-                                                     disable=not progress,
-                                                     leave=False)])
+        return np.vstack(
+            [
+                detect_soma(n, dataset=dataset)
+                for n in navis.config.tqdm(
+                    x, desc="Detecting", disable=not progress, leave=False
+                )
+            ]
+        )
 
     if not isinstance(x, (tm.Trimesh, navis.MeshNeuron)):
         x = get_mesh_neuron(x, dataset=dataset).trimesh
     elif isinstance(x, navis.MeshNeuron):
         x = x.trimesh
 
-    centers, radii, G = sk.skeletonize.wave._cast_waves(x, waves=3, step_size=1,
-                                                        progress=True)
+    centers, radii, G = sk.skeletonize.wave._cast_waves(
+        x, waves=3, step_size=1, progress=True
+    )
 
     is_big = np.where(radii >= min_rad)[0]
 
@@ -288,7 +311,7 @@ def detect_soma(x, min_rad=800, N=3, progress=True, *, dataset=None):
 
     # Find stretches of consectutive above-threshold radii
     candidates = []
-    for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0]+1):
+    for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0] + 1):
         if len(stretch) < N:
             continue
         candidates += [i for i in stretch]
@@ -333,16 +356,18 @@ def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, *, dataset=Non
     try:
         import sparsecubes as sc
     except ImportError:
-        raise ImportError('Meshing requires sparse-cubes:\n  pip3 install sparse-cubes')
+        raise ImportError("Meshing requires sparse-cubes:\n  pip3 install sparse-cubes")
 
     from .segmentation import get_voxels
 
     # Get voxels for this neuron
-    vxl = get_voxels(x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset)
+    vxl = get_voxels(
+        x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset
+    )
 
     vol = get_cloudvolume(dataset)
-    spacing = vol.scales[mip]['resolution']
+    spacing = vol.scales[mip]["resolution"]
 
     mesh = sc.marching_cubes(vxl, spacing=spacing)
 
-    return navis.MeshNeuron(mesh, id=x, units='1 nm')
+    return navis.MeshNeuron(mesh, id=x, units="1 nm")

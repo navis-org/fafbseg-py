@@ -36,7 +36,7 @@ except BaseException:
 use_pbars = utils.use_pbars
 CVtype = cloudvolume.frontends.precomputed.CloudVolumePrecomputed
 
-__all__ = ['get_mesh', 'autoreview_edges', 'test_edges']
+__all__ = ["get_mesh", "autoreview_edges", "test_edges"]
 
 
 def get_mesh(x, bbox, vol=None):
@@ -68,13 +68,13 @@ def get_mesh(x, bbox, vol=None):
 
     """
     if not mcubes:
-        raise ImportError('Unable to import mcubes (PyMCubes) library.')
+        raise ImportError("Unable to import mcubes (PyMCubes) library.")
 
     if not isinstance(x, (list, np.ndarray)):
         x = [x]
 
     if isinstance(vol, type(None)):
-        vol = getattr(utils, 'vol')
+        vol = getattr(utils, "vol")
 
     assert isinstance(vol, CVtype)
 
@@ -84,7 +84,7 @@ def get_mesh(x, bbox, vol=None):
     # Parse bbox
     bbox = np.array(bbox).reshape(3, 2)
     # Convert to voxel coords
-    bbox = bbox / np.array(vol.scale['resolution']).reshape(3, 1)
+    bbox = bbox / np.array(vol.scale["resolution"]).reshape(3, 1)
     bbox = np.array([np.floor(bbox[:, 0]), np.ceil(bbox[:, 1])]).astype(int).T
 
     # Add some padding - otherwise we might get [:1] slices
@@ -110,7 +110,7 @@ def get_mesh(x, bbox, vol=None):
         return None
 
     # We have to add some padding otherwise the marching cube will fail
-    u = np.pad(u, 1, mode='constant', constant_values=False)
+    u = np.pad(u, 1, mode="constant", constant_values=False)
 
     # Update bounding box to match padding
     bbox[:, 0] -= 1
@@ -119,8 +119,8 @@ def get_mesh(x, bbox, vol=None):
     verts, faces = mcubes.marching_cubes(u, 0)
 
     # Bring into the correct coordinate space
-    verts *= vol.scale['resolution']
-    verts += bbox[:, 0] * vol.scale['resolution']
+    verts *= vol.scale["resolution"]
+    verts += bbox[:, 0] * vol.scale["resolution"]
 
     # Turn into and return pymaid Volume
     return pymaid.Volume(verts, faces, name=str(x))
@@ -185,22 +185,23 @@ def autoreview_edges(x, conf_threshold=1, vol=None, remote_instance=None):
     to_test = n.nodes[is_low_conf & not_root]
 
     if to_test.empty:
-        print('No low-confidence edges to test in neuron(s) '
-              '{} found'.format(n.skeleton_id))
+        print(
+            "No low-confidence edges to test in neuron(s) "
+            "{} found".format(n.skeleton_id)
+        )
         return
 
     # Test edges
-    verdict = test_edges(n,
-                         edges=to_test[['treenode_id', 'parent_id']].values,
-                         vol=vol)
+    verdict = test_edges(n, edges=to_test[["treenode_id", "parent_id"]].values, vol=vol)
 
     # Update node confidences
     new_confidences = {n: 5 for n in to_test[verdict].treenode_id.values}
     new_confidences.update({n: 1 for n in to_test[~verdict].treenode_id.values})
-    resp = pymaid.update_node_confidence(new_confidences,
-                                         remote_instance=remote_instance)
+    resp = pymaid.update_node_confidence(
+        new_confidences, remote_instance=remote_instance
+    )
 
-    msg = '{} of {} tested low-confidence edges were found to be correct.'
+    msg = "{} of {} tested low-confidence edges were found to be correct."
     msg = msg.format(sum(verdict), to_test.shape[0])
     print(msg)
 
@@ -238,7 +239,7 @@ def test_edges(x, edges=None, vol=None, max_workers=4):
 
     """
     if isinstance(vol, type(None)):
-        vol = getattr(utils, 'vol')
+        vol = getattr(utils, "vol")
 
     assert isinstance(vol, CVtype)
 
@@ -247,8 +248,9 @@ def test_edges(x, edges=None, vol=None, max_workers=4):
     elif isinstance(x, pd.DataFrame):
         nodes = x
     else:
-        raise TypeError('Expected CatmaidNeuron or DataFrame,'
-                        ' got "{}"'.format(type(x)))
+        raise TypeError(
+            "Expected CatmaidNeuron or DataFrame," ' got "{}"'.format(type(x))
+        )
 
     if isinstance(edges, type(None)):
         not_root = ~nodes.parent_id.isnull()
@@ -256,24 +258,25 @@ def test_edges(x, edges=None, vol=None, max_workers=4):
 
     edges = np.array(edges)
 
-    nodes = nodes.set_index('treenode_id', inplace=False)
+    nodes = nodes.set_index("treenode_id", inplace=False)
     if edges.ndim == 1:
-        locs1 = nodes.loc[edges][['x', 'y', 'z']].values
+        locs1 = nodes.loc[edges][["x", "y", "z"]].values
         parents = nodes.loc[edges].parent_id.values
-        locs2 = nodes.loc[parents][['x', 'y', 'z']].values
+        locs2 = nodes.loc[parents][["x", "y", "z"]].values
     elif edges.ndim == 2:
-        locs1 = nodes.loc[edges[:, 0]][['x', 'y', 'z']].values
-        locs2 = nodes.loc[edges[:, 1]][['x', 'y', 'z']].values
+        locs1 = nodes.loc[edges[:, 0]][["x", "y", "z"]].values
+        locs2 = nodes.loc[edges[:, 1]][["x", "y", "z"]].values
     else:
-        raise ValueError('Unexpected format for edges: {}'.format(edges.shape))
+        raise ValueError("Unexpected format for edges: {}".format(edges.shape))
 
     # Get the segmentation IDs at the first location
     segids1 = locs_to_segments(locs1)
-    with tqdm.tqdm(total=len(segids1), desc='Testing edges') as pbar:
+    with tqdm.tqdm(total=len(segids1), desc="Testing edges") as pbar:
         with futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            point_futures = [ex.submit(_test_single_edge, *k, vol=vol) for k in zip(locs1,
-                                                                                    locs2,
-                                                                                    segids1)]
+            point_futures = [
+                ex.submit(_test_single_edge, *k, vol=vol)
+                for k in zip(locs1, locs2, segids1)
+            ]
             for f in futures.as_completed(point_futures):
                 pbar.update(1)
 
@@ -308,8 +311,10 @@ def _test_single_edge(l1, l2, seg_id, vol):
         return True
 
     # Prepare raycasting
-    coll = ncollpyde.Volume(np.array(mesh.vertices, dtype=float, order='C'),
-                            np.array(mesh.faces, dtype=np.int32, order='C'))
+    coll = ncollpyde.Volume(
+        np.array(mesh.vertices, dtype=float, order="C"),
+        np.array(mesh.faces, dtype=np.int32, order="C"),
+    )
 
     # Get intersections
     l1 = l1.reshape(1, 3)

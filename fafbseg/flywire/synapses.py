@@ -317,7 +317,7 @@ def get_transmitter_predictions(
         syn, single_pred=single_pred, weighted=weighted, id_col="pre"
     )
     if not single_pred:
-        pred.columns.name = 'root_id'
+        pred.columns.name = "root_id"
         return pred.reindex(make_iterable(x).astype(np.int64), axis=1)
     else:
         return pred
@@ -448,9 +448,10 @@ def get_synapses(
     if not pre and not post:
         raise ValueError("`pre` and `post` must not both be False")
 
-    if dataset in ('public', ) and not filtered:
-        raise ValueError('Unable to query unfiltered synapses for the public '
-                         'release data.')
+    if dataset in ("public",) and not filtered:
+        raise ValueError(
+            "Unable to query unfiltered synapses for the public " "release data."
+        )
 
     if isinstance(materialization, str):
         if materialization not in ("latest", "live", "auto"):
@@ -465,10 +466,12 @@ def get_synapses(
         )
 
     if (min_score is not None) and (min_score < 50) and filtered:
-        msg = ("Querying synapse table with `filtered=True` already removes "
-               "synaptic connections with cleft_score <= 50. If you want less "
-               "confident connections set `filtered=False`. Note that this will "
-               "also drop the de-duplication (see docstring).")
+        msg = (
+            "Querying synapse table with `filtered=True` already removes "
+            "synaptic connections with cleft_score <= 50. If you want less "
+            "confident connections set `filtered=False`. Note that this will "
+            "also drop the de-duplication (see docstring)."
+        )
         navis.config.logger.warning(msg)
 
     # Parse root IDs
@@ -1239,7 +1242,7 @@ def get_connectivity(
 
     # Turn into connectivity table
     if "weight" not in syn.columns:
-        if neuropils is True and 'neuropil' in syn.columns:
+        if neuropils is True and "neuropil" in syn.columns:
             cn_table = (
                 syn.groupby(["pre", "post", "neuropil"], as_index=False)
                 .size()
