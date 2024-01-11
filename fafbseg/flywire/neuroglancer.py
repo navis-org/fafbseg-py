@@ -180,6 +180,10 @@ def encode_url(
             # Turn into dictionary
             seg_groups = dict(zip(segments, seg_groups))
 
+            if len(seg_groups) != len(segments):
+                print('Some segments seem to belong to multiple groups. This is '
+                      'currently not supported.')
+
         # Check if dict is {id: group} or {group: [id1, id2, id3]} and force
         # into the latter
         is_list = [
