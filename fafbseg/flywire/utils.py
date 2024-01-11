@@ -72,7 +72,8 @@ area_ids = None
 vol_names = None
 
 # The default dataset
-DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'production')
+DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'public')
+
 # Some useful data types
 INT_DTYPES = (np.int32, np.int64, int, np.uint32, np.uint64)
 FLOAT_DTYPES = (np.float32, np.float64, float)
