@@ -1,0 +1,51 @@
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          # - "3.12"
+    steps:
+      # This cancels any such job that is still runnning
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.6.0
+      with:
+        access_token: ${{ github.token }}
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install Linux libraries
+      run: |
+        sudo apt-get install -y libdbus-1-3 libxkbcommon-x11-0 libxcb-icccm4 \
+          libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+          libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install zstandard==0.16.0
+        pip install numpy
+        pip install flybrains --no-deps
+        pip install pyarrow
+    - name: Install fafbseb
+      run: pip install -e .
+    - name: Report dependency versions
+      run: pip freeze -r requirements.txt
+    - name: Set FlyWire CAVE token for tests
+      env:
+        CAVE_TOKEN: ${{ secrets.cave_token }}
+      run: |
+        python -c "from fafbseg import flywire;flywire.set_chunkedgraph_secret('$CAVE_TOKEN')"
+    - name: Test with pytest
+      with:
+        run: |
+          export NAVIS_HEADLESS=TRUE
+          pytest --verbose
