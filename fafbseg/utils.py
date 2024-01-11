@@ -282,7 +282,7 @@ def download_cache_file(url, filename=None, force_reload=False, verbose=True):
         is_text = "text" in content_type or "html" in content_type
         with open(fp, mode="w" if is_text else "w") as f:
             f.write(r.content.decode())
-        if verbose:
+        if verbose and not os.environ.get("FAFBSEG_TESTING", False):
             print("Done.")
 
     return fp
