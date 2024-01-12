@@ -1,4 +1,4 @@
-[![Documentation Status](https://readthedocs.org/projects/fafbseg-py/badge/?version=latest)](https://fafbseg-py.readthedocs.io/en/latest/?badge=latest) [![DOI](https://zenodo.org/badge/197735091.svg)](https://zenodo.org/badge/latestdoi/197735091)
+[![Documentation Status](https://readthedocs.org/projects/fafbseg-py/badge/?version=latest)](https://fafbseg-py.readthedocs.io/en/latest/?badge=latest) [![Tests](https://github.com/navis-org/fafbseg-py/actions/workflows/test-package.yml/badge.svg)](https://github.com/navis-org/fafbseg-py/actions/workflows/test-package.yml) [![DOI](https://zenodo.org/badge/197735091.svg)](https://zenodo.org/badge/latestdoi/197735091)
 
 <img src="https://github.com/navis-org/fafbseg-py/blob/master/docs/_static/logo2.png?raw=true" height="60">
 
