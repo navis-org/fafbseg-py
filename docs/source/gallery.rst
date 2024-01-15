@@ -12,10 +12,10 @@ FlyWire
 .. toctree::
    :maxdepth: 1
 
-   tutorials/flywire_setup
-   tutorials/flywire_segments
-   tutorials/flywire_neurons
-   tutorials/flywire_annotations
+   FlyWire Setup: How to get your API token? <tutorials/flywire_setup>
+   Introduction to FlyWire root IDs, materializations and datasets <tutorials/flywire_segments>
+   Downloading neuron meshes and skeletons <tutorials/flywire_neurons>
+   Working with annotations <tutorials/flywire_annotations>
    tutorials/neuroglancer
    tutorials/flywire_connectivity
    tutorials/hemibrain_nblast

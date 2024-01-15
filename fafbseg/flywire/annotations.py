@@ -331,7 +331,7 @@ def create_cave_table(name: str,
                             voxel_resolution=[1, 1, 1],
                             *,
                             dataset=None):
-    """Create annotation table.
+    """Create CAVE annotation table.
 
     This is just a thin-wrapper around `CAVEclient.annotation.create_table`.
 
@@ -410,7 +410,7 @@ def create_cave_table(name: str,
 
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
 def list_cave_tables(*, dataset=None):
-    """Fetch available annotation tables.
+    """Fetch available CAVE annotation tables.
 
     Parameters
     ----------
@@ -443,7 +443,7 @@ def list_cave_tables(*, dataset=None):
 def get_cave_table_info(table_name: str,
                               *,
                               dataset=None):
-    """Get info for given table.
+    """Get info for given CAVE table.
 
     Parameters
     ----------
@@ -550,7 +550,7 @@ def delete_annotations(table_name: str,
                        annotation_ids: list,
                        *,
                        dataset=None):
-    """Delete annotations from table.
+    """Delete annotations from CAVE annotation table.
 
     Parameters
     ----------
@@ -600,7 +600,7 @@ def upload_annotations(table_name: str,
                        data: pd.DataFrame,
                        *,
                        dataset=None):
-    """Upload or update annotations to table.
+    """Upload or update annotations to CAVE table.
 
     Parameters
     ----------
@@ -992,7 +992,7 @@ def search_annotations(x,
                 If ``None`` (default), will use in order:
                  1. The version set by :func:`~fafbseg.flywire.set_default_annotation_version`
                  2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
-                 3. The latest commit available on the "main" branch
+                 3. The latest release available on the "main" branch
                 Please see the online tutorial on annotations for details.
     materialization : "auto" | "live" | "latest" | int | bool
                 Which materialization version to search:
@@ -1951,6 +1951,7 @@ class NeuronCriteria():
 
     @property
     def is_empty(self):
+        """Returns True if no criteria are specified."""
         return len(self.criteria) == 0
 
     def get_roots(self):

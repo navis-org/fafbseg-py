@@ -21,8 +21,6 @@ Interact with the segmentation:
 
     fafbseg.flywire.locs_to_segments
     fafbseg.flywire.neuron_to_segments
-    fafbseg.flywire.encode_url
-    fafbseg.flywire.decode_url
     fafbseg.flywire.locs_to_supervoxels
     fafbseg.flywire.supervoxels_to_roots
     fafbseg.flywire.skid_to_id
@@ -53,8 +51,8 @@ Connectivity:
     fafbseg.flywire.synapses.get_adjacency
     fafbseg.flywire.synapses.get_connectivity
     fafbseg.flywire.synapses.get_synapses
-    fafbseg.flywire.synapses.synapse_counts
-    fafbseg.flywire.synapses.predict_transmitter
+    fafbseg.flywire.synapses.get_synapse_counts
+    fafbseg.flywire.synapses.get_transmitter_predictions
 
 L2-related functions:
 
@@ -112,6 +110,8 @@ Utility functions:
     fafbseg.flywire.set_default_dataset
     fafbseg.flywire.set_default_annotation_version
     fafbseg.flywire.get_user_information
+    fafbseg.flywire.encode_url
+    fafbseg.flywire.decode_url
 
 
 Google segmentation
