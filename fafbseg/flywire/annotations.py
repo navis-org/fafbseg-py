@@ -718,7 +718,7 @@ def get_somas(x=None,
     --------
     >>> from fafbseg import flywire
     >>> somas = flywire.get_somas([720575940628842314])
-    Using materialization version 630.
+    Using materialization version 783.
     >>> somas                                                   # doctest: +SKIP
             id     volume   pt_supervoxel_id          pt_root_id              pt_position  rad_est
     0  5743218  27.935539  80645535832325071  720575940628842314  [584928, 201568, 22720]   2480.0
@@ -1032,7 +1032,7 @@ def search_annotations(x,
     Find info for given root ID(s):
 
     >>> an = flywire.search_annotations(720575940628857210)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> an.iloc[0]
     supervoxel_id               78112261444987077
     root_id                    720575940628857210
@@ -1064,24 +1064,24 @@ def search_annotations(x,
     Search a term among all fields (this is a cell type):
 
     >>> ps009 = flywire.search_annotations('PS009', exact=True)
-    Using materialization version 630.
+    Using materialization version 783.
 
     You can use "colum:value" as shorthand to search a specific field:
 
     >>> phn = flywire.search_annotations('nerve:PhN')
-    Using materialization version 630.
+    Using materialization version 783.
 
     Use regex to refine search (here we try to find all "PSXXX" hemibrain types):
 
     >>> all_ps = flywire.search_annotations('hemibrain_type:PS[0-9]{3}', regex=True)
-    Using materialization version 630.
+    Using materialization version 783.
 
     Use ``NeuronCriteria`` for more more complicated queries:
 
     >>> from fafbseg.flywire import NeuronCriteria as NC
     >>> ann = flywire.search_annotations(NC(type='PS009', side='left'))
     Found 1 neuron matching the given criteria.
-    Using materialization version 630.
+    Using materialization version 783.
 
     Note that `type` in the above example will search against all `*_type`
     fields (e.g. both `cell_type` and `hemibrain_type`).
@@ -1524,7 +1524,7 @@ def search_community_annotations(x,
     Search for annotations for given root ID(s):
 
     >>> an = flywire.search_community_annotations(720575940628857210)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> an.iloc[0]
     id                                   46699
     pt_position_x                       419980
@@ -1900,7 +1900,7 @@ class NeuronCriteria():
 
     >>> cn = flywire.get_connectivity(NC(hemibrain_type='DA1_lPN'))
     Found 15 neurons matching the given criteria.
-    Using materialization version 630.
+    Using materialization version 783.
     >>> cn.head()
                       pre                post  weight
     0  720575940630610425  720575940637208718     106
