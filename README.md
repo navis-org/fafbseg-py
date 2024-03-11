@@ -2,7 +2,7 @@
 
 <img src="https://github.com/navis-org/fafbseg-py/blob/master/docs/_static/logo2.png?raw=true" height="60">
 
-Tools to work with the FlyWire and Google segmentations of the FAFB EM dataset. Fully interoperable with navis.
+Tools to work with the [FlyWire](https://flywire.ai/) and [Google](https://fafb-ffn1.storage.googleapis.com/landing.html) segmentations of the FAFB EM dataset. Fully interoperable with [navis](https://github.com/navis-org/navis).
 
 ## Features
 Here are just some of the things you can do with ``fafbseg``:
