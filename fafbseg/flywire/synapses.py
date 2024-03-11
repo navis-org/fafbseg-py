@@ -120,7 +120,7 @@ def get_synapse_counts(
 
     >>> from fafbseg import flywire
     >>> n_syn = flywire.get_synapse_counts(720575940603231916)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> n_syn
                         pre  post
     id
@@ -266,7 +266,7 @@ def get_transmitter_predictions(
     Get per-transmitter predictions for a single neuron:
 
     >>> flywire.get_transmitter_predictions(720575940603231916)
-    Using materialization version 630.
+    Using materialization version 783.
     root_id        720575940603231916
     gaba                     0.011677
     acetylcholine            0.938961
@@ -278,7 +278,7 @@ def get_transmitter_predictions(
     Return only the most likely transmitter:
 
     >>> flywire.get_transmitter_predictions(720575940603231916, single_pred=True)
-    Using materialization version 630.
+    Using materialization version 783.
     {720575940603231916: prediction(transmitter='acetylcholine', probability=0.9389612897479809)}
 
     """
@@ -421,7 +421,7 @@ def get_synapses(
 
     >>> from fafbseg import flywire
     >>> syn = flywire.get_synapses(720575940603231916)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> syn.head()                                               #doctest: +SKIP
                       pre                post  cleft_score   pre_x   pre_y  pre_z  post_x  post_y  post_z         id
     0  720575940631406673  720575940603231916           60  434336  218108  28240  434340  218204   28240    3535576
@@ -435,7 +435,7 @@ def get_synapses(
     >>> from fafbseg import flywire
     >>> sk = flywire.get_skeletons(720575940603231916)
     >>> _ = flywire.get_synapses(sk, attach=True)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> sk.connectors.head()                                     #doctest: +SKIP
        connector_id       x       y       z  cleft_score          partner_id type  node_id
     0             0  356304  146840  145120          145  720575940627592977  pre      217
@@ -761,7 +761,7 @@ def get_adjacency(
     >>> from fafbseg import flywire
     >>> adj = flywire.get_adjacency(sources=720575940631406673,
     ...                             targets=720575940603231916)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> adj
     target              720575940603231916
     source
@@ -1057,7 +1057,7 @@ def get_connectivity(
 
     >>> from fafbseg import flywire
     >>> edges = flywire.get_connectivity(720575940603231916)
-    Using materialization version 630.
+    Using materialization version 783.
     >>> edges.head()
                       pre                post  weight
     0  720575940630610425  720575940603231916      83
