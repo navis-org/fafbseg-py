@@ -677,7 +677,7 @@ def find_mat_version(ids,
     # by with the live materialization
     is_latest = client.chunkedgraph.is_latest_roots(ids, timestamp=None)
     latest_valid[(latest_valid == 0) & is_latest] = -1  # track "live" as -1
-    if all(is_latest):
+    if all(is_latest) and dataset != 'public':  # public does not have live
         if verbose and not SILENCE_FIND_MAT_VERSION:
             print('Using live materialization')
         return 'live'
