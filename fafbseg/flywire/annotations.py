@@ -1417,7 +1417,7 @@ def _get_available_branches():
     return r.json()
 
 
-def get_user_information(user_ids, field=None):
+def get_user_information(user_ids, field=None, raise_missing=True, dataset=None):
     """Fetch (and cache) user information (name, affiliation, etc.) from their IDs.
 
     Parameters
@@ -1426,6 +1426,13 @@ def get_user_information(user_ids, field=None):
                 List of IDs for which to find user information.
     field :     str, optional
                 If provided will only return given field (e.g "name").
+    raise_missing : bool
+                If True (default), will raise an error if any of the queried user IDs
+                can not be found. If False, will return None for missing IDs.
+    dataset :   "public" | "production", optional
+                Against which FlyWire dataset to query. If ``None`` will fall
+                back to the default dataset (see also
+                :func:`~fafbseg.flywire.set_default_dataset`).    
 
     Returns
     -------
@@ -1437,13 +1444,18 @@ def get_user_information(user_ids, field=None):
 
     # Fetch info for missing IDs and update cache
     if len(missing):
-        client = get_cave_client()
+        client = get_cave_client(dataset=dataset)
         _user_information.update({r['id']: r for r in client.auth.get_user_information(missing)})
 
+    if raise_missing:
+        missing = [i for i in user_ids if i not in _user_information]
+        if len(missing):
+            raise ValueError(f'Could not find user information for user IDs: {missing}')
+
     if field is None:
-        return [_user_information[i] for i in user_ids]
+        return [_user_information.get(i, {}) for i in user_ids]
     else:
-        return [_user_information[i][field] for i in user_ids]
+        return [_user_information.get(i, {}).get(field, None) for i in user_ids]
 
 
 @inject_dataset(disallowed=['sandbox'])
@@ -1600,7 +1612,7 @@ def search_community_annotations(x,
 
     if not ct.empty:
         name_map = dict(zip(ct.user_id.unique(),
-                            get_user_information(ct.user_id.unique(), field='name')))
+                            get_user_information(ct.user_id.unique(), field='name', raise_missing=False, dataset=dataset)))
         ct.insert(ct.columns.tolist().index('user_id'),
                   'user',
                   ct.user_id.map(name_map))
