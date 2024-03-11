@@ -1526,15 +1526,17 @@ def search_community_annotations(x,
     >>> an = flywire.search_community_annotations(720575940628857210)
     Using materialization version 783.
     >>> an.iloc[0]
-    id                                   46699
-    pt_position_x                       419980
-    pt_position_y                       189644
-    pt_position_z                       217360
-    pt_supervoxel_id         77830580511126708
-    pt_root_id              720575940628857210
-    tag                 unclassified_IN_FW_112
-    user                       Stefanie Hampel
-    user_id                                125
+    id                                             46699
+    created             2022-04-20 17:26:55.132886+00:00
+    superceded_id                                    NaN
+    pt_position_x                                 419980
+    pt_position_y                                 189644
+    pt_position_z                                 217360
+    tag                           unclassified_IN_FW_112
+    user                                 Stefanie Hampel
+    user_id                                          125
+    pt_supervoxel_id                   77830580511126708
+    pt_root_id                        720575940628857210
     Name: 0, dtype: object
 
     Search for all tags matching a given pattern:
@@ -1902,12 +1904,12 @@ class NeuronCriteria():
     Found 15 neurons matching the given criteria.
     Using materialization version 783.
     >>> cn.head()
-                      pre                post  weight
-    0  720575940630610425  720575940637208718     106
-    1  720575940630610425  720575940605102694     106
-    2  720575940611174702  720575940630066007     104
-    3  720575940611174702  720575940621239679      89
-    4  720575940630610425  720575940619385765      87
+                    pre                post  weight
+    0  720575940635945919  720575940605102694     106
+    1  720575940635945919  720575940637208718     106
+    2  720575940614956072  720575940630066007     104
+    3  720575940614956072  720575940621239679      89
+    4  720575940635945919  720575940619385765      87
 
     """
     @inject_dataset()
