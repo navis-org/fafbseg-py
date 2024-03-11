@@ -1134,7 +1134,12 @@ def search_annotations(x,
         # Map to the latest cached version
         cached_versions = _get_cached_annotation_materializations(commit)
         available_version = get_cave_client(dataset=dataset).materialize.get_versions()
-        available_and_cached = cached_versions[np.isin(cached_versions, available_version)]
+        
+        if len(cached_versions):
+            available_and_cached = cached_versions[np.isin(cached_versions, available_version)]
+        else:
+            available_and_cached = []
+
         if len(available_and_cached):
             materialization = sorted(available_and_cached)[-1]
         else:
