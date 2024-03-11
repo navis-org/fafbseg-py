@@ -20,7 +20,7 @@ setup(
     version=verstr,
     packages=find_packages(),
     license='GNU GPL V3',
-    description='Tools to work with auto-segmented FAFB data',
+    description='Tools to work with the FlyWire and Google segmentations of the FAFB EM dataset',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://fafbseg-py.readthedocs.io',
@@ -31,7 +31,7 @@ setup(
     },
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
-    keywords='FAFB neuron segmentation FlyWire Google synapses',
+    keywords='FAFB neuron segmentation FlyWire Google synapses connectome fly brain navis cave',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
 
@@ -41,14 +41,13 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
 
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
     ],
     install_requires=requirements,
     extras_require={},
-    python_requires='>=3.7',
+    python_requires='>=3.8',
     zip_safe=False,
     include_package_data=True
 )
