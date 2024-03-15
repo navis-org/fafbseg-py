@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.3] - dev
+- make `is_proofread` play nicely with the public dataset (uses a different table for proofread neuron IDs)
+- add option to `get_cave_table` to fill in user info (name + affiliation)
+
+## [3.0.2] - 2024-03-11
+Fixes a bug in `search_annotations` when there are no cached versions.
+
+## [3.0.1] - 2024-03-11
+Small bug fix release.
+
+1. We now prevent searches against live materialization in the public dataset.
+2. Make get `get_user_information` robust against missing IDs.
+
 ## [3.0.0] - 2024-01-10
 The default dataset is now the "public" dataset!
 
