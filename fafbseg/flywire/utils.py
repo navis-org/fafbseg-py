@@ -607,11 +607,12 @@ def get_lr_position(x, coordinates='nm'):
     return (m[:, 0] - x[:, 0]) / 2
 
 
+@inject_dataset()
 def find_mat_version(ids,
                      verbose=True,
                      allow_multiple=False,
                      raise_missing=True,
-                     dataset='production'):
+                     dataset=None):
     """Find a materialization version (or live) for given IDs.
 
     Parameters
@@ -682,13 +683,13 @@ def find_mat_version(ids,
             print('Using live materialization')
         return 'live'
 
-    if allow_multiple:
+    if allow_multiple and any(latest_valid != 0):
         if all(latest_valid != 0):
             if verbose and not SILENCE_FIND_MAT_VERSION:
                 print(f"Found root IDs spread across {len(np.unique(latest_valid))} "
                       "materialization versions.")
             return latest_valid
-
+        
         msg = (f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
                f"materialization versions but {(latest_valid == 0).sum()} IDs "
                "do not exist in any of the materialized tables.")
@@ -698,16 +699,18 @@ def find_mat_version(ids,
                 print(msg)
             return latest_valid
         else:
-            raise ValueError(msg)
+            raise MaterializationMatchError(msg)
 
     if dataset not in ('public, '):
-        raise ValueError('Given root IDs do not (co-)exist in any of the available '
-                        'materialization versions (including live). Try updating '
-                        'root IDs and rerun your query.')
+        raise MaterializationMatchError(
+            'Given root IDs do not (co-)exist in any of the available '
+            'materialization versions (including live). Try updating '
+            'root IDs and rerun your query.')
     else:
-        raise ValueError('Given root IDs do not (co-)exist in any of the available '
-                        'public materialization versions. Please make sure that '
-                        'the root IDs do exist and rerun your query.')
+        raise MaterializationMatchError(
+            'Given root IDs do not (co-)exist in any of the available '
+            'public materialization versions. Please make sure that '
+            'the root IDs do exist and rerun your query.')
 
 
 def _is_valid_version(ids, version, dataset):
@@ -751,3 +754,7 @@ class silence_find_mat_version:
     def __exit__(self, exc_type, exc_value, exc_tb):
         global SILENCE_FIND_MAT_VERSION
         SILENCE_FIND_MAT_VERSION = False
+
+
+class MaterializationMatchError(Exception):
+    pass
