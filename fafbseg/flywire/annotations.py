@@ -544,6 +544,7 @@ def get_cave_table(table_name: str,
 
     """
     if isinstance(materialization, (np.ndarray, tuple, list)):
+        assert len(materialization) > 0, 'If you provide a container of materialization versions it must not be empty.'
         return pd.concat([get_cave_table(table_name,
                                          materialization=v,
                                          split_positions=split_positions,
