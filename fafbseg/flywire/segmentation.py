@@ -932,7 +932,7 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
     not_zero = id != "0"
 
     # Check if all other IDs are valid
-    is_valid_root(id[not_zero], raise_exc=True)
+    is_valid_root(id[not_zero], raise_exc=True, dataset=dataset)
 
     is_latest = np.ones(len(id)).astype(bool)
 
@@ -1559,17 +1559,20 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
                     Use this function to check if a supervoxel ID is valid.
 
     """
-    vol = get_cloudvolume(dataset)
+    client = get_cave_client(dataset=dataset)
+    vol = cv.CloudVolume(client.chunkedgraph.cloudvolume_path)
 
     if navis.utils.is_iterable(x):
-        is_valid = np.array([is_valid_root(r, dataset=vol) for r in x])
+        is_valid = np.array([is_valid_root(r, dataset=dataset) for r in x])
         if raise_exc and not all(is_valid):
             invalid = set(np.asarray(x)[~is_valid].tolist())
             raise ValueError(f"Invalid root IDs found: {invalid}")
         return is_valid
 
     try:
-        is_valid = vol.get_chunk_layer(x) == 10
+        # Note: FlyWire has 10 layers but FANC has 9 
+        # by using the volume's info we stay flexible
+        is_valid = vol.get_chunk_layer(x) == vol.info['graph']['n_layers']
     except ValueError:
         is_valid = False
 
@@ -1707,7 +1710,7 @@ def get_voxels(
     else:
         sv_vol = vol
 
-    is_valid_root(x, raise_exc=True)
+    is_valid_root(x, raise_exc=True, dataset=dataset)
 
     # Get L2 chunks making up this neuron
     l2_ids = client.chunkedgraph.get_leaves(x, stop_layer=2)
