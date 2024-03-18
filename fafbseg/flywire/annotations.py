@@ -74,6 +74,10 @@ __all__ = ['get_somas',
 
 
 PR_TABLE = {}
+NUC_TABLES = {"default": "nuclei_v1",
+              "flywire_fafb_public": "nuclei_v1",
+              "flywire_fafb_production": "nuclei_v1",
+              "fanc_production_mar2021": "nucleus_mar2022"}
 COMMUNITY_ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_tables = None
 _user_information = {}
@@ -597,6 +601,61 @@ def get_cave_table(table_name: str,
     return data
 
 
+@inject_dataset()
+@lru_cache
+def _get_empty_cave_table(table_name: str,
+                          split_positions: bool = False,
+                          fill_user_info: bool = False,
+                          *,
+                          dataset: Optional[str] = None):
+    """Get an empty version of given CAVE table.
+
+    Parameters
+    ----------
+    table_name :        str
+                        Name of the table.
+    fill_user_info :    bool | full
+                        Whether to fill in user information for the table. Only 
+                        relevant if table has a `user_id` column. If True,
+                        will add a `user_name` column. If "full", will add
+                        also add a `user_pi` column.
+    split_positions :   bool
+                        Whether to split x/y/z positions into separate columns.
+    dataset :           "public" | "production" | "sandbox" | "flat_630", optional
+                        Against which FlyWire dataset to query. If ``None`` will fall
+                        back to the default dataset (see
+                        :func:`~fafbseg.flywire.set_default_dataset`).
+
+    Returns
+    -------
+    table :             pandas.DataFrame
+
+    """
+    # Get/Initialize the CAVE client
+    client = get_cave_client(dataset=dataset)
+
+    navis.utils.eval_param(table_name, name='table_name', allowed_types=(str, ))
+
+    query_table = retry(client.materialize.query_table)
+    data = query_table(table=table_name,
+                       split_positions=split_positions,
+                       limit=1)
+    data = data.iloc[0:0].copy()
+    
+    if fill_user_info and 'user_id' in data.columns:
+        data['user_name'] = ''
+        if fill_user_info == 'full':
+            data['user_pi'] = ''
+
+    # There is some weird interaction with pandas and the .attrs if the attrs contain numpy arrays
+    if getattr(data, 'attrs', None):
+        for k, v in data.attrs.items():
+            if isinstance(v, np.ndarray):
+                data.attrs[k] = v.tolist()
+
+    return data
+
+
 @inject_dataset(disallowed=['flat_630', 'flat_571'])
 def delete_annotations(table_name: str,
                        annotation_ids: list,
@@ -779,6 +838,8 @@ def get_somas(x=None,
     if isinstance(x, navis.BaseNeuron):
         x = navis.NeuronList(x)
 
+    table_name = NUC_TABLES.get(dataset, NUC_TABLES['default'])
+
     filter_in_dict = None
     if not isinstance(x, type(None)):
         if isinstance(x, navis.NeuronList):
@@ -786,15 +847,22 @@ def get_somas(x=None,
         else:
             root_ids = make_iterable(x, force_type=np.int64)
         if materialization == 'auto':
-            materialization = find_mat_version(root_ids,
-                                               allow_multiple=True,
-                                               raise_missing=raise_missing,
-                                               dataset=dataset)
+            try:
+                materialization = find_mat_version(root_ids,
+                                                allow_multiple=True,
+                                                raise_missing=raise_missing,
+                                                dataset=dataset)
+            except MaterializationError as e:
+                if raise_missing:
+                    raise e
+                else:
+                    return _get_empty_cave_table(table_name, split_positions=split_positions, dataset=dataset)
+
             if isinstance(materialization, np.ndarray):
                 materialization = tuple(np.unique(materialization[materialization != 0]).tolist())
         filter_in_dict = {'pt_root_id': root_ids}
 
-    nuc = get_cave_table('nuclei_v1',
+    nuc = get_cave_table(table_name,
                          materialization=materialization,
                          split_positions=split_positions,
                          dataset=dataset,
@@ -814,9 +882,7 @@ def get_somas(x=None,
             start = nuc[start_cols].values
             end = nuc[end_cols].values
             nuc.drop(start_cols + end_cols, inplace=True, axis=1)
-        nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2
-
-        return nuc
+        nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2        
 
         # If NeuronList, set their somas
         if isinstance(x, navis.NeuronList):
