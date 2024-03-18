@@ -193,7 +193,7 @@ def is_proofread(x, table=("proofreading_status_public_v1", "proofread_neurons")
 
     # Check if any of the roots are outdated -> can't check those
     if validate and materialization == 'live':
-        il = segmentation.is_latest_root(x)
+        il = segmentation.is_latest_root(x, dataset=dataset)
         if any(~il):
             print("At least some root ID(s) outdated and will therefore show up as "
                   f"not proofread: {x[~il]}")
@@ -295,7 +295,7 @@ def is_materialized_root(id, materialization='latest', *, dataset=None):
 
     # Check which of the old-enough roots are still up-to-date
     if any(older):
-        il = segmentation.is_latest_root(id[older])
+        il = segmentation.is_latest_root(id[older], dataset=dataset)
 
         if any(il):
             is_mat[np.where(older)[0][il]] = True
@@ -1384,7 +1384,7 @@ def get_hierarchical_annotations(annotation_version=None,
         if "root_live" not in table.columns:
             table["root_live"] = table["root_id"]
             root_col = "root_live"
-        to_update = ~segmentation.is_latest_root(table.root_live, progress=False)
+        to_update = ~segmentation.is_latest_root(table.root_live, progress=False, dataset=dataset)
         if any(to_update):
             if verbose and not os.environ.get('FAFBSEG_TESTING', False):
                 print(
