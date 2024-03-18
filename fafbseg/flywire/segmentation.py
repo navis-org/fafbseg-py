@@ -936,16 +936,15 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
 
     is_latest = np.ones(len(id)).astype(bool)
 
+    client = get_cave_client(dataset=dataset)
     session = requests.Session()
     token = get_chunkedgraph_secret()
     session.headers["Authorization"] = f"Bearer {token}"
     url = (
-        "https://prod.flywire-daf.com/segmentation/api/v1/table/"
-        f"{FLYWIRE_DATASETS.get(dataset, dataset)}/is_latest_roots?int64_as_str=1"
+        client.chunkedgraph._endpoints["is_latest_roots"].format_map(client.chunkedgraph.default_url_mapping)
     )
 
-    if isinstance(timestamp, str) and timestamp.startswith("mat"):
-        client = get_cave_client(dataset=dataset)
+    if isinstance(timestamp, str) and timestamp.startswith("mat"):        
         if timestamp == "mat" or timestamp == "mat_latest":
             timestamp = client.materialize.get_timestamp()
         else:
