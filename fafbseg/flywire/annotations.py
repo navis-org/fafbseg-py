@@ -40,7 +40,7 @@ from pathlib import Path
 from ..utils import make_iterable, download_cache_file, CACHE_DIR
 from .utils import (get_cave_client, retry, get_chunkedgraph_secret,
                     find_mat_version, inject_dataset, _is_valid_version,
-                    match_dtype)
+                    match_dtype, MaterializationMatchError)
 from . import segmentation  # this is to avoid circular imports
 
 ANNOT_REPO_URL = "https://api.github.com/repos/flyconnectome/flywire_annotations"
@@ -820,10 +820,10 @@ def get_somas(x=None,
     Returns
     -------
     DataFrame
-                        Pandas DataFrame with nucleu (see Examples). Root IDs
+                        Pandas DataFrame with nuclei (see Examples). Root IDs
                         without a nucleus will be missing. The `rad_est` is
                         the estimated radius based on the widest point of the
-                        nucleus. Take it with a grain of salt!
+                        nucleus - take it with a pinch of salt!
 
     Examples
     --------
@@ -852,7 +852,7 @@ def get_somas(x=None,
                                                 allow_multiple=True,
                                                 raise_missing=raise_missing,
                                                 dataset=dataset)
-            except MaterializationError as e:
+            except MaterializationMatchError as e:
                 if raise_missing:
                     raise e
                 else:
@@ -950,7 +950,7 @@ def submit_cell_identification(x, split_tags=False, validate=True,
     Returns
     -------
     submitted :     pandas.DataFrame
-                    A list of tags the were supposed to be submitted. Includes a
+                    A list of tags that were supposed to be submitted. Includes a
                     `success` and an `error` column. You can use this to
                     retry submission in case of errors.
 
