@@ -1559,7 +1559,7 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
 
     """
     client = get_cave_client(dataset=dataset)
-    vol = cv.CloudVolume(client.chunkedgraph.cloudvolume_path)
+    vol = cv.CloudVolume(client.chunkedgraph.cloudvolume_path, use_https=True, progress=False)
 
     if navis.utils.is_iterable(x):
         is_valid = np.array([is_valid_root(r, dataset=dataset) for r in x])
