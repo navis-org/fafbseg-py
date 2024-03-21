@@ -1643,7 +1643,7 @@ def search_community_annotations(x,
 
     >>> an = flywire.search_community_annotations(720575940628857210)
     Using materialization version 783.
-    >>> an.iloc[0]
+    >>> an.iloc[0]                                              # doctest: +SKIP
     id                                             46699
     created             2022-04-20 17:26:55.132886+00:00
     superceded_id                                    NaN
