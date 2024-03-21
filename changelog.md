@@ -1,8 +1,9 @@
 # Changelog
 
-## [3.0.3] - dev
+## [3.0.3] - 2024-03-24
 - make `is_proofread` play nicely with the public dataset (uses a different table for proofread neuron IDs)
 - add option to `get_cave_table` to fill in user info (name + affiliation)
+- bug fixes in `get_somas`, `find_mat_version` , `is_latest_root` and `is_valid_root`
 
 ## [3.0.2] - 2024-03-11
 Fixes a bug in `search_annotations` when there are no cached versions.
