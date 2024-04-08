@@ -562,6 +562,10 @@ def get_synapses(
     for df in syn:
         df.attrs = {}
 
+    # Drop empty tables but make sure to keep at least one if all are empty
+    if not all([t.empty for t in syn]):
+        syn = [t for t in syn if not t.empty]
+
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
 
@@ -822,7 +826,7 @@ def get_adjacency(
             # nb there is a bug in CAVE which causes empty results if we don't
             # ask for supervoxels
             select_columns=columns + sv_cols,
-        )        
+        )
     elif filtered:
         has_view = "valid_connection_v2" in client.materialize.get_views(
             materialization
@@ -878,7 +882,7 @@ def get_adjacency(
                         post_pt_root_id=target_batch, pre_pt_root_id=source_batch
                     )
                 )
-            this = func(filter_in_dict=filter_in_dict)            
+            this = func(filter_in_dict=filter_in_dict)
 
             # We need to drop the .attrs (which contain meta data from queries)
             # Otherwise we run into issues when concatenating
@@ -888,6 +892,10 @@ def get_adjacency(
                 syn.append(this.drop(
                     sv_cols, axis=1, errors="ignore"
                 ))
+
+    # Drop empty tables but make sure to keep at least one if all are empty
+    if not all([t.empty for t in syn]):
+        syn = [t for t in syn if not t.empty]
 
     # Combine results from batches
     if len(syn):
@@ -1137,11 +1145,13 @@ def get_connectivity(
             select_columns=columns + sv_cols,
         )
     elif filtered:
+        # Check if there is a view for valid connections
         has_view = "valid_connection_v2" in client.materialize.get_views(
             materialization
         )
         no_np = isinstance(neuropils, type(None))
         no_score_thresh = (not min_score) or (min_score == 50)
+        # If all conditions are met, we can use the view
         if has_view & no_np & no_score_thresh:
             columns = ["pre_pt_root_id", "post_pt_root_id", "n_syn"]
             if transmitters:
@@ -1153,6 +1163,7 @@ def get_connectivity(
                 materialization_version=materialization,
             )
             filtered = False  # Set to false since we don't need the join
+        # Otherwise we need to query the valid synapse view
         else:
             func = partial(
                 retry(client.materialize.join_query),
@@ -1199,6 +1210,10 @@ def get_connectivity(
         df.drop(sv_cols, axis=1, errors="ignore", inplace=True)
         # Drop `attrs`` to avoid issues when concatenating
         df.attrs = {}
+
+    # Drop empty tables but make sure to keep at least one if all are empty
+    if not all([t.empty for t in syn]):
+        syn = [t for t in syn if not t.empty]
 
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
@@ -1372,6 +1387,10 @@ def get_supervoxel_synapses(
     # Drop attrs to avoid issues when concatenating
     for df in syn:
         df.attrs = {}
+
+    # Drop empty tables but make sure to keep at least one if all are empty
+    if not all([t.empty for t in syn]):
+        syn = [t for t in syn if not t.empty]
 
     # Combine results from batches
     syn = pd.concat(syn, axis=0, ignore_index=True)
