@@ -1,6 +1,16 @@
 # Changelog
 
-## [3.0.3] - 2024-03-24
+## [3.0.6] - 2024-04-09
+- (hierarchical) annotations can now be loaded from a specific (or just the latest) commit
+- re-enabled synapse queries against the raw (`filtered=False`) synapse table for the public dataset
+
+## [3.0.5] - 2024-03-22
+- fixed a bug when querying connectivity against live materialization
+
+## [3.0.4] - 2024-03-21
+- fixed bugs in `get_somas` and `is_valid_root`
+
+## [3.0.3] - 2024-03-21
 - make `is_proofread` play nicely with the public dataset (uses a different table for proofread neuron IDs)
 - add option to `get_cave_table` to fill in user info (name + affiliation)
 - bug fixes in `get_somas`, `find_mat_version` , `is_latest_root` and `is_valid_root`
