@@ -335,7 +335,15 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
         cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
         cave_clients[datastack]._created_at = dt.datetime.now()
 
-    return cave_clients[datastack]
+    # The public datastack configuration currently does not set the .synapse_table
+    # That's intentional to avoid people using it - they are supposed to use the filtered view
+    # However, we want to enable our users to do that if they want, so we will add it back
+    client = cave_clients[datastack]
+    if client.materialize.synapse_table is None:
+        if "synapses_nt_v1" in client.materialize.get_tables():
+            client.materialize.synapse_table = "synapses_nt_v1"
+
+    return client
 
 
 def get_chunkedgraph_secret(domain=('global.daf-apis.com', 'prod.flywire-daf.com')):

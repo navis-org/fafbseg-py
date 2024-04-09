@@ -448,11 +448,6 @@ def get_synapses(
     if not pre and not post:
         raise ValueError("`pre` and `post` must not both be False")
 
-    if dataset in ("public",) and not filtered:
-        raise ValueError(
-            "Unable to query unfiltered synapses for the public " "release data."
-        )
-
     if isinstance(materialization, str):
         if materialization not in ("latest", "live", "auto"):
             raise ValueError(
@@ -774,11 +769,6 @@ def get_adjacency(
     """
     if isinstance(targets, type(None)):
         targets = sources
-
-    if dataset in ("public",) and not filtered:
-        raise ValueError(
-            "Unable to query unfiltered synapses for the public " "release data."
-        )
 
     if isinstance(materialization, str):
         if materialization not in ("latest", "live", "auto"):
