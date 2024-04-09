@@ -150,20 +150,20 @@ def is_proofread(x, table=("proofreading_status_public_v1", "proofread_neurons")
                     Root IDs to check.
     table :         str | tupple
                     Which CAVE table(s) to use. There are currently two tables:
-                     - "proofreading_status_public_v1" contains everything that 
-                       has been set to proofread by the community and includes 
-                       some things that aren't actual neurons; this table is 
-                       automatically updated and should be up-to-date for the 
+                     - "proofreading_status_public_v1" contains everything that
+                       has been set to proofread by the community and includes
+                       some things that aren't actual neurons; this table is
+                       automatically updated and should be up-to-date for the
                        production dataset
-                     - "proofread_neurons" is a sanitized version of the above 
-                       and should contain only neurons; note though that this 
-                       table is not automatically updated and will lag behind 
+                     - "proofread_neurons" is a sanitized version of the above
+                       and should contain only neurons; note though that this
+                       table is not automatically updated and will lag behind
                         the "proofreading_status_public_v1" table
-                    Unfortunately, the "proofreading_status_public_v1" table 
+                    Unfortunately, the "proofreading_status_public_v1" table
                     is currently only available in the production but not the
-                    public dataset - which makes sense since the public dataset 
+                    public dataset - which makes sense since the public dataset
                     is a static snapshot.
-                    To make this function robust, we default to using 
+                    To make this function robust, we default to using
                     "proofreading_status_public_v1" and fall back to
                     "proofread_neurons" if the former is not available.
     materialization : "latest" | "live" | "auto" | int
@@ -213,7 +213,7 @@ def is_proofread(x, table=("proofreading_status_public_v1", "proofread_neurons")
         for t in table:
             if t in available_tables:
                 table = t
-                break 
+                break
         if not isinstance(t, str):
             raise ValueError(f'None of the tables "{table}" are available in dataset "{dataset}"')
     else:
@@ -525,7 +525,7 @@ def get_cave_table(table_name: str,
                         the results (no deduplication).
                         Set to ``False`` to fetch the non-materialized version.
     fill_user_info :    bool | full
-                        Whether to fill in user information for the table. Only 
+                        Whether to fill in user information for the table. Only
                         relevant if table has a `user_id` column. If True,
                         will add a `user_name` column. If "full", will add
                         also add a `user_pi` column.
@@ -580,7 +580,7 @@ def get_cave_table(table_name: str,
     else:
         raise ValueError('It is currently not possible to query the non-'
                          'materialized tables.')
-    
+
     if fill_user_info and 'user_id' in data.columns:
         user_info = get_user_information(data.user_id.unique(), dataset=dataset, raise_missing=False)
         user_info = {r['id']: r for r in user_info if 'id' in r}
@@ -615,7 +615,7 @@ def _get_empty_cave_table(table_name: str,
     table_name :        str
                         Name of the table.
     fill_user_info :    bool | full
-                        Whether to fill in user information for the table. Only 
+                        Whether to fill in user information for the table. Only
                         relevant if table has a `user_id` column. If True,
                         will add a `user_name` column. If "full", will add
                         also add a `user_pi` column.
@@ -641,7 +641,7 @@ def _get_empty_cave_table(table_name: str,
                        split_positions=split_positions,
                        limit=1)
     data = data.iloc[0:0].copy()
-    
+
     if fill_user_info and 'user_id' in data.columns:
         data['user_name'] = ''
         if fill_user_info == 'full':
@@ -882,7 +882,7 @@ def get_somas(x=None,
             start = nuc[start_cols].values
             end = nuc[end_cols].values
             nuc.drop(start_cols + end_cols, inplace=True, axis=1)
-        nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2        
+        nuc['rad_est'] = np.abs(start - end).max(axis=1) / 2
 
         # If NeuronList, set their somas
         if isinstance(x, navis.NeuronList):
@@ -1107,10 +1107,12 @@ def search_annotations(x,
                 Which version of the annotations to use. This should
                 correspond to a tag (e.g. the "v1.1.0" release) or a branch
                 of the annotation repository (see URL above).
-                If ``None`` (default), will use in order:
-                 1. The version set by :func:`~fafbseg.flywire.set_default_annotation_version`
-                 2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
-                 3. The latest release available on the "main" branch
+                  - if `None` (default), will use in order:
+                     1. The version set by ``flywire.set_default_annotation_version()``
+                     2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
+                     3. The latest commit available on the "main" branch
+                  - if `latest_commit` will use the latest available release
+                  - if `latest_tag` will use the latest available tag
                 Please see the online tutorial on annotations for details.
     materialization : "auto" | "live" | "latest" | int | bool
                 Which materialization version to search:
@@ -1252,7 +1254,7 @@ def search_annotations(x,
         # Map to the latest cached version
         cached_versions = _get_cached_annotation_materializations(commit)
         available_version = get_cave_client(dataset=dataset).materialize.get_versions()
-        
+
         if len(cached_versions):
             available_and_cached = cached_versions[np.isin(cached_versions, available_version)]
         else:
@@ -1307,6 +1309,9 @@ def search_annotations(x,
 
 def version_to_commit(annotation_version):
     """Map version to commit."""
+    if annotation_version == 'latest_commit':
+        return _get_available_commits()[0]['sha']
+
     # Get available tags for the repo
     tags = _get_available_annotation_versions()
 
@@ -1318,6 +1323,8 @@ def version_to_commit(annotation_version):
             annotation_version = tags[0]['name']
         else:
             annotation_version = DEFAULT_ANNOTATION_VERSION
+    elif annotation_version == 'latest_tag':
+        annotation_version = tags[0]['name']
 
     # Map annotation version to commit
     commit = None
@@ -1333,6 +1340,14 @@ def version_to_commit(annotation_version):
             if annotation_version == b['name']:
                 commit = b['commit']['sha']
                 break
+    # If no commit, look for an actual commit
+    if not commit:
+        all_commits = _get_available_commits()
+        for c in all_commits:
+            if c['sha'].startswith(annotation_version):
+                commit = c['sha']
+                break
+
     # If still no commit, raise error
     if not commit:
         raise ValueError(f'`annotation_version="{annotation_version}"` could not '
@@ -1378,12 +1393,15 @@ def get_hierarchical_annotations(annotation_version=None,
     ----------
     annotation_version : str, optional
                         Which version of the annotations to use. This should
-                        correspond to a tag (e.g. the "v1.1.0" release) or a branch
-                        of the annotation repository (https://github.com/flyconnectome/flywire_annotations).
-                        If `None` (default), will use in order:
-                          1. The version set by ``flywire.set_default_annotation_version()``
-                          2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
-                          3. The latest commit available on the "main" branch
+                        correspond to a tag (e.g. the "v1.1.0" release), a branch
+                        or a commit of the annotation repository
+                        (https://github.com/flyconnectome/flywire_annotations).
+                         - if `None` (default), will use in order:
+                             1. The version set by ``flywire.set_default_annotation_version()``
+                             2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
+                             3. The latest commit available on the "main" branch
+                         - if `latest_commit` will use the latest available release
+                         - if `latest_tag` will use the latest available tag
                         Please see the online tutorial on annotations for details.
     materialization :   "live" | "latest" | int, optional
                         Which materialization you want the root IDs to correspond to:
@@ -1533,6 +1551,14 @@ def _get_available_annotation_versions():
 
 
 @lru_cache
+def _get_available_commits():
+    # Get available commits
+    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/commits")
+    r.raise_for_status()
+    return r.json()
+
+
+@lru_cache
 def _get_available_branches():
     # Get available tags
     r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/branches")
@@ -1555,7 +1581,7 @@ def get_user_information(user_ids, field=None, raise_missing=True, dataset=None)
     dataset :   "public" | "production", optional
                 Against which FlyWire dataset to query. If ``None`` will fall
                 back to the default dataset (see also
-                :func:`~fafbseg.flywire.set_default_dataset`).    
+                :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -1958,7 +1984,7 @@ class NeuronCriteria():
                 Whether to interpret string criteria as case sensitive.
     annotation_version : str, optional
                 Which version of the annotations to use. This should correspond
-                to a tag (e.g. the "v1.1.0" release) or a branch of the
+                to a tag (e.g. the "v1.1.0" release), a commit or a branch of the
                 annotation repository (https://github.com/flyconnectome/flywire_annotations).
                 If `None`, will use the latest tagged release.
     materialization :  "live" | "latest" | int | bool, optional
