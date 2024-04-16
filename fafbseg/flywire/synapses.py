@@ -517,7 +517,7 @@ def get_synapses(
     elif filtered:
         func = partial(
             retry(client.materialize.query_view),
-            view_name="valid_synapses_nt_v2_view",
+            view_name="valid_synapses_nt_np_v6",
             materialization_version=materialization,
             split_positions=True,
             select_columns=columns,
@@ -837,7 +837,7 @@ def get_adjacency(
                 retry(client.materialize.join_query),
                 tables=[
                     [client.materialize.synapse_table, "id"],
-                    ["valid_synapses_nt_v2", "target_id"],
+                    ["valid_synapses_nt_np_v6", "target_id"],
                 ],
                 materialization_version=materialization,
                 select_columns={client.materialize.synapse_table: columns},
@@ -1159,7 +1159,7 @@ def get_connectivity(
                 retry(client.materialize.join_query),
                 tables=[
                     [client.materialize.synapse_table, "id"],
-                    ["valid_synapses_nt_v2", "target_id"],
+                    ["valid_synapses_nt_np_v6", "target_id"],
                 ],
                 materialization_version=materialization,
                 select_columns={client.materialize.synapse_table: columns},
