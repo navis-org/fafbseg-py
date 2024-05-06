@@ -362,7 +362,8 @@ def mesh_neuron(x, mip=2, thin=False, bounds=None, progress=True, *, dataset=Non
 
     # Get voxels for this neuron
     vxl = get_voxels(
-        x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset
+        x, mip=mip, thin=thin, bounds=bounds, progress=progress, dataset=dataset,
+        use_mirror=False,  threads=10
     )
 
     vol = get_cloudvolume(dataset)
