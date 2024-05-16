@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.0.7] - 2024-04-16
+- small fix for connectivity queries when `filtered=True` in the public dataset
+- queries against Github (for hierarchical annotations) will now use personal access token defined
+  in `GITHUB_PAT` if present; this avoids issues with rate limits
+
 ## [3.0.6] - 2024-04-09
 - (hierarchical) annotations can now be loaded from a specific (or just the latest) commit
 - re-enabled synapse queries against the raw (`filtered=False`) synapse table for the public dataset
