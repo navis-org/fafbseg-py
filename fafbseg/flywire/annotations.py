@@ -1543,9 +1543,19 @@ def _get_cached_annotation_materializations(commit):
 
 
 @lru_cache
+def _get_github_session():
+    s = requests.Session()
+    if "GITHUB_PAT" in os.environ:
+        s.auth = ('user', 'pass')
+        s.headers.update({'Authorization': f"Bearer {os.environ['GITHUB_PAT']}"})
+
+    return s
+
+
+@lru_cache
 def _get_available_annotation_versions():
     # Get available tags
-    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/tags")
+    r = _get_github_session().get("https://api.github.com/repos/flyconnectome/flywire_annotations/tags")
     r.raise_for_status()
     return r.json()
 
@@ -1553,7 +1563,7 @@ def _get_available_annotation_versions():
 @lru_cache
 def _get_available_commits():
     # Get available commits
-    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/commits")
+    r = _get_github_session().get("https://api.github.com/repos/flyconnectome/flywire_annotations/commits")
     r.raise_for_status()
     return r.json()
 
@@ -1561,7 +1571,7 @@ def _get_available_commits():
 @lru_cache
 def _get_available_branches():
     # Get available tags
-    r = requests.get("https://api.github.com/repos/flyconnectome/flywire_annotations/branches")
+    r = _get_github_session().get("https://api.github.com/repos/flyconnectome/flywire_annotations/branches")
     r.raise_for_status()
     return r.json()
 
