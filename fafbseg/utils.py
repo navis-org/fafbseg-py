@@ -97,11 +97,11 @@ def make_url(*args, **GET):
     url = args[0]
     for arg in args[1:]:
         arg_str = str(arg)
-        joiner = '' if url.endswith('/') else '/'
-        relative = arg_str[1:] if arg_str.startswith('/') else arg_str
+        joiner = "" if url.endswith("/") else "/"
+        relative = arg_str[1:] if arg_str.startswith("/") else arg_str
         url = requests.compat.urljoin(url + joiner, relative)
     if GET:
-        url += '?{}'.format(urlencode(GET))
+        url += "?{}".format(urlencode(GET))
     return url
 
 
@@ -157,23 +157,25 @@ class GSPointLoader(object):
         else:
             self._points = np.concat(self._points, points)
 
-        resolution = np.array(self._volume.scale['resolution'])
-        chunk_size = np.array(self._volume.scale['chunk_sizes'])
+        resolution = np.array(self._volume.scale["resolution"])
+        chunk_size = np.array(self._volume.scale["chunk_sizes"])
         chunk_starts = (points // resolution).astype(int) // chunk_size * chunk_size
         for point, chunk_start in zip(points, chunk_starts):
             self._chunk_map[tuple(chunk_start)].add(tuple(point))
 
     def _load_chunk(self, chunk_start, chunk_end):
         # (No validation that this is a valid chunk_start.)
-        return self._volume[chunk_start[0]:chunk_end[0],
-                            chunk_start[1]:chunk_end[1],
-                            chunk_start[2]:chunk_end[2]]
+        return self._volume[
+            chunk_start[0] : chunk_end[0],
+            chunk_start[1] : chunk_end[1],
+            chunk_start[2] : chunk_end[2],
+        ]
 
     def _load_points(self, chunk_map_key):
         chunk_start = np.array(chunk_map_key)
         points = np.array(list(self._chunk_map[chunk_map_key]))
 
-        resolution = np.array(self._volume.scale['resolution'])
+        resolution = np.array(self._volume.scale["resolution"])
         indices = (points // resolution).astype(int) - chunk_start
 
         # We don't really need to load the whole chunk here:
@@ -212,12 +214,16 @@ class GSPointLoader(object):
         """
         progress_state = self._volume.progress
         self._volume.progress = False
-        with tqdm(total=len(self._chunk_map),
-                  desc='Segmentation IDs',
-                  leave=False,
-                  disable=not progress) as pbar:
+        with tqdm(
+            total=len(self._chunk_map),
+            desc="Segmentation IDs",
+            leave=False,
+            disable=not progress,
+        ) as pbar:
             with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
-                point_futures = [ex.submit(self._load_points, k) for k in self._chunk_map]
+                point_futures = [
+                    ex.submit(self._load_points, k) for k in self._chunk_map
+                ]
                 for f in futures.as_completed(point_futures):
                     pbar.update(1)
         self._volume.progress = progress_state
@@ -225,8 +231,12 @@ class GSPointLoader(object):
         results = [f.result() for f in point_futures]
 
         if return_sorted:
-            points_dict = dict(zip([tuple(p) for result in results for p in result[0]],
-                                   [i for result in results for i in result[1]]))
+            points_dict = dict(
+                zip(
+                    [tuple(p) for result in results for p in result[0]],
+                    [i for result in results for i in result[1]],
+                )
+            )
 
             data = np.array([points_dict[tuple(p)] for p in self._points])
             points = self._points
@@ -280,8 +290,8 @@ def download_cache_file(url, filename=None, force_reload=False, verbose=True):
         r.raise_for_status()
         content_type = r.headers.get("content-type", "").lower()
         is_text = "text" in content_type or "html" in content_type
-        with open(fp, mode="w" if is_text else "w") as f:
-            f.write(r.content.decode())
+        with open(fp, mode="w" if is_text else "w", encoding="utf-8") as f:
+            f.write(r.content.decode("utf-8"))
         if verbose and not os.environ.get("FAFBSEG_TESTING", False):
             print("Done.")
 
