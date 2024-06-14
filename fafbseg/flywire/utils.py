@@ -53,7 +53,7 @@ FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentat
                 'flat_783': 'precomputed://gs://flywire_v141_m783'}
 
 CAVE_DATASETS = {'production': 'flywire_fafb_production',
-                 'flat_783': 'flywire_fafb_production',
+                 'flat_783': 'flywire_fafb_public',
                  'flat_630': 'flywire_fafb_public',
                  'flat_571': 'flywire_fafb_production',
                  'sandbox': 'flywire_fafb_sandbox',
