@@ -84,6 +84,7 @@ _user_information = {}
 
 # The default annotation version
 DEFAULT_ANNOTATION_VERSION = os.environ.get('FLYWIRE_DEFAULT_ANNOTATION_VERSION', None)
+_CURRENT_ANNOTATION_COMMIT = None  # this is to keep track of the current commit
 
 
 def parse_neuroncriteria(allow_all=True, allow_empty=False):
@@ -1110,9 +1111,9 @@ def search_annotations(x,
                   - if `None` (default), will use in order:
                      1. The version set by ``flywire.set_default_annotation_version()``
                      2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
-                     3. The latest commit available on the "main" branch
-                  - if `latest_commit` will use the latest available release
-                  - if `latest_tag` will use the latest available tag
+                     3. The latest tagged release available on the "main" branch
+                  - if `latest_commit` will use the latest available commit
+                  - if `latest_tag` will use the latest available tag (release)
                 Please see the online tutorial on annotations for details.
     materialization : "auto" | "live" | "latest" | int | bool
                 Which materialization version to search:
@@ -1309,53 +1310,76 @@ def search_annotations(x,
 
 def version_to_commit(annotation_version):
     """Map version to commit."""
-    if annotation_version == 'latest_commit':
-        return _get_available_commits()[0]['sha']
-
     # Get available tags for the repo
     tags = _get_available_annotation_versions()
 
     # If no version specified in this function
+    annotation_version_str = "unspecified"
     if annotation_version is None:
         # If no default annotation version
         if DEFAULT_ANNOTATION_VERSION is None:
-            # Use latest tagged release
+            # Use latest commit
+            annotation_version_str = "latest tagged release"
             annotation_version = tags[0]['name']
+            #annotation_version = _get_available_commits()[0]['sha']
         else:
+            annotation_version_str = f"default ({DEFAULT_ANNOTATION_VERSION})"
             annotation_version = DEFAULT_ANNOTATION_VERSION
-    elif annotation_version == 'latest_tag':
-        annotation_version = tags[0]['name']
 
-    # Map annotation version to commit
-    commit = None
+    if annotation_version == 'latest_tag':
+        annotation_version_str = "latest tagged release"
+        annotation_version = tags[0]['name']
+    elif annotation_version == 'latest_commit':
+        annotation_version_str = "latest commit"
+        annotation_version = _get_available_commits()[0]['sha']
+
+    # Now map the annotation version to the actual commit sha
+    sha = None
+
     # See if any of the tags match `annotation_version`
     for t in tags:
         if annotation_version == t['name']:
-            commit = t['commit']['sha']
+            sha = t['commit']['sha']
             break
-    # If no commit, look for a branch
-    if not commit:
+    # If still no commit, look for a branch
+    if not sha:
         branches = _get_available_branches()
         for b in branches:
             if annotation_version == b['name']:
-                commit = b['commit']['sha']
+                sha = b['commit']['sha']
                 break
-    # If no commit, look for an actual commit
-    if not commit:
+    # If still no commit, look for an actual commit
+    if not sha:
         all_commits = _get_available_commits()
         for c in all_commits:
             if c['sha'].startswith(annotation_version):
-                commit = c['sha']
+                sha = c['sha']
                 break
 
     # If still no commit, raise error
-    if not commit:
+    if not sha:
         raise ValueError(f'`annotation_version="{annotation_version}"` could not '
                          'be mapped to a commit.\n'
                          f'Available versions are: {", ".join([t["name"] for t in tags])}\n'
                          f'Available branches are: {", ".join([b["name"] for b in branches])}')
 
-    return commit
+    # Report which version we are using on first call
+    global _CURRENT_ANNOTATION_COMMIT
+    if _CURRENT_ANNOTATION_COMMIT != sha:
+        all_commits = _get_available_commits()
+        for c in all_commits:
+            if c['sha'] == sha:
+                commit = c
+                break
+        try:
+            # This works if we have a commit date
+            date = f" from {dt.datetime.fromisoformat(commit['commit']['author']['date']).date()}"
+        except BaseException:
+            date = ''
+        print(f'Using annotation version "{annotation_version_str}" ({sha[:7]}{date}) from https://github.com/flyconnectome/flywire_annotations.')
+        _CURRENT_ANNOTATION_COMMIT = sha
+
+    return sha
 
 
 def clear_cached_annotations():
@@ -1399,9 +1423,9 @@ def get_hierarchical_annotations(annotation_version=None,
                          - if `None` (default), will use in order:
                              1. The version set by ``flywire.set_default_annotation_version()``
                              2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
-                             3. The latest commit available on the "main" branch
-                         - if `latest_commit` will use the latest available release
-                         - if `latest_tag` will use the latest available tag
+                             3. The latest tagged release available on the "main" branch
+                         - if `latest_commit` will use the latest available commit
+                         - if `latest_tag` will use the latest available tag (release)
                         Please see the online tutorial on annotations for details.
     materialization :   "live" | "latest" | int, optional
                         Which materialization you want the root IDs to correspond to:
@@ -2243,7 +2267,9 @@ def set_default_annotation_version(version):
     tags = [t['name'] for t in _get_available_annotation_versions()]
 
     if version:
-        if version in branches:
+        if version in ('latest_commit', 'latest_tag'):
+            pass
+        elif version in branches:
             print(f'Default annotation version set to latest commit in branch "{version}".')
         elif version in tags:
             print(f'Default annotation version set to tag "{version}".')
@@ -2254,5 +2280,5 @@ def set_default_annotation_version(version):
     else:
         print('Default annotation version set to `None` (will use latest release on "main" branch).')
 
-    global FLYWIRE_DEFAULT_ANNOTATION_VERSION
-    FLYWIRE_DEFAULT_ANNOTATION_VERSION = version
+    global DEFAULT_ANNOTATION_VERSION
+    DEFAULT_ANNOTATION_VERSION = version
