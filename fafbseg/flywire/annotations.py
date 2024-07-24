@@ -2017,10 +2017,16 @@ class NeuronCriteria():
     case :      bool
                 Whether to interpret string criteria as case sensitive.
     annotation_version : str, optional
-                Which version of the annotations to use. This should correspond
-                to a tag (e.g. the "v1.1.0" release), a commit or a branch of the
-                annotation repository (https://github.com/flyconnectome/flywire_annotations).
-                If `None`, will use the latest tagged release.
+                Which version of the annotations to use. This should
+                correspond to a tag (e.g. the "v1.1.0" release) or a branch
+                of the annotation repository (see URL above).
+                  - if `None` (default), will use in order:
+                     1. The version set by ``flywire.set_default_annotation_version()``
+                     2. The version set by environment variable ``FLYWIRE_DEFAULT_ANNOTATION_VERSION``
+                     3. The latest tagged release available on the "main" branch
+                  - if `latest_commit` will use the latest available commit
+                  - if `latest_tag` will use the latest available tag (release)
+                Please see the online tutorial on annotations for details.
     materialization :  "live" | "latest" | int | bool, optional
                 Which materialization version to search. By default, this
                 is set to `None` and will get automatically adjusted to reflect
@@ -2079,6 +2085,7 @@ class NeuronCriteria():
     multiple root IDs:
 
     >>> cn = flywire.get_connectivity(NC(hemibrain_type='DA1_lPN'))
+    Using annotation version "latest tagged release" (327ae7b from 2024-01-10) from https://github.com/flyconnectome/flywire_annotations.
     Found 15 neurons matching the given criteria.
     Using materialization version 783.
     >>> cn.head()
