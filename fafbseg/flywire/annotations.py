@@ -1387,7 +1387,7 @@ def clear_cached_annotations():
     cache_dir = Path(CACHE_DIR).expanduser().absolute()
 
     # Delete all files in cache_dir that match "flywire_annotations@*.tsv"
-    cached = [f.name.split('@')[-1].split('.')[0] for f in cache_dir.glob('flywire_annotations@*.tsv')]
+    cached = [f.name for f in cache_dir.glob('flywire_annotations@*.tsv')]
 
     for c in cached:
         fp = cache_dir / c
