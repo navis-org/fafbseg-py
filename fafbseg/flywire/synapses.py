@@ -1311,7 +1311,9 @@ def get_connectivity(
 
     if transmitters:
         # Generate per-neuron predictions
-        pred = collapse_nt_predictions(syn, single_pred=True, id_col="pre")
+        pred = collapse_nt_predictions(
+            syn, single_pred=True, id_col="pre", weighted="cleft_score" in syn.columns
+        )
 
         cn_table["pred_nt"] = cn_table.pre.map(lambda x: pred.get(x, [None])[0])
         cn_table["pred_conf"] = cn_table.pre.map(lambda x: pred.get(x, [None, None])[1])
