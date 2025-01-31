@@ -844,7 +844,7 @@ def skid_to_id(x, sample=None, catmaid_instance=None, progress=True, *, dataset=
         for n in navis.config.tqdm(
             x, desc="Searching", disable=not progress, leave=False
         ):
-            res.append(skid_to_id(n, dataset=dataset))
+            res.append(skid_to_id(n, dataset=dataset, sample=sample))
         return pd.concat(res, axis=0).reset_index(drop=True)
     elif isinstance(x, navis.TreeNeuron):
         nodes = x.nodes[["x", "y", "z"]]
