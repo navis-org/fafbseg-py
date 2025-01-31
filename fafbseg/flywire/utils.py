@@ -214,14 +214,14 @@ def get_neuropil_volumes(neuropils):
 
     with ZipFile(data_path / 'JFRC2NP.surf.fw.zip', 'r') as zip:
         try:
-            f = zip.read(f'{neuropils}.stl')
+            f = zip.read(f'{neuropils}.ply')
         except KeyError:
             available = []
             for file in zip.filelist:
                 fname = file.filename.split('/')[-1]
-                if not fname.endswith('.stl') or fname.startswith('.'):
+                if not fname.endswith('.ply') or fname.startswith('.'):
                     continue
-                available.append(fname.replace('.stl', ''))
+                available.append(fname.replace('.ply', ''))
             available = sorted(available)
 
             if neuropils:
@@ -230,8 +230,8 @@ def get_neuropil_volumes(neuropils):
             else:
                 return np.array(available)
 
-        f = zip.read(f'{neuropils}.stl')
-        m = tm.load_mesh(BytesIO(f), file_type='stl')
+        f = zip.read(f'{neuropils}.ply')
+        m = tm.load_mesh(BytesIO(f), file_type='ply')
 
     return navis.Volume(m, name=neuropils)
 
