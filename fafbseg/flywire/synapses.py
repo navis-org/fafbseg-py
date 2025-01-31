@@ -454,7 +454,7 @@ def get_synapses(
                 '`materialization` must be "auto", "latest", "live" or '
                 f'integer, got "{materialization}"'
             )
-    elif not isinstance(materialization, int):
+    elif not isinstance(materialization, (np.integer, int)):
         raise ValueError(
             '`materialization` must be "auto", "latest", "live" or integer, '
             f'got "{type(materialization)}"'
@@ -793,7 +793,7 @@ def get_adjacency(
                 '`materialization` must be "auto", "latest", "live" or '
                 f'integer, got "{materialization}"'
             )
-    elif not isinstance(materialization, int):
+    elif not isinstance(materialization, (np.integer, int)):
         raise ValueError(
             '`materialization` must be "auto", "latest", "live" or integer, '
             f'got "{type(materialization)}"'
@@ -1119,7 +1119,7 @@ def get_connectivity(
                 '`materialization` must be "auto", "latest", "live" or '
                 f'integer, got "{materialization}"'
             )
-    elif not isinstance(materialization, int):
+    elif not isinstance(materialization, (np.integer, int)):
         raise ValueError(
             '`materialization` must be "auto", "latest", "live" or integer, '
             f'got "{type(materialization)}"'

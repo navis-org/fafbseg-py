@@ -92,7 +92,7 @@ def query_synapses(seg_ids, pre=True, post=True, score_thresh=30, ret='brief',
 
     """
     assert ret in ('brief', 'full')
-    assert isinstance(score_thresh, (type(None), int, float))
+    assert isinstance(score_thresh, (type(None), int, float, np.number))
 
     conn = get_connection(db)
 
@@ -188,7 +188,7 @@ def query_connections(pre_ids, post_ids, score_thresh=30, ret='brief',
 
     """
     assert ret in ('brief', 'full')
-    assert isinstance(score_thresh, (type(None), int, float))
+    assert isinstance(score_thresh, (type(None), int, float, np.number))
 
     conn = get_connection(db)
 

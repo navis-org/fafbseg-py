@@ -124,7 +124,7 @@ def get_mesh_neuron(
                 ]
             )
         else:
-            if not isinstance(threads, int):
+            if not isinstance(threads, (np.integer, int)):
                 raise TypeError(
                     f'`threads` must be int or `None`, got "{type(threads)}".'
                 )

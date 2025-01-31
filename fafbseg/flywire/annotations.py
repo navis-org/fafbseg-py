@@ -231,7 +231,7 @@ def is_proofread(x, table=("proofreading_status_public_v1", "proofread_neurons")
         pr_table = client.materialize.live_query(table=table,
                                                  timestamp=dt.datetime.utcnow(),
                                                  filter_in_dict=dict(pt_root_id=x))
-    elif isinstance(materialization, int):
+    elif isinstance(materialization, (np.integer, int)):
         if cache:
             if (table, materialization) in PR_TABLE:
                 pr_table = PR_TABLE[(table, materialization)]
@@ -243,6 +243,8 @@ def is_proofread(x, table=("proofreading_status_public_v1", "proofread_neurons")
             pr_table = client.materialize.query_table(table=table,
                                                       filter_in_dict=dict(pt_root_id=x),
                                                       materialization_version=materialization)
+    else:
+        raise ValueError(f'Invalid materialization "{materialization}"')
 
     return np.isin(x, pr_table.pt_root_id.values)
 
@@ -696,7 +698,7 @@ def delete_annotations(table_name: str,
 
     if isinstance(annotation_ids, np.ndarray):
         annotation_ids = annotation_ids.flatten().tolist()
-    elif isinstance(annotation_ids, int):
+    elif isinstance(annotation_ids, (np.integer, int)):
         annotation_ids = [annotation_ids]
 
     resp = client.annotation.delete_annotation(table_name=table_name,
