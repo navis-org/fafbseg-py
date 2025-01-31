@@ -2131,6 +2131,21 @@ class NeuronCriteria():
         self.verbose = verbose
         self._annotations = None
 
+    def __iter__(self):
+        if not hasattr(self, '_roots'):
+            self._roots = self.get_roots()
+        return iter(self._roots)
+
+    def __len__(self):
+        if not hasattr(self, '_roots'):
+            self._roots = self.get_roots()
+        return len(self._roots)
+
+    def __contains__(self, item):
+        if not hasattr(self, '_roots'):
+            self._roots = self.get_roots()
+        return item in self._roots
+
     @classmethod
     def available_fields(self):
         """Return all available fields for selection."""
