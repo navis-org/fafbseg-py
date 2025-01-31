@@ -6,4 +6,7 @@ These files were provided by Sven Dorkenwald. He used neuropil volumes
 mapped from the JFRC2 template brain into FAFB14 space to assign each
 synapse to a neuropil. `global_area_ids` is a list of `int8` - use
 `volume_name_dict` to map to neuropil names. Unassignable synapses (~20M) have
-id `-1`. 
+id `-1`.
+
+The neuropil meshes packaged with `fafbseg` were downloaded from
+`precomputed://gs://flywire_neuropil_meshes/neuropils/neuropil_mesh_v141_v6`.
