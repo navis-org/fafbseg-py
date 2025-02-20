@@ -24,9 +24,13 @@ import numpy as np
 from pathlib import Path
 from tqdm.auto import tqdm
 from functools import wraps
-from concurrent import futures
 from collections.abc import Iterable
 from urllib.parse import urlparse, urlencode
+
+try:
+    from pathos.pools import _ProcessPool as ProcessingPool
+except ModuleNotFoundError:
+    ProcessingPool = None
 
 use_pbars = True
 
@@ -214,21 +218,29 @@ class GSPointLoader(object):
         """
         progress_state = self._volume.progress
         self._volume.progress = False
+
         with tqdm(
             total=len(self._chunk_map),
             desc="Segmentation IDs",
             leave=False,
             disable=not progress,
         ) as pbar:
-            with futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
-                point_futures = [
-                    ex.submit(self._load_points, k) for k in self._chunk_map
-                ]
-                for f in futures.as_completed(point_futures):
-                    pbar.update(1)
-        self._volume.progress = progress_state
+            if max_workers > 1:
+                if ProcessingPool is None:
+                    raise ModuleNotFoundError("Please install `pathos` to use parallel loading.")
 
-        results = [f.result() for f in point_futures]
+                with ProcessingPool(max_workers) as pool:
+                    results = []
+                    for result in pool.imap_unordered(self._load_points, self._chunk_map):
+                        results.append(result)
+                        pbar.update(1)
+            else:
+                results = []
+                for chunk_map_key in self._chunk_map:
+                    results.append(self._load_points(chunk_map_key))
+                    pbar.update(1)
+
+        self._volume.progress = progress_state
 
         if return_sorted:
             points_dict = dict(
