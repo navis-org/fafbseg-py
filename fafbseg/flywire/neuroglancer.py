@@ -583,6 +583,16 @@ def decode_url(url, format="json"):
         r.raise_for_status()
 
         scene = r.json()
+    # Parse Neuroglancer URL
+    elif '!middleauth+' in url:
+        token = utils.get_chunkedgraph_secret()
+        path = urlparse(url).fragment.replace('!middleauth+', '')
+        r = requests.get(
+            path, headers={"Authorization": f"Bearer {token}"}
+        )
+        r.raise_for_status()
+
+        scene = r.json()
     elif isinstance(url, str):
         query = unquote(urlparse(url).fragment)[1:]
         scene = json.loads(query)
