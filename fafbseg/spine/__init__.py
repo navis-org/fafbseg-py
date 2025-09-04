@@ -15,4 +15,4 @@
 
 """Module containing interface with data services on services.itanna.io"""
 
-from .base import transform, synapses, flycache 
+from .base import transform, synapses, flycache, lookup_services
