@@ -563,8 +563,11 @@ def supervoxels_to_roots(
     return roots
 
 
-def locs_to_supervoxels(locs, mip=2, coordinates="voxel", backend="spine"):
-    """Retrieve FlyWire supervoxel IDs at given location(s).
+@inject_dataset()
+def locs_to_supervoxels(
+    locs, mip=-1, coordinates="voxel", backend="auto", *, dataset=None
+):
+    """Retrieve supervoxel IDs at given location(s).
 
     Parameters
     ----------
@@ -572,16 +575,25 @@ def locs_to_supervoxels(locs, mip=2, coordinates="voxel", backend="spine"):
                     Array of x/y/z coordinates. If DataFrame must contain
                     'x', 'y', 'z' or 'fw.x', 'fw.y', 'fw.z' columns. If both
                     present, 'fw.' columns take precedence!
-    mip :           int [2-8]
+    mip :           int
                     Scale to query. Lower mip = more precise but slower;
                     higher mip = faster but less precise (small supervoxels
-                    might not show at all).
+                    might not show at all). The default is -1 which will use
+                    the highest available mip, -2 will use the second highest
+                    mip and so on. For the "cloudvolume" backend this
+                    will be mip 0 (i.e. the highest resolution). For "spine" the
+                    highest mip may be lower.
     coordinates :   "voxel" | "nm"
                     Units in which your coordinates are in. "voxel" is assumed
-                    to be 4x4x40 (x/y/z) nanometers.
-    backend :       "spine" | "cloudvolume"
-                    Which backend to use. Use "cloudvolume" only when spine
-                    doesn't work.
+                    to match the resolution shown in neuroglancer, i.e.
+                    4x4x40nm for FlyWire/FAFB.
+    backend :       "auto" | "spine" | "cloudvolume"
+                    Which backend to use. If "auto", will use "spine" if available
+                    then "cloudvolume".
+    dataset :       "public" | "production" | "sandbox", optional
+                    Against which FlyWire dataset to query. If ``None`` will fall
+                    back to the default dataset (see
+                    :func:`~fafbseg.flywire.set_default_dataset`).
 
     Returns
     -------
@@ -604,7 +616,7 @@ def locs_to_supervoxels(locs, mip=2, coordinates="voxel", backend="spine"):
     array([79801454835332154, 79731086091150780], dtype=uint64)
 
     """
-    if backend not in ("spine", "cloudvolume"):
+    if backend not in ("auto", "spine", "cloudvolume"):
         raise ValueError(f"`backend` not recognised: {backend}")
 
     if isinstance(locs, pd.DataFrame):
@@ -622,19 +634,57 @@ def locs_to_supervoxels(locs, mip=2, coordinates="voxel", backend="spine"):
         if not np.issubdtype(locs.dtype, np.number):
             locs = locs.astype(np.float64)
 
+    # The FlyWire datasets, have a different name on spine
+    if dataset in ("public", "production", "sandbox"):
+        segmentation = "flywire_190410"
+    else:
+        segmentation = dataset
+
+    # Check if we can use spine (or any of the other available services)
+    if backend == "auto":
+        if any(segmentation in tr.info for tr in spine.lookup_services):
+            backend = "spine"
+        else:
+            backend = "cloudvolume"
+
     if backend == "spine":
-        return spine.transform.get_segids(
-            locs, segmentation="flywire_190410", coordinates=coordinates, mip=mip
+        # Find a service that can handle this dataset
+        service = [tr for tr in spine.lookup_services if segmentation in tr.info]
+        if not service:
+            raise ValueError(
+                f"No transform service found for dataset {segmentation}. Try using backend='cloudvolume'."
+            )
+        service = service[0]
+
+        return service.get_segids(
+            locs, segmentation=segmentation, coordinates=coordinates, mip=mip
         )
     else:
-        vol = copy.deepcopy(get_cloudvolume("production"))
-        # Lower mips appear to cause inconsistencies despite spine also only
-        # using mip 2 (IIRC?)
-        # vol.mip = 2
+        vol = copy.deepcopy(get_cloudvolume(dataset))
+
+        # For cloudvolume the highest available mip is always 0
+        if mip < 0:
+            mip = abs(mip) - 1
+        vol.mip = mip
         pl = GSPointLoader(vol)
 
+        # The GSPointLoader expects points in nanometers
         if coordinates in ("voxel", "voxels"):
-            locs = locs * [4, 4, 40]
+            # For FlyWire we know the resolution
+            if dataset in ("public", "production", "sandbox", "flat_783", "flat_630"):
+                res = [4, 4, 40]
+            # For other datasets we have to look it up
+            else:
+                cc = get_cave_client(dataset=dataset)
+                res = np.array(
+                    [
+                        cc.info.get_datastack_info()["viewer_resolution_x"],
+                        cc.info.get_datastack_info()["viewer_resolution_y"],
+                        cc.info.get_datastack_info()["viewer_resolution_z"],
+                    ]
+                )
+
+            locs = locs * res
 
         pl.add_points(locs)
 
