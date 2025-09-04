@@ -783,7 +783,7 @@ def neuron_to_segments(x, short=False, coordinates="voxel", *, dataset=None):
 
 @inject_dataset(disallowed=["flat_630", "flat_571"])
 def locs_to_segments(
-    locs, timestamp=None, backend="spine", coordinates="voxel", *, dataset=None
+    locs, timestamp=None, backend="auto", coordinates="voxel", *, dataset=None
 ):
     """Retrieve FlyWire segment (i.e. root) IDs at given location(s).
 
@@ -799,12 +799,13 @@ def locs_to_segments(
                     "mat" will use the timestamp of the most recent
                     materalization. You can also use e.g. "mat_438" to get the
                     root ID at a specific materialization.
-    backend :       "spine" | "cloudvolume"
-                    Which backend to use. Use "cloudvolume" only when spine
-                    doesn't work because it's terribly slow.
+    backend :       "auto" | "spine" | "cloudvolume"
+                    Which backend to use. If "auto", will use "spine" if available
+                    then "cloudvolume".
     coordinates :   "voxel" | "nm"
                     Units in which your coordinates are in. "voxel" is assumed
-                    to be 4x4x40 (x/y/z) nanometers.
+                    to match the resolution shown in neuroglancer, i.e.
+                    4x4x40nm for FlyWire/FAFB.
     dataset :       "public" | "production" | "sandbox" | "flat_630", optional
                     Against which FlyWire dataset to query. If ``None`` will fall
                     back to the default dataset (see
@@ -830,7 +831,7 @@ def locs_to_segments(
     array([720575940631693610, 720575940631693610])
 
     """
-    svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend)
+    svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend, dataset=dataset)
 
     return supervoxels_to_roots(svoxels, timestamp=timestamp, dataset=dataset)
 
