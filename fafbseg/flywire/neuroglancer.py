@@ -55,7 +55,7 @@ def encode_url(
     invis_segs=None,
     scene=None,
     base_neuroglancer=False,
-    layout='3d',
+    layout="3d",
     open=False,
     to_clipboard=False,
     shorten=True,
@@ -142,7 +142,7 @@ def encode_url(
         raise TypeError(f"`scene` must be string, dict or None, got {type(scene)}")
 
     # Set layout
-    scene['layout'] = layout
+    scene["layout"] = layout
 
     # Now we can start adding stuff to our scene
     # First, add segments (if applicable)
@@ -181,8 +181,10 @@ def encode_url(
             seg_groups = dict(zip(segments, seg_groups))
 
             if len(seg_groups) != len(segments):
-                print('Some segments seem to belong to multiple groups. This is '
-                      'currently not supported.')
+                print(
+                    "Some segments seem to belong to multiple groups. This is "
+                    "currently not supported."
+                )
 
         # Check if dict is {id: group} or {group: [id1, id2, id3]} and force
         # into the latter
@@ -315,11 +317,18 @@ def encode_url(
         else:
             scene = add_skeleton_layer(skeletons, scene)
 
-    return scene_to_url(scene, base_neuroglancer=base_neuroglancer,
-                        shorten=shorten, open=open, to_clipboard=to_clipboard)
+    return scene_to_url(
+        scene,
+        base_neuroglancer=base_neuroglancer,
+        shorten=shorten,
+        open=open,
+        to_clipboard=to_clipboard,
+    )
 
 
-def scene_to_url(scene, base_neuroglancer=False, shorten=True, open=False, to_clipboard=False):
+def scene_to_url(
+    scene, base_neuroglancer=False, shorten=True, open=False, to_clipboard=False
+):
     """Turn neuroglancer scene into a URL.
 
     Parameter
@@ -577,19 +586,17 @@ def decode_url(url, format="json"):
 
         scene = r.json()
     # Parse URLs with a link to Google buckets
-    elif '!gs://' in url:
-        path = urlparse(url).fragment.replace('!gs://', '')
-        r = requests.get(f'https://storage.googleapis.com/{path}')
+    elif "!gs://" in url:
+        path = urlparse(url).fragment.replace("!gs://", "")
+        r = requests.get(f"https://storage.googleapis.com/{path}")
         r.raise_for_status()
 
         scene = r.json()
     # Parse Neuroglancer URL
-    elif '!middleauth+' in url:
+    elif "!middleauth+" in url:
         token = utils.get_chunkedgraph_secret()
-        path = urlparse(url).fragment.replace('!middleauth+', '')
-        r = requests.get(
-            path, headers={"Authorization": f"Bearer {token}"}
-        )
+        path = urlparse(url).fragment.replace("!middleauth+", "")
+        r = requests.get(path, headers={"Authorization": f"Bearer {token}"})
         r.raise_for_status()
 
         scene = r.json()
@@ -600,7 +607,7 @@ def decode_url(url, format="json"):
         scene = url
 
     # "full" is for legacy purposes
-    if format in ('json', 'full'):
+    if format in ("json", "full"):
         return scene
     elif format == "brief":
         seg_layers = [
@@ -634,7 +641,9 @@ def decode_url(url, format="json"):
         ]
         for layer in seg_layers:
             for s in layer.get("segments", []):
-                segs.append([int(s.replace('!', '')), layer["name"], not s.startswith('!')])
+                segs.append(
+                    [int(s.replace("!", "")), layer["name"], not s.startswith("!")]
+                )
 
         return pd.DataFrame(segs, columns=["segment", "layer", "visible"])
     else:
@@ -779,7 +788,7 @@ def _find_flywire_layer(layers, raise_not_found=True):
         if layer["type"] == "segmentation_with_graph":
             return i
         if layer["type"] == "segmentation":
-            if (layer["name"] in poss_names or 'flywire' in layer['name']):
+            if layer["name"] in poss_names or "flywire" in layer["name"]:
                 return i
     if raise_not_found:
         raise ValueError("Unable to identify flywire segmentation among layers")
@@ -795,7 +804,7 @@ def construct_scene(
     neuropils=False,
     hemibrain_neuropils=False,
     base_neuroglancer=False,
-    layout='xy-3d',
+    layout="xy-3d",
     dataset="production",
 ):
     """Construct a basic neuroglancer scene.
@@ -842,7 +851,7 @@ def construct_scene(
     # Get the canned scene
     scene = NGL_SCENES["MINIMAL_SCENE"]
 
-    scene['layout'] = layout
+    scene["layout"] = layout
 
     # Add image layer
     if image:

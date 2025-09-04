@@ -35,19 +35,36 @@ from .segmentation import snap_to_id, is_latest_root
 from .utils import get_cloudvolume, silence_find_mat_version, inject_dataset
 from .annotations import get_somas, parse_neuroncriteria
 
-SKELETON_BASE_URL = {'630': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_630",
-                     '783': "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_783",}
-SKELETON_INFO = {"@type": "neuroglancer_skeletons", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0], "vertex_attributes": [{"id": "radius", "data_type": "float32", "num_components": 1}]}
+SKELETON_BASE_URL = {
+    "630": "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_630",
+    "783": "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/flywire_skeletons_783",
+}
+SKELETON_INFO = {
+    "@type": "neuroglancer_skeletons",
+    "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+    "vertex_attributes": [
+        {"id": "radius", "data_type": "float32", "num_components": 1}
+    ],
+}
 
 
-__all__ = ['skeletonize_neuron', 'skeletonize_neuron_parallel', 'get_skeletons']
+__all__ = ["skeletonize_neuron", "skeletonize_neuron_parallel", "get_skeletons"]
 
 
 @parse_neuroncriteria()
 @inject_dataset()
-def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
-                       assert_id_match=False, threads=2, save_to=None,
-                       progress=True, *, dataset=None, **kwargs):
+def skeletonize_neuron(
+    x,
+    shave_skeleton=True,
+    remove_soma_hairball=False,
+    assert_id_match=False,
+    threads=2,
+    save_to=None,
+    progress=True,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Skeletonize FlyWire neuron.
 
     Note that this is optimized to be primarily fast which comes at the cost
@@ -122,9 +139,9 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     if save_to is not None:
         save_to = pathlib.Path(save_to)
         if not save_to.exists():
-            raise ValueError('`save_to` must be an existing directory')
+            raise ValueError("`save_to` must be an existing directory")
         if not save_to.is_dir():
-            raise ValueError('`save_to` must be a directory')
+            raise ValueError("`save_to` must be a directory")
 
     # TODOs:
     # - drop single disconnected nodes?
@@ -132,9 +149,10 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     # - fix 0-radius nodes: these will be on 99.9% of the cases be leaf nodes
     # - shave only high-strahler twigs
 
-    if int(sk.__version__.split('.')[0]) < 1:
-        raise ImportError('Please update skeletor to version >= 1.0.0: '
-                          'pip3 install skeletor -U')
+    if int(sk.__version__.split(".")[0]) < 1:
+        raise ImportError(
+            "Please update skeletor to version >= 1.0.0: pip3 install skeletor -U"
+        )
 
     if navis.utils.is_iterable(x):
         # Make sure these are root IDs
@@ -145,21 +163,28 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # For neurons without a soma we'll be doing more sophisticated checks
         # when we skeletonize
         with silence_find_mat_version():
-            kwargs['_nuclei'] = get_somas(x, raise_missing=False, dataset=dataset, materialization='latest')
+            kwargs["_nuclei"] = get_somas(
+                x, raise_missing=False, dataset=dataset, materialization="latest"
+            )
 
-        return navis.NeuronList([skeletonize_neuron(n,
-                                                    progress=False,
-                                                    shave_skeleton=shave_skeleton,
-                                                    remove_soma_hairball=remove_soma_hairball,
-                                                    assert_id_match=assert_id_match,
-                                                    dataset=dataset,
-                                                    threads=threads,
-                                                    save_to=save_to,
-                                                    **kwargs)
-                                 for n in navis.config.tqdm(x,
-                                                            desc='Skeletonizing',
-                                                            disable=not progress,
-                                                            leave=False)])
+        return navis.NeuronList(
+            [
+                skeletonize_neuron(
+                    n,
+                    progress=False,
+                    shave_skeleton=shave_skeleton,
+                    remove_soma_hairball=remove_soma_hairball,
+                    assert_id_match=assert_id_match,
+                    dataset=dataset,
+                    threads=threads,
+                    save_to=save_to,
+                    **kwargs,
+                )
+                for n in navis.config.tqdm(
+                    x, desc="Skeletonizing", disable=not progress, leave=False
+                )
+            ]
+        )
 
     if not navis.utils.is_mesh(x):
         vol = get_cloudvolume(dataset)
@@ -171,10 +196,10 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         try:
             old_parallel = vol.parallel
             vol.parallel = threads
-            if vol.path.startswith('graphene'):
+            if vol.path.startswith("graphene"):
                 mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
-            elif vol.path.startswith('precomputed'):
-                lod_ = kwargs.pop('lod', 2)
+            elif vol.path.startswith("precomputed"):
+                lod_ = kwargs.pop("lod", 2)
                 while lod_ >= 0:
                     try:
                         mesh = vol.mesh.get(id, lod=lod_)[id]
@@ -184,18 +209,19 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
                     except BaseException:
                         raise
                 if lod_ < 0:
-                    raise ValueError(f'Root ID {id} does not appear to exist '
-                                     f'in "{dataset}"')
+                    raise ValueError(
+                        f'Root ID {id} does not appear to exist in "{dataset}"'
+                    )
         except BaseException:
             raise
         finally:
             vol.parallel = old_parallel
     else:
         mesh = x
-        id = getattr(mesh, 'segid', getattr(mesh, 'id', 0))
+        id = getattr(mesh, "segid", getattr(mesh, "id", 0))
 
     # Pop nuclei from kwargs before passing them to skeletonization
-    nuc = kwargs.pop('_nuclei', pd.DataFrame())
+    nuc = kwargs.pop("_nuclei", pd.DataFrame())
 
     mesh = sk.utilities.make_trimesh(mesh, validate=True)
 
@@ -203,9 +229,7 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
     # Drop disconnected pieces that represent less than 0.05% of total size
     to_remove = int(0.0001 * mesh.vertices.shape[0])
     to_remove = None if to_remove == 0 else to_remove
-    mesh = sk.pre.fix_mesh(mesh,
-                           inplace=True,
-                           remove_disconnected=to_remove)
+    mesh = sk.pre.fix_mesh(mesh, inplace=True, remove_disconnected=to_remove)
 
     # Skeletonize
     defaults = dict(waves=1, step_size=1)
@@ -214,16 +238,16 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
     # Skeletor indexes node IDs at zero but to avoid potential issues we want
     # node IDs to start at 1
-    s.swc['node_id'] += 1
-    s.swc.loc[s.swc.parent_id >= 0, 'parent_id'] += 1
+    s.swc["node_id"] += 1
+    s.swc.loc[s.swc.parent_id >= 0, "parent_id"] += 1
 
     # We will also round the radius and make it an integer to save some
     # memory. We could do the same with x/y/z coordinates but that could
     # potentially move nodes outside the mesh
-    s.swc['radius'] = s.swc.radius.round().astype(int)
+    s.swc["radius"] = s.swc.radius.round().astype(int)
 
     # Turn into a neuron
-    tn = navis.TreeNeuron(s.swc, units='1 nm', id=id, soma=None)
+    tn = navis.TreeNeuron(s.swc, units="1 nm", id=id, soma=None)
 
     if shave_skeleton:
         # Get child -> parent distances
@@ -233,10 +257,14 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # Now start shaving
         while True:
             # Find segments containing leafs
-            leaf_segs = [seg for seg in tn.small_segments if seg[0] in tn.leafs.node_id.values]
+            leaf_segs = [
+                seg for seg in tn.small_segments if seg[0] in tn.leafs.node_id.values
+            ]
             # Among the leaf segments find those that are either only 1 node
             # or have any of the suspicously long (> micron) connections
-            to_remove = [seg for seg in leaf_segs if any(np.isin(seg, long)) or (len(seg) <= 2)]
+            to_remove = [
+                seg for seg in leaf_segs if any(np.isin(seg, long)) or (len(seg) <= 2)
+            ]
 
             # Make sure we don't drop very long segments
             to_remove = [seg for seg in to_remove if len(seg) < 10]
@@ -251,12 +279,12 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
             navis.subset_neuron(tn, ~tn.nodes.node_id.isin(to_remove), inplace=True)
 
         # Get branch points
-        bp = tn.nodes.loc[tn.nodes.type == 'branch', 'node_id'].values
+        bp = tn.nodes.loc[tn.nodes.type == "branch", "node_id"].values
 
         # Get single-node twigs
-        is_end = tn.nodes.type == 'end'
+        is_end = tn.nodes.type == "end"
         parent_is_bp = tn.nodes.parent_id.isin(bp)
-        twigs = tn.nodes.loc[is_end & parent_is_bp, 'node_id'].values
+        twigs = tn.nodes.loc[is_end & parent_is_bp, "node_id"].values
 
         # Drop terminal twigs
         tn._nodes = tn.nodes.loc[~tn.nodes.node_id.isin(twigs)].copy()
@@ -272,15 +300,15 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         # See if we can find a soma based on the nucleus segmentation
         try:
             with silence_find_mat_version():
-                soma = get_somas(id,
-                                 raise_missing=False,
-                                 dataset=dataset,
-                                 materialization='auto')
+                soma = get_somas(
+                    id, raise_missing=False, dataset=dataset, materialization="auto"
+                )
         except KeyboardInterrupt:
             raise
         except requests.HTTPError:
-            navis.config.logger.warning(f'Failed to fetch soma for {id} from '
-                                        'nucleus table.')
+            navis.config.logger.warning(
+                f"Failed to fetch soma for {id} from nucleus table."
+            )
             soma = pd.DataFrame()
 
     if not soma.empty:
@@ -296,8 +324,8 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
         tn.reroot(tn.soma, inplace=True)
 
         if remove_soma_hairball:
-            soma = tn.nodes.set_index('node_id').loc[soma]
-            soma_loc = soma[['x', 'y', 'z']].values
+            soma = tn.nodes.set_index("node_id").loc[soma]
+            soma_loc = soma[["x", "y", "z"]].values
 
             # Find all nodes within 2x the soma radius
             tree = navis.neuron2KDTree(tn)
@@ -320,19 +348,21 @@ def skeletonize_neuron(x, shave_skeleton=True, remove_soma_hairball=False,
 
     if assert_id_match:
         if id == 0:
-            raise ValueError('Segmentation ID must not be 0')
-        new_locs = snap_to_id(tn.nodes[['x', 'y', 'z']].values,
-                              id=id,
-                              snap_zero=False,
-                              dataset=dataset,
-                              search_radius=160,
-                              coordinates='nm',
-                              max_workers=4,
-                              verbose=True)
-        tn.nodes[['x', 'y', 'z']] = new_locs
+            raise ValueError("Segmentation ID must not be 0")
+        new_locs = snap_to_id(
+            tn.nodes[["x", "y", "z"]].values,
+            id=id,
+            snap_zero=False,
+            dataset=dataset,
+            search_radius=160,
+            coordinates="nm",
+            max_workers=4,
+            verbose=True,
+        )
+        tn.nodes[["x", "y", "z"]] = new_locs
 
     if save_to is not None:
-        navis.write_swc(tn, save_to / f'{tn.id}.swc')
+        navis.write_swc(tn, save_to / f"{tn.id}.swc")
 
     return tn
 
@@ -357,7 +387,7 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
     assert isinstance(s, navis.TreeNeuron)
 
     # For each segment get the radius
-    radii = s.nodes.set_index('node_id').radius.to_dict()
+    radii = s.nodes.set_index("node_id").radius.to_dict()
     candidates = []
     for seg in s.segments:
         rad = np.array([radii[s] for s in seg])
@@ -368,7 +398,7 @@ def detect_soma_skeleton(s, min_rad=800, N=3):
             continue
 
         # Find stretches of consectutive above-threshold radii
-        for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0]+1):
+        for stretch in np.split(is_big, np.where(np.diff(is_big) != 1)[0] + 1):
             if len(stretch) < N:
                 continue
             candidates += [seg[i] for i in stretch]
@@ -396,13 +426,13 @@ def __detect_soma_mesh(mesh):
     """
     # Build a KD tree
     from scipy.spatial import cKDTree
+
     tree = cKDTree(mesh.vertices)
 
     # Find out how many neighbours each vertex has within a 4 micron radius
-    n_neighbors = tree.query_ball_point(mesh.vertices,
-                                        r=4000,
-                                        return_length=True,
-                                        n_jobs=3)
+    n_neighbors = tree.query_ball_point(
+        mesh.vertices, r=4000, return_length=True, n_jobs=3
+    )
 
     # Seed for soma is the node with the most neighbors
     seed = np.argmax(n_neighbors)
@@ -413,10 +443,10 @@ def __detect_soma_mesh(mesh):
         return np.array([])
 
     # Find nodes within 10 microns of the seed
-    dist, ix = tree.query(mesh.vertices[[seed]],
-                          k=mesh.vertices.shape[0],
-                          distance_upper_bound=10000)
-    soma_verts = ix[dist < float('inf')]
+    dist, ix = tree.query(
+        mesh.vertices[[seed]], k=mesh.vertices.shape[0], distance_upper_bound=10000
+    )
+    soma_verts = ix[dist < float("inf")]
 
     """
     TODO:
@@ -453,20 +483,22 @@ def divide_local_neighbourhood(mesh, radius):
     e1 = mesh.vertices[edges[:, 0]]
     e2 = mesh.vertices[edges[:, 1]]
     dist = np.sqrt(np.sum((e1 - e2) ** 2, axis=1))
-    nx.set_edge_attributes(G, dict(zip(G.edges, dist)), name='weight')
+    nx.set_edge_attributes(G, dict(zip(G.edges, dist)), name="weight")
 
     not_seen = set(G.nodes)
     patches = []
     while not_seen:
         center = not_seen.pop()
-        sg = nx.ego_graph(G, center, distance='weight', radius=radius)
+        sg = nx.ego_graph(G, center, distance="weight", radius=radius)
         nodes = set(sg.nodes)
         patches.append(nodes)
         not_seen -= nodes
 
 
-def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, progress=True, **kwargs):
-    """Skeletonization on parallel cores.
+def skeletonize_neuron_parallel(
+    ids, n_cores=os.cpu_count() // 2, progress=True, **kwargs
+):
+    """Skeletonization in parallel on multiple cores.
 
     Parameters
     ----------
@@ -492,21 +524,24 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, progress=True,
 
     """
     if n_cores < 2 or n_cores > os.cpu_count():
-        raise ValueError('`n_cores` must be between 2 and max number of cores.')
+        raise ValueError("`n_cores` must be between 2 and max number of cores.")
 
     sig = inspect.signature(skeletonize_neuron)
     for k in kwargs:
-        if k not in sig.parameters and k not in ('lod', ):
-            raise ValueError('unexpected keyword argument for '
-                             f'`skeletonize_neuron`: {k}')
+        if k not in sig.parameters and k not in ("lod",):
+            raise ValueError(
+                f"unexpected keyword argument for `skeletonize_neuron`: {k}"
+            )
 
     # Make sure IDs are all integers
     ids = np.asarray(ids, dtype=np.int64)
 
     # Prepare the calls and parameters
-    kwargs['progress'] = False
-    kwargs['threads'] = 1
-    kwargs['_nuclei'] = get_somas(ids, raise_missing=False, dataset=kwargs.get('dataset', 'production'))
+    kwargs["progress"] = False
+    kwargs["threads"] = 1
+    kwargs["_nuclei"] = get_somas(
+        ids, raise_missing=False, dataset=kwargs.get("dataset", "production")
+    )
     funcs = [skeletonize_neuron] * len(ids)
     parsed_kwargs = [kwargs] * len(ids)
     combinations = list(zip(funcs, [[i] for i in ids], parsed_kwargs))
@@ -514,19 +549,22 @@ def skeletonize_neuron_parallel(ids, n_cores=os.cpu_count() // 2, progress=True,
     # Run the actual skeletonization
     with mp.Pool(n_cores) as pool:
         chunksize = 1
-        res = list(navis.config.tqdm(pool.imap(_worker_wrapper,
-                                               combinations,
-                                               chunksize=chunksize),
-                                     total=len(combinations),
-                                     desc='Skeletonizing',
-                                     disable=not progress,
-                                     leave=True))
+        res = list(
+            navis.config.tqdm(
+                pool.imap(_worker_wrapper, combinations, chunksize=chunksize),
+                total=len(combinations),
+                desc="Skeletonizing",
+                disable=not progress,
+                leave=True,
+            )
+        )
 
     # Check if any skeletonizations failed
-    failed = np.array([r for r in res if not isinstance(r, navis.TreeNeuron)]).astype(str)
+    failed = np.array([r for r in res if not isinstance(r, navis.TreeNeuron)]).astype(
+        str
+    )
     if any(failed):
-        print(f'{len(failed)} neurons failed to skeletonize: '
-              f'{". ".join(failed)}')
+        print(f"{len(failed)} neurons failed to skeletonize: {'. '.join(failed)}")
 
     return navis.NeuronList([r for r in res if isinstance(r, navis.TreeNeuron)])
 
@@ -550,8 +588,9 @@ def _worker_wrapper(x):
 
 
 @parse_neuroncriteria()
-def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
-                  dataset=783, progress=True):
+def get_skeletons(
+    root_id, threads=2, omit_failures=None, max_threads=6, dataset=783, progress=True
+):
     """Fetch precomputed skeletons.
 
     Currently this only works for proofread (!) 630 and 783 root IDs
@@ -594,7 +633,7 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     --------
     >>> from fafbseg import flywire
     >>> n = flywire.get_skeletons(720575940603231916)
-    >>> n                                                   #doctest: +SKIP
+    >>> n                                                        #doctest: +SKIP
     type                                             navis.TreeNeuron
     name                                                     skeleton
     id                                             720575940603231916
@@ -672,12 +711,14 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
     root_id = np.int64(root_id)
 
     try:
-        tn = navis.read_precomputed(f'{SKELETON_BASE_URL[str(dataset)]}/{root_id}',
-                                    datatype='skeleton',
-                                    info=SKELETON_INFO)
+        tn = navis.read_precomputed(
+            f"{SKELETON_BASE_URL[str(dataset)]}/{root_id}",
+            datatype="skeleton",
+            info=SKELETON_INFO,
+        )
         # Force integer (navis.read_precomputed will turn Id into string)
         tn.id = root_id
-        tn.units = '1nm'
+        tn.units = "1nm"
         return tn
     except BaseException:
         if omit_failures is None:
@@ -685,4 +726,4 @@ def get_skeletons(root_id, threads=2, omit_failures=None, max_threads=6,
         elif omit_failures:
             return navis.NeuronList([])
         else:
-            return navis.TreeNeuron(None, id=root_id, units='1 nm')
+            return navis.TreeNeuron(None, id=root_id, units="1 nm")

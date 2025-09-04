@@ -893,9 +893,7 @@ def get_adjacency(
             this.attrs = {}
 
             if not this.empty:
-                syn.append(this.drop(
-                    sv_cols, axis=1, errors="ignore"
-                ))
+                syn.append(this.drop(sv_cols, axis=1, errors="ignore"))
 
     # Drop empty tables but make sure to keep at least one if all are empty
     if not all([t.empty for t in syn]):
@@ -964,7 +962,9 @@ def get_adjacency(
             cn = syn.groupby(["pre", "post"], as_index=False).size()
     else:
         cn = syn
-    cn.columns = ["source", "target", "weight"] + (["neuropil"] if 'neuropil' in cn.columns else [])
+    cn.columns = ["source", "target", "weight"] + (
+        ["neuropil"] if "neuropil" in cn.columns else []
+    )
 
     # Pivot
     if square:
@@ -1528,7 +1528,7 @@ def _check_ids(ids, materialization, dataset="production"):
         not_latest = ids[~_is_latest_roots(ids)]
         if any(not_latest):
             print(
-                f'Root ID(s) {", ".join(not_latest.astype(str))} are outdated '
+                f"Root ID(s) {', '.join(not_latest.astype(str))} are outdated "
                 "and live connectivity might be inaccurrate."
             )
     else:
@@ -1543,7 +1543,7 @@ def _check_ids(ids, materialization, dataset="production"):
             print(
                 "Some root IDs are more recent than materialization "
                 f"{materialization} and synapse/connectivity data will be "
-                f'inaccurate:\n\n {", ".join(too_recent.astype(str))}\n\n'
+                f"inaccurate:\n\n {', '.join(too_recent.astype(str))}\n\n"
                 "You can either try mapping these IDs back in time or use"
                 '`materialization="auto"`.'
             )
@@ -1560,7 +1560,7 @@ def _check_ids(ids, materialization, dataset="production"):
                 print(
                     "Some root IDs were already outdated at materialization "
                     f"{materialization} and synapse/connectivity data will be "
-                    f'inaccurrate:\n\n {", ".join(not_latest.astype(str))}\n\n'
+                    f"inaccurrate:\n\n {', '.join(not_latest.astype(str))}\n\n"
                     "Try updating the root IDs using `flywire.update_ids` "
                     "or `flywire.supervoxels_to_roots` if you have supervoxel IDs,"
                     " or pick a different materialization version."

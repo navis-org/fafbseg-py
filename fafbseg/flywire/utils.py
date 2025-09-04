@@ -37,27 +37,39 @@ import pandas as pd
 from .. import utils
 
 
-__all__ = ['set_chunkedgraph_secret', 'get_chunkedgraph_secret',
-           'get_cave_client', 'get_neuropil_volumes', 'get_lr_position',
-           'set_default_dataset', 'find_mat_version']
+__all__ = [
+    "set_chunkedgraph_secret",
+    "get_chunkedgraph_secret",
+    "get_cave_client",
+    "get_neuropil_volumes",
+    "get_lr_position",
+    "set_default_dataset",
+    "find_mat_version",
+]
 
-FLYWIRE_DATASETS = {'production': 'fly_v31',
-                    'sandbox': 'fly_v26',
-                    'public': 'flywire_public'}
+FLYWIRE_DATASETS = {
+    "production": "fly_v31",
+    "sandbox": "fly_v26",
+    "public": "flywire_public",
+}
 
-FLYWIRE_URLS = {'production': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v31',
-                'sandbox': 'graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v26',
-                'public': 'graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public',
-                'flat_630': 'precomputed://gs://flywire_v141_m630',
-                'flat_571': 'precomputed://gs://flywire_v141_m526',
-                'flat_783': 'precomputed://gs://flywire_v141_m783'}
+FLYWIRE_URLS = {
+    "production": "graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v31",
+    "sandbox": "graphene://https://prod.flywire-daf.com/segmentation/1.0/fly_v26",
+    "public": "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/flywire_public",
+    "flat_630": "precomputed://gs://flywire_v141_m630",
+    "flat_571": "precomputed://gs://flywire_v141_m526",
+    "flat_783": "precomputed://gs://flywire_v141_m783",
+}
 
-CAVE_DATASETS = {'production': 'flywire_fafb_production',
-                 'flat_783': 'flywire_fafb_public',
-                 'flat_630': 'flywire_fafb_public',
-                 'flat_571': 'flywire_fafb_production',
-                 'sandbox': 'flywire_fafb_sandbox',
-                 'public': 'flywire_fafb_public'}
+CAVE_DATASETS = {
+    "production": "flywire_fafb_production",
+    "flat_783": "flywire_fafb_public",
+    "flat_630": "flywire_fafb_public",
+    "flat_571": "flywire_fafb_production",
+    "sandbox": "flywire_fafb_sandbox",
+    "public": "flywire_fafb_public",
+}
 
 SILENCE_FIND_MAT_VERSION = False
 
@@ -67,12 +79,12 @@ cave_clients = {}
 
 # Data stuff
 fp = Path(__file__).parent
-data_path = fp.parent / 'data'
+data_path = fp.parent / "data"
 area_ids = None
 vol_names = None
 
 # The default dataset
-DEFAULT_DATASET = os.environ.get('FLYWIRE_DEFAULT_DATASET', 'public')
+DEFAULT_DATASET = os.environ.get("FLYWIRE_DEFAULT_DATASET", "public")
 
 # Some useful data types
 INT_DTYPES = (np.int32, np.int64, int, np.uint32, np.uint64)
@@ -139,7 +151,7 @@ def set_default_dataset(dataset):
     """
     if dataset not in FLYWIRE_URLS and dataset not in get_cave_datastacks():
         datasets = np.unique(list(FLYWIRE_URLS) + get_cave_datastacks())
-        raise ValueError(f'`dataset` must be one of: {", ".join(datasets)}.')
+        raise ValueError(f"`dataset` must be one of: {', '.join(datasets)}.")
 
     global DEFAULT_DATASET
     DEFAULT_DATASET = dataset
@@ -152,20 +164,25 @@ def inject_dataset(allowed=None, disallowed=None):
         allowed = [allowed]
     if isinstance(disallowed, str):
         disallowed = [disallowed]
+
     def outer(func):
         @functools.wraps(func)
         def inner(*args, **kwargs):
-            if kwargs.get('dataset', None) is None:
-                kwargs['dataset'] = DEFAULT_DATASET
+            if kwargs.get("dataset", None) is None:
+                kwargs["dataset"] = DEFAULT_DATASET
 
-            ds = kwargs['dataset']
+            ds = kwargs["dataset"]
             if allowed and ds not in allowed:
-                raise ValueError(f'Dataset "{ds}" not allowed for function {func}. '
-                                 f'Accepted datasets: {allowed}')
+                raise ValueError(
+                    f'Dataset "{ds}" not allowed for function {func}. '
+                    f"Accepted datasets: {allowed}"
+                )
             if disallowed and ds in disallowed:
                 raise ValueError(f'Dataset "{ds}" not allowed for function {func}.')
             return func(*args, **kwargs)
+
         return inner
+
     return outer
 
 
@@ -212,28 +229,30 @@ def get_neuropil_volumes(neuropils):
     if navis.utils.is_iterable(neuropils):
         return [get_neuropil_volumes(n) for n in neuropils]
 
-    with ZipFile(data_path / 'JFRC2NP.surf.fw.zip', 'r') as zip:
+    with ZipFile(data_path / "JFRC2NP.surf.fw.zip", "r") as zip:
         try:
-            f = zip.read(f'{neuropils}.ply')
+            f = zip.read(f"{neuropils}.ply")
         except KeyError:
             available = []
             for file in zip.filelist:
-                fname = file.filename.split('/')[-1]
-                if not fname.endswith('.ply') or fname.startswith('.'):
+                fname = file.filename.split("/")[-1]
+                if not fname.endswith(".ply") or fname.startswith("."):
                     continue
-                available.append(fname.replace('.ply', ''))
+                available.append(fname.replace(".ply", ""))
             available = sorted(available)
 
             if neuropils:
-                raise ValueError(f'No mesh for neuropil "{neuropils}". Available '
-                                 f'neuropils: {", ".join(available)}')
+                raise ValueError(
+                    f'No mesh for neuropil "{neuropils}". Available '
+                    f"neuropils: {', '.join(available)}"
+                )
             else:
                 return np.array(available)
 
-        f = zip.read(f'{neuropils}.ply')
-        m = tm.load_mesh(BytesIO(f), file_type='ply')
+        f = zip.read(f"{neuropils}.ply")
+        m = tm.load_mesh(BytesIO(f), file_type="ply")
 
-    return navis.Volume(m, name=neuropils, units='nm')
+    return navis.Volume(m, name=neuropils, units="nm")
 
 
 def get_synapse_areas(ind):
@@ -254,11 +273,11 @@ def get_synapse_areas(ind):
     global area_ids, vol_names
 
     if isinstance(area_ids, type(None)):
-        area_ids = np.load(data_path / 'global_area_ids.npy.zip')['global_area_ids']
-        with open(data_path / 'volume_name_dict.json') as f:
+        area_ids = np.load(data_path / "global_area_ids.npy.zip")["global_area_ids"]
+        with open(data_path / "volume_name_dict.json") as f:
             vol_names = json.load(f)
             vol_names = {int(k): v for k, v in vol_names.items()}
-            vol_names[-1] = 'NA'
+            vol_names[-1] = "NA"
 
     return np.array([vol_names[i] for i in area_ids[ind]])
 
@@ -272,12 +291,13 @@ def get_cave_datastacks():
 @functools.lru_cache
 def get_datastack_segmentation_source(datastack):
     """Get segmentation source for given CAVE datastack."""
-    return CAVEclient().info.get_datastack_info(datastack_name=datastack)['segmentation_source']
+    return CAVEclient().info.get_datastack_info(datastack_name=datastack)[
+        "segmentation_source"
+    ]
 
 
 @inject_dataset()
-def get_cave_client(*, dataset=None, token=None, check_stale=True,
-                    force_new=False):
+def get_cave_client(*, dataset=None, token=None, check_stale=True, force_new=False):
     """Get CAVE client.
 
     Currently, the CAVE client pulls the available materialization versions
@@ -324,7 +344,7 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
         # Check if any of the versions are expired
         now = pytz.UTC.localize(dt.datetime.utcnow())
         for v in mds:
-            if v['expires_on'] <= now:
+            if v["expires_on"] <= now:
                 force_new = True
                 break
 
@@ -332,7 +352,7 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
         # from Friday will persist into middle of the next week - i.e. not
         # expire on Monday. Therefore, on Mondays only, we will also
         # force an update if the client is older than 30 minutes
-        if now.weekday() in (0, ) and not force_new:
+        if now.weekday() in (0,) and not force_new:
             if (dt.datetime.now() - client._created_at) > dt.timedelta(minutes=30):
                 force_new = True
 
@@ -358,7 +378,7 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True,
     return client
 
 
-def get_chunkedgraph_secret(domain=('global.daf-apis.com', 'prod.flywire-daf.com')):
+def get_chunkedgraph_secret(domain=("global.daf-apis.com", "prod.flywire-daf.com")):
     """Get local FlyWire chunkedgraph/CAVE secret.
 
     Parameters
@@ -376,14 +396,16 @@ def get_chunkedgraph_secret(domain=('global.daf-apis.com', 'prod.flywire-daf.com
 
     token = None
     for dom in domain:
-        token = cv.secrets.cave_credentials(dom).get('token', None)
+        token = cv.secrets.cave_credentials(dom).get("token", None)
         if token:
             break
 
     if not token:
-        raise ValueError(f'No chunkedgraph/CAVE secret for domain(s) {domain} '
-                        'found. Please see fafbseg.flywire.set_chunkedgraph_secret '
-                        'to store your API token.')
+        raise ValueError(
+            f"No chunkedgraph/CAVE secret for domain(s) {domain} "
+            "found. Please see fafbseg.flywire.set_chunkedgraph_secret "
+            "to store your API token."
+        )
     return token
 
 
@@ -440,7 +462,7 @@ def parse_root_ids(x):
     try:
         return np.asarray(ids, dtype=np.int64)
     except ValueError:
-        raise ValueError(f'Unable to convert given root IDs to integer: {ids}')
+        raise ValueError(f"Unable to convert given root IDs to integer: {ids}")
     except BaseException:
         raise
 
@@ -448,7 +470,7 @@ def parse_root_ids(x):
 def get_cloudvolume(dataset, **kwargs):
     """Get CloudVolume for given dataset."""
     # If this already is a CloudVolume just pass it through
-    if "CloudVolume" in  str(type(dataset)):
+    if "CloudVolume" in str(type(dataset)):
         return dataset
     else:
         if not isinstance(dataset, str):
@@ -467,17 +489,19 @@ def get_cloudvolume(dataset, **kwargs):
         # Add this volume if it does not already exists
         if dataset not in cloud_volumes:
             # Set and update defaults from kwargs
-            defaults = dict(mip=0,
-                            fill_missing=True,
-                            cache=False,
-                            use_https=True,  # this way google secret is not needed
-                            progress=False)
+            defaults = dict(
+                mip=0,
+                fill_missing=True,
+                cache=False,
+                use_https=True,  # this way google secret is not needed
+                progress=False,
+            )
             defaults.update(kwargs)
 
             # Check if chunkedgraph secret exists
             # This probably needs yanking!
-            #secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
-            #if not os.path.isfile(secret):
+            # secret = os.path.expanduser('~/.cloudvolume/secrets/chunkedgraph-secret.json')
+            # if not os.path.isfile(secret):
             #    # If not secrets but environment variable use this
             #    if 'CHUNKEDGRAPH_SECRET' in os.environ and 'secrets' not in defaults:
             #        defaults['secrets'] = {'token': os.environ['CHUNKEDGRAPH_SECRET']}
@@ -488,7 +512,7 @@ def get_cloudvolume(dataset, **kwargs):
         return cloud_volumes[dataset]
 
 
-def retry(func, retries=5, cooldown=2):
+def retry(func, retries=2, cooldown=2):
     """Retry function on HTTPError.
 
     This also suppresses UserWarnings (because we typically use this for stuff
@@ -503,6 +527,7 @@ def retry(func, retries=5, cooldown=2):
                 will delay by an additional `retry`.
 
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         for i in range(1, retries + 1):
@@ -518,6 +543,7 @@ def retry(func, retries=5, cooldown=2):
                 except BaseException:
                     raise
                 time.sleep(cooldown * i)
+
     return wrapper
 
 
@@ -539,8 +565,9 @@ def parse_bounds(x):
     x = np.asarray(x)
 
     if not x.ndim == 2 or x.shape not in [(3, 2), (2, 3)]:
-        raise ValueError('Must provide bounding box as (3, 2) or (2, 3) array, '
-                         f'got {x.shape}')
+        raise ValueError(
+            f"Must provide bounding box as (3, 2) or (2, 3) array, got {x.shape}"
+        )
 
     if x.shape == (2, 3):
         x = x.T
@@ -548,7 +575,7 @@ def parse_bounds(x):
     return np.vstack((x.min(axis=1), x.max(axis=1))).T
 
 
-def get_lr_position(x, coordinates='nm'):
+def get_lr_position(x, coordinates="nm"):
     """Find out if given xyz positions are on the fly's left or right.
 
     This works by:
@@ -584,29 +611,35 @@ def get_lr_position(x, coordinates='nm'):
     try:
         import flybrains
     except ImportError:
-        raise ImportError('This function requires `flybrains` to be '
-                          'installed:\n pip3 install flybrains')
+        raise ImportError(
+            "This function requires `flybrains` to be "
+            "installed:\n pip3 install flybrains"
+        )
 
     # The FlyWire mirror registration is only part of the most recent version
     try:
-        _ = navis.transforms.registry.find_template('FLYWIRE')
+        _ = navis.transforms.registry.find_template("FLYWIRE")
     except ValueError:
-        raise ImportError('Looks like your version of `flybrains` is outdated. '
-                          'Please update:\n pip3 install flybrains -U')
+        raise ImportError(
+            "Looks like your version of `flybrains` is outdated. "
+            "Please update:\n pip3 install flybrains -U"
+        )
 
-    navis.utils.eval_param(coordinates, name='coordinates',
-                           allowed_values=('nm', 'nanometer', 'nanometers',
-                                           'voxel', 'voxels'))
+    navis.utils.eval_param(
+        coordinates,
+        name="coordinates",
+        allowed_values=("nm", "nanometer", "nanometers", "voxel", "voxels"),
+    )
 
     if navis.utils.is_iterable(x):
         x = np.asarray(x)
     elif isinstance(x, pd.DataFrame):
         if x.shape[1] == 3:
             x = x.values
-        elif all([c in x.columns for c in ['x', 'y', 'z']]):
-            x = x[['x', 'y', 'z']].values
+        elif all([c in x.columns for c in ["x", "y", "z"]]):
+            x = x[["x", "y", "z"]].values
     elif isinstance(x, navis.TreeNeuron):
-        x = x.nodes[['x', 'y', 'z']].values
+        x = x.nodes[["x", "y", "z"]].values
     elif isinstance(x, navis.MeshNeuron):
         x = x.vertices
     elif isinstance(x, navis.Dotprops):
@@ -615,24 +648,22 @@ def get_lr_position(x, coordinates='nm'):
     if not isinstance(x, np.ndarray):
         raise TypeError(f'Expected numpy array or neuron, got "{type(x)}"')
     elif x.ndim != 2 or x.shape[1] != 3:
-        raise TypeError(f'Expected (N, 3) numpy array, got {x.shape}')
+        raise TypeError(f"Expected (N, 3) numpy array, got {x.shape}")
 
     # Scale if required
-    if coordinates in ('voxel', 'voxels'):
+    if coordinates in ("voxel", "voxels"):
         x = x * [4, 4, 40]
 
     # Mirror -> this should be using the landmark-based transform in flybrains
-    m = navis.mirror_brain(x, template='FLYWIRE')
+    m = navis.mirror_brain(x, template="FLYWIRE")
 
     return (m[:, 0] - x[:, 0]) / 2
 
 
 @inject_dataset()
-def find_mat_version(ids,
-                     verbose=True,
-                     allow_multiple=False,
-                     raise_missing=True,
-                     dataset=None):
+def find_mat_version(
+    ids, verbose=True, allow_multiple=False, raise_missing=True, dataset=None
+):
     """Find a materialization version (or live) for given IDs.
 
     Parameters
@@ -667,9 +698,9 @@ def find_mat_version(ids,
 
     """
     # If dataset is the flat segmentation we can take a shortcut
-    if dataset == 'flat_630':
+    if dataset == "flat_630":
         return 630
-    elif dataset == 'flat_571':
+    elif dataset == "flat_571":
         return 571
 
     ids = np.asarray(ids)
@@ -680,7 +711,9 @@ def find_mat_version(ids,
     latest_valid = np.zeros(len(ids), dtype=np.int32)
 
     # Go over each version (start with the most recent)
-    for i, version in enumerate(sorted(client.materialize.get_versions(), reverse=True)):
+    for i, version in enumerate(
+        sorted(client.materialize.get_versions(), reverse=True)
+    ):
         ts_m = client.materialize.get_timestamp(version)
 
         # Check which root IDs were valid at the time
@@ -691,28 +724,32 @@ def find_mat_version(ids,
 
         if all(is_valid):
             if verbose and not SILENCE_FIND_MAT_VERSION:
-                print(f'Using materialization version {version}.')
+                print(f"Using materialization version {version}.")
             return version
 
     # If no single materialized version can be found, see if we can get
     # by with the live materialization
     is_latest = client.chunkedgraph.is_latest_roots(ids, timestamp=None)
     latest_valid[(latest_valid == 0) & is_latest] = -1  # track "live" as -1
-    if all(is_latest) and dataset != 'public':  # public does not have live
+    if all(is_latest) and dataset != "public":  # public does not have live
         if verbose and not SILENCE_FIND_MAT_VERSION:
-            print('Using live materialization')
-        return 'live'
+            print("Using live materialization")
+        return "live"
 
     if allow_multiple and any(latest_valid != 0):
         if all(latest_valid != 0):
             if verbose and not SILENCE_FIND_MAT_VERSION:
-                print(f"Found root IDs spread across {len(np.unique(latest_valid))} "
-                      "materialization versions.")
+                print(
+                    f"Found root IDs spread across {len(np.unique(latest_valid))} "
+                    "materialization versions."
+                )
             return latest_valid
-        
-        msg = (f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
-               f"materialization versions but {(latest_valid == 0).sum()} IDs "
-               "do not exist in any of the materialized tables.")
+
+        msg = (
+            f"Found root IDs spread across {len(np.unique(latest_valid)) - 1} "
+            f"materialization versions but {(latest_valid == 0).sum()} IDs "
+            "do not exist in any of the materialized tables."
+        )
 
         if not raise_missing:
             if verbose and not SILENCE_FIND_MAT_VERSION:
@@ -721,16 +758,18 @@ def find_mat_version(ids,
         else:
             raise MaterializationMatchError(msg)
 
-    if dataset not in ('public, '):
+    if dataset not in ("public, "):
         raise MaterializationMatchError(
-            'Given root IDs do not (co-)exist in any of the available '
-            'materialization versions (including live). Try updating '
-            'root IDs and rerun your query.')
+            "Given root IDs do not (co-)exist in any of the available "
+            "materialization versions (including live). Try updating "
+            "root IDs and rerun your query."
+        )
     else:
         raise MaterializationMatchError(
-            'Given root IDs do not (co-)exist in any of the available '
-            'public materialization versions. Please make sure that '
-            'the root IDs do exist and rerun your query.')
+            "Given root IDs do not (co-)exist in any of the available "
+            "public materialization versions. Please make sure that "
+            "the root IDs do exist and rerun your query."
+        )
 
 
 def _is_valid_version(ids, version, dataset):
@@ -768,6 +807,7 @@ def package_timestamp(timestamp, name="timestamp"):
 
 class silence_find_mat_version:
     """Context manager to silence `find_mat_version` output."""
+
     def __enter__(self):
         global SILENCE_FIND_MAT_VERSION
         SILENCE_FIND_MAT_VERSION = True

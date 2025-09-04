@@ -13,24 +13,24 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import pymaid
+import copy
+import time
 import navis
+import pymaid
 import requests
 import textwrap
-import time
-import copy
 
-import cloudvolume as cv
-import datetime as dt
 import numpy as np
 import pandas as pd
+import datetime as dt
 import networkx as nx
+import cloudvolume as cv
 
-from concurrent import futures
-from diskcache import Cache
-from requests_futures.sessions import FuturesSession
 from scipy import ndimage
 from tqdm.auto import tqdm
+from diskcache import Cache
+from concurrent import futures
+from requests_futures.sessions import FuturesSession
 
 from .. import spine
 from .. import xform
@@ -216,7 +216,7 @@ def get_leaderboard(days=7, by_day=False, progress=True, max_threads=4):
 
     session = requests.Session()
     if not by_day:
-        url = f"https://pyrdev.eyewire.org/flywire-leaderboard?days={days-1}"
+        url = f"https://pyrdev.eyewire.org/flywire-leaderboard?days={days - 1}"
         resp = session.get(url, params=None)
         resp.raise_for_status()
         return pd.DataFrame.from_records(resp.json()["entries"]).set_index("name")
@@ -831,7 +831,9 @@ def locs_to_segments(
     array([720575940631693610, 720575940631693610])
 
     """
-    svoxels = locs_to_supervoxels(locs, coordinates=coordinates, backend=backend, dataset=dataset)
+    svoxels = locs_to_supervoxels(
+        locs, coordinates=coordinates, backend=backend, dataset=dataset
+    )
 
     return supervoxels_to_roots(svoxels, timestamp=timestamp, dataset=dataset)
 
@@ -999,11 +1001,11 @@ def is_latest_root(id, timestamp=None, progress=True, *, dataset=None, **kwargs)
     session = requests.Session()
     token = get_chunkedgraph_secret()
     session.headers["Authorization"] = f"Bearer {token}"
-    url = (
-        client.chunkedgraph._endpoints["is_latest_roots"].format_map(client.chunkedgraph.default_url_mapping)
+    url = client.chunkedgraph._endpoints["is_latest_roots"].format_map(
+        client.chunkedgraph.default_url_mapping
     )
 
-    if isinstance(timestamp, str) and timestamp.startswith("mat"):        
+    if isinstance(timestamp, str) and timestamp.startswith("mat"):
         if timestamp == "mat" or timestamp == "mat_latest":
             timestamp = client.materialize.get_timestamp()
         else:
@@ -1198,7 +1200,7 @@ def update_ids(
             id = id["root"].values
         else:
             raise ValueError(
-                "DataFrame must contain either `root_id` or " "`root` column."
+                "DataFrame must contain either `root_id` or `root` column."
             )
     elif isinstance(id, pd.Series):
         id = id.values
@@ -1230,7 +1232,7 @@ def update_ids(
                     timestamp=timestamp,
                     stop_layer=stop_layer,
                 )
-                for x, il, in navis.config.tqdm(
+                for x, il in navis.config.tqdm(
                     zip(id, is_latest),
                     desc="Updating",
                     leave=False,
@@ -1270,7 +1272,7 @@ def update_ids(
 
     if id == 0 or pd.isnull(id):
         navis.config.logger.warning(
-            f'Unable to update ID "{id}" - returning ' "unchanged."
+            f'Unable to update ID "{id}" - returning unchanged.'
         )
         return id
 
@@ -1322,7 +1324,7 @@ def update_ids(
                     supervoxels = np.int64(supervoxels)
                 except ValueError:
                     raise ValueError(
-                        f'"{supervoxels}" does not look like a valid ' "supervoxel ID."
+                        f'"{supervoxels}" does not look like a valid supervoxel ID.'
                     )
                 get_root_id = retry(client.chunkedgraph.get_root_id)
                 new_id = get_root_id(supervoxels_to_roots)
@@ -1625,10 +1627,10 @@ def is_valid_root(x, raise_exc=False, *, dataset=None):
             is_valid = vol.get_chunk_layer(x) == vol.info["graph"]["n_layers"]
         except ValueError:
             is_valid = False
-        
+
         if raise_exc and not is_valid:
             raise ValueError(f"{x} is not a valid root ID")
-        
+
         return is_valid
 
     if navis.utils.is_iterable(x):
@@ -1678,10 +1680,10 @@ def is_valid_supervoxel(x, raise_exc=False, *, dataset=None):
             is_valid = vol.get_chunk_layer(x) == 1
         except ValueError:
             is_valid = False
-        
+
         if raise_exc and not is_valid:
             raise ValueError(f"{x} is not a valid supervoxel ID")
-        
+
         return is_valid
 
     if navis.utils.is_iterable(x):
@@ -1762,10 +1764,16 @@ def get_voxels(
     client = get_cave_client()
 
     if use_mirror:
+        if isinstance(use_mirror, str):
+            url = use_mirror
+        else:
+            url = (
+                "precomputed://https://seungdata.princeton.edu/"
+                "sseung-archive/fafbv14-ws/"
+                "ws_190410_FAFB_v02_ws_size_threshold_200"
+            )
         sv_vol = cv.CloudVolume(
-            "precomputed://https://seungdata.princeton.edu/"
-            "sseung-archive/fafbv14-ws/"
-            "ws_190410_FAFB_v02_ws_size_threshold_200",
+            url,
             use_https=True,
             progress=False,
             fill_missing=True,
@@ -1819,7 +1827,7 @@ def get_voxels(
             is_root = np.isin(ct, sv)
             this_vxl = np.dstack(np.where(is_root))[0]
             this_vxl = this_vxl + ch
-            voxels.append(this_vxl)
+            voxels.append(this_vxl.astype("uint16"))
 
             if sv_map or thin:
                 svids.append(ct[is_root])

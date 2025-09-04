@@ -35,8 +35,13 @@ from functools import partial
 from .annotations import parse_neuroncriteria
 from .utils import get_cloudvolume, get_cave_client, retry, inject_dataset
 
-__all__ = ['get_l2_skeleton', 'get_l2_dotprops', 'get_l2_graph', 'get_l2_info',
-           'find_anchor_loc']
+__all__ = [
+    "get_l2_skeleton",
+    "get_l2_dotprops",
+    "get_l2_graph",
+    "get_l2_info",
+    "find_anchor_loc",
+]
 
 
 @parse_neuroncriteria()
@@ -179,16 +184,15 @@ def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     client = get_cave_client(dataset=dataset)
 
     # Get the L2 representative coordinates, vectors and (if required) volume
-    attributes = ['rep_coord_nm', 'pca', 'size_nm3']
+    attributes = ["rep_coord_nm", "pca", "size_nm3"]
 
     l2_info = {}
-    with navis.config.tqdm(desc='Fetching L2 info',
-                           disable=not progress,
-                           total=len(l2_ids),
-                           leave=False) as pbar:
+    with navis.config.tqdm(
+        desc="Fetching L2 info", disable=not progress, total=len(l2_ids), leave=False
+    ) as pbar:
         func = retry(client.l2cache.get_l2data)
         for chunk_ix in np.arange(0, len(l2_ids), chunk_size):
-            chunk = l2_ids[chunk_ix: chunk_ix + chunk_size]
+            chunk = l2_ids[chunk_ix : chunk_ix + chunk_size]
             l2_info.update(func(chunk.tolist(), attributes=attributes))
             pbar.update(len(chunk))
 
@@ -197,36 +201,34 @@ def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
     l2_info = {k: v for k, v in l2_info.items() if v}
 
     if l2_info:
-        pts = np.vstack([i['rep_coord_nm'] for i in l2_info.values()])
-        vec = np.vstack([i.get('pca', [[None, None, None]])[0] for i in l2_info.values()])
-        sizes = np.array([i['size_nm3'] for i in l2_info.values()])
+        pts = np.vstack([i["rep_coord_nm"] for i in l2_info.values()])
+        vec = np.vstack(
+            [i.get("pca", [[None, None, None]])[0] for i in l2_info.values()]
+        )
+        sizes = np.array([i["size_nm3"] for i in l2_info.values()])
 
         info_df = pd.DataFrame()
-        info_df['id'] = list(l2_info.keys())
-        info_df['x'] = (pts[:, 0] / 4).astype(int)
-        info_df['y'] = (pts[:, 1] / 4).astype(int)
-        info_df['z'] = (pts[:, 2] / 40).astype(int)
-        info_df['vec_x'] = vec[:, 0]
-        info_df['vec_y'] = vec[:, 1]
-        info_df['vec_z'] = vec[:, 2]
-        info_df['size_nm3'] = sizes
+        info_df["id"] = list(l2_info.keys())
+        info_df["x"] = (pts[:, 0] / 4).astype(int)
+        info_df["y"] = (pts[:, 1] / 4).astype(int)
+        info_df["z"] = (pts[:, 2] / 40).astype(int)
+        info_df["vec_x"] = vec[:, 0]
+        info_df["vec_y"] = vec[:, 1]
+        info_df["vec_z"] = vec[:, 2]
+        info_df["size_nm3"] = sizes
     else:
-        info_df = pd.DataFrame([], columns=['id',
-                                            'x', 'y', 'z',
-                                            'vec_x', 'vec_y', 'vec_z',
-                                            'size_nm3'])
+        info_df = pd.DataFrame(
+            [], columns=["id", "x", "y", "z", "vec_x", "vec_y", "vec_z", "size_nm3"]
+        )
 
     return info_df
 
 
 @parse_neuroncriteria()
 @inject_dataset()
-def find_anchor_loc(root_ids,
-                    validate=False,
-                    max_threads=4,
-                    progress=True,
-                    *,
-                    dataset=None):
+def find_anchor_loc(
+    root_ids, validate=False, max_threads=4, progress=True, *, dataset=None
+):
     """Find a representative coordinate.
 
     This works by querying the L2 cache and using the representative coordinate
@@ -258,16 +260,20 @@ def find_anchor_loc(root_ids,
         root_ids_unique = np.unique(root_ids)
         info = []
         with ThreadPoolExecutor(max_workers=max_threads) as pool:
-            func = partial(find_anchor_loc,
-                           dataset=dataset,
-                           validate=False,
-                           progress=False)
+            func = partial(
+                find_anchor_loc, dataset=dataset, validate=False, progress=False
+            )
             futures = pool.map(func, root_ids_unique)
-            info = [f for f in navis.config.tqdm(futures,
-                                                 desc='Fetching locations',
-                                                 total=len(root_ids_unique),
-                                                 disable=not progress or len(root_ids_unique) == 1,
-                                                 leave=False)]
+            info = [
+                f
+                for f in navis.config.tqdm(
+                    futures,
+                    desc="Fetching locations",
+                    total=len(root_ids_unique),
+                    disable=not progress or len(root_ids_unique) == 1,
+                    leave=False,
+                )
+            ]
         df = pd.concat(info, axis=0, ignore_index=True)
 
         # Validate
@@ -275,9 +281,10 @@ def find_anchor_loc(root_ids,
             has_loc = ~df.x.isnull()
             if any(has_loc):
                 from .segmentation import locs_to_supervoxels
-                sv = locs_to_supervoxels(df.loc[has_loc, ['x', 'y', 'z']].values)
-                df['supervoxel'] = None
-                df.loc[has_loc, 'supervoxel'] = sv.astype(str)  # do not change str
+
+                sv = locs_to_supervoxels(df.loc[has_loc, ["x", "y", "z"]].values)
+                df["supervoxel"] = None
+                df.loc[has_loc, "supervoxel"] = sv.astype(str)  # do not change str
 
                 # Get/Initialize the CAVE client
                 client = get_cave_client(dataset=dataset)
@@ -285,18 +292,20 @@ def find_anchor_loc(root_ids,
                 # Get root timestamps
                 ts = client.chunkedgraph.get_root_timestamps(df.root_id.values.tolist())
 
-                df['valid'] = False
-                for i in navis.config.trange(len(df),
-                                             desc='Validating',
-                                             disable=not progress or len(df) == 1,
-                                             leave=False):
+                df["valid"] = False
+                for i in navis.config.trange(
+                    len(df),
+                    desc="Validating",
+                    disable=not progress or len(df) == 1,
+                    leave=False,
+                ):
                     if df.supervoxel.values[i]:
                         sv = np.int64(df.supervoxel.values[i])
                         r = client.chunkedgraph.get_root_id(sv, timestamp=ts[i])
-                        df.loc[i, 'valid'] = r == df.root_id.values[i]
+                        df.loc[i, "valid"] = r == df.root_id.values[i]
 
         # Make sure the original order is retained
-        df = df.set_index('root_id').loc[root_ids].reset_index(drop=False)
+        df = df.set_index("root_id").loc[root_ids].reset_index(drop=False)
 
         return df
 
@@ -314,24 +323,24 @@ def find_anchor_loc(root_ids,
     if info.empty:
         loc = [None, None, None]
     else:
-        info.sort_values('size_nm3', ascending=False, inplace=True)
-        loc = info[['x', 'y', 'z']].values[0].tolist()
+        info.sort_values("size_nm3", ascending=False, inplace=True)
+        loc = info[["x", "y", "z"]].values[0].tolist()
 
-    df = pd.DataFrame([[root_ids] + loc],
-                      columns=['root_id', 'x', 'y', 'z'])
+    df = pd.DataFrame([[root_ids] + loc], columns=["root_id", "x", "y", "z"])
 
     if validate:
         if not isinstance(loc[0], type(None)):
             from .segmentation import locs_to_supervoxels
+
             sv = locs_to_supervoxels([loc])[0]
-            df['supervoxel'] = sv
+            df["supervoxel"] = sv
 
             if sv:
                 ts = client.chunkedgraph.get_root_timestamps(root_ids)[0]
                 r = client.chunkedgraph.get_root_id(sv, timestamp=ts)
-                df['valid'] = r == root_ids
+                df["valid"] = r == root_ids
             else:
-                df['valid'] = False
+                df["valid"] = False
 
     return df
 
@@ -365,9 +374,12 @@ def get_l2_graph(root_ids, progress=True, *, dataset=None):
     """
     if navis.utils.is_iterable(root_ids):
         graphs = []
-        for id in navis.config.tqdm(root_ids, desc='Fetching',
-                                    disable=not progress or len(root_ids) == 1,
-                                    leave=False):
+        for id in navis.config.tqdm(
+            root_ids,
+            desc="Fetching",
+            disable=not progress or len(root_ids) == 1,
+            leave=False,
+        ):
             n = get_l2_graph(id, dataset=dataset)
             graphs.append(n)
         return graphs
@@ -398,9 +410,18 @@ def get_l2_graph(root_ids, progress=True, *, dataset=None):
 
 @parse_neuroncriteria()
 @inject_dataset()
-def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
-                omit_failures=None, progress=True, max_threads=4,
-                *, dataset=None, **kwargs):
+def get_l2_skeleton(
+    root_id,
+    refine=True,
+    drop_missing=True,
+    l2_node_ids=False,
+    omit_failures=None,
+    progress=True,
+    max_threads=4,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Generate skeleton from L2 graph.
 
     Parameters
@@ -465,28 +486,46 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
     """
     if omit_failures not in (None, True, False):
-        raise ValueError('`omit_failures` must be either None, True or False. '
-                         f'Got "{omit_failures}".')
+        raise ValueError(
+            "`omit_failures` must be either None, True or False. "
+            f'Got "{omit_failures}".'
+        )
 
     if navis.utils.is_iterable(root_id):
         root_id = np.asarray(root_id, dtype=np.int64)
 
-        get_l2_skels = partial(get_l2_skeleton, refine=refine, drop_missing=drop_missing,
-                               omit_failures=omit_failures, dataset=dataset, **kwargs)
+        get_l2_skels = partial(
+            get_l2_skeleton,
+            refine=refine,
+            drop_missing=drop_missing,
+            omit_failures=omit_failures,
+            dataset=dataset,
+            **kwargs,
+        )
         if (max_threads > 1) and (len(root_id) > 1):
             with ThreadPoolExecutor(max_workers=max_threads) as pool:
                 futures = pool.map(get_l2_skels, root_id)
-                nl = [f for f in navis.config.tqdm(futures,
-                                                   desc='Fetching L2 skeletons',
-                                                   total=len(root_id),
-                                                   disable=not progress or len(root_id) == 1,
-                                                   leave=False)]
+                nl = [
+                    f
+                    for f in navis.config.tqdm(
+                        futures,
+                        desc="Fetching L2 skeletons",
+                        total=len(root_id),
+                        disable=not progress or len(root_id) == 1,
+                        leave=False,
+                    )
+                ]
         else:
-            nl = [get_l2_skels(r) for r in navis.config.tqdm(root_id,
-                                               desc='Fetching L2 skeletons',
-                                               total=len(root_id),
-                                               disable=not progress or len(root_id) == 1,
-                                               leave=False)]
+            nl = [
+                get_l2_skels(r)
+                for r in navis.config.tqdm(
+                    root_id,
+                    desc="Fetching L2 skeletons",
+                    total=len(root_id),
+                    disable=not progress or len(root_id) == 1,
+                    leave=False,
+                )
+            ]
 
         # Turn into neuron list
         nl = navis.NeuronList(nl)
@@ -513,8 +552,10 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
 
     # If no edges, we can't create a skeleton
     if not len(l2_eg):
-        msg = (f'Unable to create L2 skeleton: root ID {root_id} '
-               'consists of only a single L2 chunk.')
+        msg = (
+            f"Unable to create L2 skeleton: root ID {root_id} "
+            "consists of only a single L2 chunk."
+        )
         if omit_failures is None:
             raise ValueError(msg)
 
@@ -525,7 +566,7 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
             return navis.NeuronList([])
             # If no omission, return empty TreeNeuron
         else:
-            return navis.TreeNeuron(None, id=root_id, units='1 nm', **kwargs)
+            return navis.TreeNeuron(None, id=root_id, units="1 nm", **kwargs)
 
     # Drop duplicate edges
     l2_eg = np.unique(np.sort(l2_eg, axis=1), axis=0)
@@ -552,23 +593,27 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
         swc = sk.skeletonize.utils.make_swc(G, coords=coords, reindex=False)
 
     # Set radius to 0
-    swc['radius'] = 0
+    swc["radius"] = 0
 
     # Convert to Euclidian space
     # Dimension of a single chunk
     ch_dims = chunks_to_nm([1, 1, 1], vol) - chunks_to_nm([0, 0, 0], vol)
     ch_dims = np.squeeze(ch_dims)
 
-    xyz = swc[['x', 'y', 'z']].values
-    swc[['x', 'y', 'z']] = chunks_to_nm(xyz, vol) + ch_dims / 2
+    xyz = swc[["x", "y", "z"]].values
+    swc[["x", "y", "z"]] = chunks_to_nm(xyz, vol) + ch_dims / 2
 
     if refine:
         # Get the L2 representative coordinates
         get_l2data = retry(client.l2cache.get_l2data)
-        l2_info = get_l2data(l2_ids.tolist(), attributes=['rep_coord_nm', 'max_dt_nm'])
+        l2_info = get_l2data(l2_ids.tolist(), attributes=["rep_coord_nm", "max_dt_nm"])
         # Missing L2 chunks will be {'id': {}}
-        new_co = {l2dict[np.int64(k)]: v['rep_coord_nm'] for k, v in l2_info.items() if v}
-        new_r = {l2dict[np.int64(k)]: v.get('max_dt_nm', 0) for k, v in l2_info.items() if v}
+        new_co = {
+            l2dict[np.int64(k)]: v["rep_coord_nm"] for k, v in l2_info.items() if v
+        }
+        new_r = {
+            l2dict[np.int64(k)]: v.get("max_dt_nm", 0) for k, v in l2_info.items() if v
+        }
 
         # Map refined coordinates onto the SWC
         has_new = swc.node_id.isin(new_co)
@@ -576,52 +621,71 @@ def get_l2_skeleton(root_id, refine=True, drop_missing=True, l2_node_ids=False,
         # Only apply if we actually have new coordinates - otherwise there
         # the datatype is changed to object for some reason...
         if any(has_new):
-            swc.loc[has_new, 'x'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][0])
-            swc.loc[has_new, 'y'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][1])
-            swc.loc[has_new, 'z'] = swc.loc[has_new, 'node_id'].map(lambda x: new_co[x][2])
+            swc.loc[has_new, "x"] = swc.loc[has_new, "node_id"].map(
+                lambda x: new_co[x][0]
+            )
+            swc.loc[has_new, "y"] = swc.loc[has_new, "node_id"].map(
+                lambda x: new_co[x][1]
+            )
+            swc.loc[has_new, "z"] = swc.loc[has_new, "node_id"].map(
+                lambda x: new_co[x][2]
+            )
 
-        swc['radius'] = swc.node_id.map(new_r)
+        swc["radius"] = swc.node_id.map(new_r)
 
         # Turn into a proper neuron
-        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
+        tn = navis.TreeNeuron(swc, id=root_id, units="1 nm", **kwargs)
 
         # Drop nodes that are still at their unrefined chunk position
         if drop_missing:
             frac_refined = has_new.sum() / len(has_new)
             if not any(has_new):
-                msg = (f'Unable to refine: no L2 info for root ID {root_id} '
-                       'available. Set `drop_missing=False` to use unrefined '
-                       'positions.')
+                msg = (
+                    f"Unable to refine: no L2 info for root ID {root_id} "
+                    "available. Set `drop_missing=False` to use unrefined "
+                    "positions."
+                )
                 if omit_failures is None:
                     raise ValueError(msg)
                 elif omit_failures:
                     return navis.NeuronList([])
                     # If no omission, return empty TreeNeuron
                 else:
-                    return navis.TreeNeuron(None, id=root_id, units='1 nm', **kwargs)
-            elif frac_refined < .5:
-                msg = (f'Root ID {root_id} has only {frac_refined:.1%} of their '
-                       'L2 IDs in the cache. Set `drop_missing=False` to use '
-                       'unrefined positions.')
+                    return navis.TreeNeuron(None, id=root_id, units="1 nm", **kwargs)
+            elif frac_refined < 0.5:
+                msg = (
+                    f"Root ID {root_id} has only {frac_refined:.1%} of their "
+                    "L2 IDs in the cache. Set `drop_missing=False` to use "
+                    "unrefined positions."
+                )
                 navis.config.logger.warning(msg)
 
-            tn = navis.remove_nodes(tn, swc.loc[~has_new, 'node_id'].values)
+            tn = navis.remove_nodes(tn, swc.loc[~has_new, "node_id"].values)
             tn._l2_chunks_missing = (~has_new).sum()
     else:
-        tn = navis.TreeNeuron(swc, id=root_id, units='1 nm', **kwargs)
+        tn = navis.TreeNeuron(swc, id=root_id, units="1 nm", **kwargs)
 
     if l2_node_ids:
         ixdict = {ii: l2 for ii, l2 in enumerate(l2_ids)}
-        tn.nodes['node_id'] = tn.nodes.node_id.map(ixdict)
-        tn.nodes['parent_id'] = tn.nodes.parent_id.map(lambda x: ixdict.get(x, -1))
+        tn.nodes["node_id"] = tn.nodes.node_id.map(ixdict)
+        tn.nodes["parent_id"] = tn.nodes.parent_id.map(lambda x: ixdict.get(x, -1))
 
     return tn
 
 
 @parse_neuroncriteria()
 @inject_dataset()
-def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
-                progress=True, max_threads=10, *, dataset=None, **kwargs):
+def get_l2_dotprops(
+    root_ids,
+    min_size=None,
+    sample=False,
+    omit_failures=None,
+    progress=True,
+    max_threads=10,
+    *,
+    dataset=None,
+    **kwargs,
+):
     """Generate dotprops from L2 chunks.
 
     L2 chunks not present in the L2 cache or without a `pca` attribute
@@ -682,16 +746,18 @@ def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
 
     """
     if omit_failures not in (None, True, False):
-        raise ValueError('`omit_failures` must be either None, True or False. '
-                         f'Got "{omit_failures}".')
+        raise ValueError(
+            "`omit_failures` must be either None, True or False. "
+            f'Got "{omit_failures}".'
+        )
 
     if not navis.utils.is_iterable(root_ids):
         root_ids = [root_ids]
 
     root_ids = np.asarray(root_ids, dtype=np.int64)
 
-    if '0' in root_ids or 0 in root_ids:
-        raise ValueError('Unable to produce dotprops for root ID 0.')
+    if "0" in root_ids or 0 in root_ids:
+        raise ValueError("Unable to produce dotprops for root ID 0.")
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset=dataset)
@@ -700,88 +766,103 @@ def get_l2_dotprops(root_ids, min_size=None, sample=False, omit_failures=None,
     with ThreadPoolExecutor(max_workers=max_threads) as pool:
         get_l2_ids = partial(retry(client.chunkedgraph.get_leaves), stop_layer=2)
         futures = pool.map(get_l2_ids, root_ids)
-        l2_ids = [f for f in navis.config.tqdm(futures,
-                                               desc='Fetching L2 IDs',
-                                               total=len(root_ids),
-                                               disable=not progress or len(root_ids) == 1,
-                                               leave=False)]
+        l2_ids = [
+            f
+            for f in navis.config.tqdm(
+                futures,
+                desc="Fetching L2 IDs",
+                total=len(root_ids),
+                disable=not progress or len(root_ids) == 1,
+                leave=False,
+            )
+        ]
 
     # Turn IDs into strings
     l2_ids = [i.astype(str) for i in l2_ids]
 
     if sample:
         if sample <= 0 or sample >= 1:
-            raise ValueError(f'`sample` must be between 0 and 1, got {sample}')
+            raise ValueError(f"`sample` must be between 0 and 1, got {sample}")
 
         for i in range(len(l2_ids)):
             # Make the sampling deterministic
             np.random.seed(1985)
-            l2_ids[i] = np.random.choice(l2_ids[i],
-                                         size=max(1, int(len(l2_ids[i]) * sample)),
-                                         replace=False)
+            l2_ids[i] = np.random.choice(
+                l2_ids[i], size=max(1, int(len(l2_ids[i]) * sample)), replace=False
+            )
 
     # Flatten into a list of all L2 IDs
     l2_ids_all = np.unique([i for l in l2_ids for i in l])
 
     # Get the L2 representative coordinates, vectors and (if required) volume
     chunk_size = 2000  # no. of L2 IDs per query (doesn't seem have big impact)
-    attributes = ['rep_coord_nm', 'pca']
+    attributes = ["rep_coord_nm", "pca"]
     if min_size:
-        attributes.append('size_nm3')
+        attributes.append("size_nm3")
 
     l2_info = {}
-    with navis.config.tqdm(desc='Fetching L2 vectors',
-                           disable=not progress,
-                           total=len(l2_ids_all),
-                           leave=False) as pbar:
+    with navis.config.tqdm(
+        desc="Fetching L2 vectors",
+        disable=not progress,
+        total=len(l2_ids_all),
+        leave=False,
+    ) as pbar:
         get_l2data = retry(client.l2cache.get_l2data)
         for chunk_ix in np.arange(0, len(l2_ids_all), chunk_size):
-            chunk = l2_ids_all[chunk_ix: chunk_ix + chunk_size]
+            chunk = l2_ids_all[chunk_ix : chunk_ix + chunk_size]
             l2_info.update(get_l2data(chunk.tolist(), attributes=attributes))
             pbar.update(len(chunk))
 
     # L2 chunks without info will show as empty dictionaries
     # Let's drop them to make our life easier (speeds up indexing too)
     # Note that small L2 chunks won't have a `pca` entry
-    l2_info = {k: v for k, v in l2_info.items() if 'pca' in v}
+    l2_info = {k: v for k, v in l2_info.items() if "pca" in v}
 
     # Generate dotprops
     dps = []
-    for root, ids in navis.config.tqdm(zip(root_ids, l2_ids),
-                                       desc='Creating dotprops',
-                                       total=len(root_ids),
-                                       disable=not progress or len(root_ids) <= 1,
-                                       leave=False):
+    for root, ids in navis.config.tqdm(
+        zip(root_ids, l2_ids),
+        desc="Creating dotprops",
+        total=len(root_ids),
+        disable=not progress or len(root_ids) <= 1,
+        leave=False,
+    ):
         # Get xyz points and the first component of the PCA as vector
         # Note that first subsetting IDs to what's actually available in
         # `l2_info` is actually slower than doing it like this
         this_info = [l2_info[i] for i in ids if i in l2_info]
 
         if not len(this_info):
-            msg = ('Unable to create L2 dotprops: none of the L2 chunks for '
-                   f'root ID {root} are present in the L2 cache.')
+            msg = (
+                "Unable to create L2 dotprops: none of the L2 chunks for "
+                f"root ID {root} are present in the L2 cache."
+            )
             if omit_failures is None:
                 raise ValueError(msg)
 
             if not omit_failures:
                 # If no omission, add empty Dotprops
-                dps.append(navis.Dotprops(None, k=None, id=root,
-                                          units='1 nm', **kwargs))
+                dps.append(
+                    navis.Dotprops(None, k=None, id=root, units="1 nm", **kwargs)
+                )
                 dps[-1]._l2_chunks_missing = len(ids)
             continue
 
-        pts = np.vstack([i['rep_coord_nm'] for i in this_info])
-        vec = np.vstack([i['pca'][0] for i in this_info])
+        pts = np.vstack([i["rep_coord_nm"] for i in this_info])
+        vec = np.vstack([i["pca"][0] for i in this_info])
 
         # Apply min size filter if requested
         if min_size:
-            sizes = np.array([i['size_nm3'] for i in this_info])
+            sizes = np.array([i["size_nm3"] for i in this_info])
             pts = pts[sizes >= min_size]
             vec = vec[sizes >= min_size]
 
         # Generate the actual dotprops
-        dps.append(navis.Dotprops(points=pts, vect=vec, id=root, k=None,
-                                  units='1 nm', **kwargs))
+        dps.append(
+            navis.Dotprops(
+                points=pts, vect=vec, id=root, k=None, units="1 nm", **kwargs
+            )
+        )
         dps[-1]._l2_chunks_missing = len(ids) - len(this_info)
 
     return navis.NeuronList(dps)
@@ -810,7 +891,7 @@ def get_l2_meshes(x, threads=10, progress=True, *, dataset=None):
     try:
         x = np.int64(x)
     except ValueError:
-        raise ValueError(f'Unable to convert root ID {x} to integer')
+        raise ValueError(f"Unable to convert root ID {x} to integer")
 
     # Get/Initialize the CAVE client
     client = get_cave_client(dataset=dataset)
@@ -823,14 +904,19 @@ def get_l2_meshes(x, threads=10, progress=True, *, dataset=None):
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
         mesh_get = retry(vol.mesh.get)
-        futures = [pool.submit(mesh_get, i,
-                               allow_missing=True,
-                               deduplicate_chunk_boundaries=False) for i in l2_ids]
+        futures = [
+            pool.submit(
+                mesh_get, i, allow_missing=True, deduplicate_chunk_boundaries=False
+            )
+            for i in l2_ids
+        ]
 
-        res = [f.result() for f in navis.config.tqdm(futures,
-                                                     disable=not progress,
-                                                     leave=False,
-                                                     desc='Loading meshes')]
+        res = [
+            f.result()
+            for f in navis.config.tqdm(
+                futures, disable=not progress, leave=False, desc="Loading meshes"
+            )
+        ]
 
     # Unpack results
     meshes = {k: v for d in res for k, v in d.items()}
@@ -841,14 +927,19 @@ def get_l2_meshes(x, threads=10, progress=True, *, dataset=None):
 def _get_l2_centroids(l2_ids, vol, threads=10, progress=True):
     """Fetch L2 meshes and compute centroid."""
     with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = [pool.submit(vol.mesh.get, i,
-                               allow_missing=True,
-                               deduplicate_chunk_boundaries=False) for i in l2_ids]
+        futures = [
+            pool.submit(
+                vol.mesh.get, i, allow_missing=True, deduplicate_chunk_boundaries=False
+            )
+            for i in l2_ids
+        ]
 
-        res = [f.result() for f in navis.config.tqdm(futures,
-                                                     disable=not progress,
-                                                     leave=False,
-                                                     desc='Loading meshes')]
+        res = [
+            f.result()
+            for f in navis.config.tqdm(
+                futures, disable=not progress, leave=False, desc="Loading meshes"
+            )
+        ]
 
     # Unpack results
     meshes = {k: v for d in res for k, v in d.items()}

@@ -30,11 +30,18 @@ except ImportError:
 except BaseException:
     raise
 
-__all__ = ['merge_flywire_neuron']
+__all__ = ["merge_flywire_neuron"]
 
 
-def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
-                         assert_id_match=True, drop_soma_hairball=True, **kwargs):
+def merge_flywire_neuron(
+    id,
+    target_instance,
+    tag,
+    flywire_dataset="production",
+    assert_id_match=True,
+    drop_soma_hairball=True,
+    **kwargs,
+):
     """Merge FlyWire neuron into FAFB CATMAID.
 
     This function (1) fetches a mesh from FlyWire, (2) turns it into a skeleton,
@@ -83,7 +90,7 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
 
     """
     if not sk:
-        raise ImportError('Must install skeletor: pip3 install skeletor')
+        raise ImportError("Must install skeletor: pip3 install skeletor")
 
     vol = get_cloudvolume(flywire_dataset)
 
@@ -94,18 +101,20 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     mesh = vol.mesh.get(id, deduplicate_chunk_boundaries=False)[id]
 
     # Convert to neuron
-    n_fw = skeletonize_neuron(mesh,
-                              remove_soma_hairball=drop_soma_hairball,
-                              dataset=flywire_dataset,
-                              assert_id_match=assert_id_match)
+    n_fw = skeletonize_neuron(
+        mesh,
+        remove_soma_hairball=drop_soma_hairball,
+        dataset=flywire_dataset,
+        assert_id_match=assert_id_match,
+    )
 
     # Confirm
-    viewer = navis.Viewer(title='Confirm skeletonization')
+    viewer = navis.Viewer(title="Confirm skeletonization")
     # Make sure viewer is actually visible and cleared
     viewer.show()
     viewer.clear()
     # Add skeleton
-    viewer.add(n_fw, color='r')
+    viewer.add(n_fw, color="r")
 
     msg = """
     Please carefully inspect the skeletonization of the FlyWire neuron.
@@ -113,21 +122,27 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
     """
 
     # Add mesh last - otherwise it might mask out other objects despite alpha
-    viewer.add(navis.MeshNeuron(mesh), color='w', alpha=.2)
+    viewer.add(navis.MeshNeuron(mesh), color="w", alpha=0.2)
 
     try:
         _ = input(msg)
     except KeyboardInterrupt:
-        raise KeyboardInterrupt('Merge process aborted by user.')
+        raise KeyboardInterrupt("Merge process aborted by user.")
     except BaseException:
         raise
     finally:
         viewer.close()
 
     # Xform to FAFB
-    n_fafb = xform.flywire_to_fafb14(n_fw, on_fail='raise', coordinates='nm', inplace=False)
-    mesh_fafb = xform.flywire_to_fafb14(tm.Trimesh(mesh.vertices, mesh.faces),
-                                        on_fail='raise', coordinates='nm', inplace=False)
+    n_fafb = xform.flywire_to_fafb14(
+        n_fw, on_fail="raise", coordinates="nm", inplace=False
+    )
+    mesh_fafb = xform.flywire_to_fafb14(
+        tm.Trimesh(mesh.vertices, mesh.faces),
+        on_fail="raise",
+        coordinates="nm",
+        inplace=False,
+    )
 
     # Heal neuron
     try:
@@ -136,5 +151,6 @@ def merge_flywire_neuron(id, target_instance, tag, flywire_dataset='production',
         n_fafb = navis.heal_fragmented_neuron(n_fafb)
 
     # Merge neuron
-    return merge_into_catmaid(n_fafb, target_instance=target_instance, tag=tag,
-                              mesh=mesh_fafb, **kwargs)
+    return merge_into_catmaid(
+        n_fafb, target_instance=target_instance, tag=tag, mesh=mesh_fafb, **kwargs
+    )
