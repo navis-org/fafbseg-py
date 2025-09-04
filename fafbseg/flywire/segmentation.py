@@ -457,7 +457,7 @@ def supervoxels_to_roots(
     x,
     timestamp=None,
     batch_size=10_000,
-    stop_layer=10,
+    stop_layer=-1,
     retry=True,
     progress=True,
     *,
@@ -480,7 +480,9 @@ def supervoxels_to_roots(
                     Max number of supervoxel IDs per query. Reduce batch size if
                     you experience time outs.
     stop_layer :    int
-                    Set e.g. to ``2`` to get L2 IDs instead of root IDs.
+                    The layer at which to stop. The default (-1) will stop at the
+                    highest available layer but you can also set this to
+                    e.g. ``2`` to get L2 IDs instead of root IDs.
     retry :         bool
                     Whether to retry if a batched query fails.
     progress :      bool
@@ -510,6 +512,10 @@ def supervoxels_to_roots(
 
     # Parse the volume
     vol = get_cloudvolume(dataset)
+
+    # Parse stop layer
+    if stop_layer < 0:
+        stop_layer = vol.meta.n_layers - (stop_layer + 1)
 
     # Prepare results array
     roots = np.zeros(x.shape, dtype=np.int64)
