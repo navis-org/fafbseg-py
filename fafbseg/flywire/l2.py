@@ -288,7 +288,9 @@ def find_anchor_loc(
             if any(has_loc):
                 from .segmentation import locs_to_supervoxels
 
-                sv = locs_to_supervoxels(df.loc[has_loc, ["x", "y", "z"]].values)
+                sv = locs_to_supervoxels(
+                    df.loc[has_loc, ["x", "y", "z"]].values, dataset=dataset
+                )
                 df["supervoxel"] = None
                 df.loc[has_loc, "supervoxel"] = sv.astype(str)  # do not change str
 
@@ -324,7 +326,7 @@ def find_anchor_loc(
     l2_ids = get_l2_ids(root_ids)
 
     get_l2data = retry(get_l2_chunk_info)
-    info = get_l2data(l2_ids, progress=progress)
+    info = get_l2data(l2_ids, progress=progress, dataset=dataset)
 
     if info.empty:
         loc = [None, None, None]
@@ -338,7 +340,7 @@ def find_anchor_loc(
         if not isinstance(loc[0], type(None)):
             from .segmentation import locs_to_supervoxels
 
-            sv = locs_to_supervoxels([loc])[0]
+            sv = locs_to_supervoxels([loc], dataset=dataset)[0]
             df["supervoxel"] = sv
 
             if sv:
