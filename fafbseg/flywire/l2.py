@@ -207,11 +207,17 @@ def get_l2_chunk_info(l2_ids, progress=True, chunk_size=2000, *, dataset=None):
         )
         sizes = np.array([i["size_nm3"] for i in l2_info.values()])
 
+        res = (
+            client.info.get_datastack_info().get("viewer_resolution_x", 1),
+            client.info.get_datastack_info().get("viewer_resolution_y", 1),
+            client.info.get_datastack_info().get("viewer_resolution_z", 1),
+        )
+
         info_df = pd.DataFrame()
         info_df["id"] = list(l2_info.keys())
-        info_df["x"] = (pts[:, 0] / 4).astype(int)
-        info_df["y"] = (pts[:, 1] / 4).astype(int)
-        info_df["z"] = (pts[:, 2] / 40).astype(int)
+        info_df["x"] = (pts[:, 0] // res[0]).astype(int)
+        info_df["y"] = (pts[:, 1] // res[1]).astype(int)
+        info_df["z"] = (pts[:, 2] // res[2]).astype(int)
         info_df["vec_x"] = vec[:, 0]
         info_df["vec_y"] = vec[:, 1]
         info_df["vec_z"] = vec[:, 2]
