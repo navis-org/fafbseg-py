@@ -1629,7 +1629,7 @@ def get_hierarchical_annotations(
     if materialization in ("live", "current") and (dataset == "production"):
         if "root_live" not in table.columns:
             table["root_live"] = table["root_id"]
-            root_col = "root_live"
+        root_col = "root_live"
         to_update = ~segmentation.is_latest_root(
             table.root_live, progress=False, dataset=dataset
         )
