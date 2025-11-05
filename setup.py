@@ -31,7 +31,7 @@ setup(
     },
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
-    keywords='FAFB neuron segmentation FlyWire Google synapses connectome fly brain navis cave',
+    keywords='FAFB neuron segmentation FlyWire Google synapses connectome fly brain navis CAVE',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
 
@@ -41,13 +41,14 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
 
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
     ],
     install_requires=requirements,
     extras_require={},
-    python_requires='>=3.8',
+    python_requires='>=3.10',
     zip_safe=False,
     include_package_data=True
 )
