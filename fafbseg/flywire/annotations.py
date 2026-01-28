@@ -670,7 +670,11 @@ def get_cave_table(
             )
 
     if drop_invalid and "valid" in data.columns:
-        data = data[data.valid == "t"].copy()
+        if isinstance(data.valid.dtype, pd.BooleanDtype) or data.valid.dtype == bool:
+            data = data[data.valid].copy()
+        else:
+            data = data[(data.valid == "t")].copy()
+
         data.drop("valid", axis=1, inplace=True)
 
     # There is some weird interaction with pandas and the .attrs if the attrs contain numpy arrays
