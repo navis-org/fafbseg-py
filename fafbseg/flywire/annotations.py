@@ -1981,22 +1981,6 @@ def search_community_annotations(
     else:
         ct = ct[ct.pt_root_id.isin(x)]
 
-    if not ct.empty:
-        name_map = dict(
-            zip(
-                ct.user_id.unique(),
-                get_user_information(
-                    ct.user_id.unique(),
-                    field="name",
-                    raise_missing=False,
-                    dataset=dataset,
-                ),
-            )
-        )
-        ct.insert(
-            ct.columns.tolist().index("user_id"), "user", ct.user_id.map(name_map)
-        )
-
     return ct.reset_index(drop=True)
 
 
