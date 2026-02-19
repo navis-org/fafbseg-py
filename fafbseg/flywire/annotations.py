@@ -32,10 +32,10 @@ with warnings.catch_warnings():
     import fuzzywuzzy as fw
     import fuzzywuzzy.process
 
-from requests_futures.sessions import FuturesSession
-from typing import Optional
-from functools import lru_cache
 from pathlib import Path
+from functools import lru_cache
+from typing import Optional, Union
+from requests_futures.sessions import FuturesSession
 
 from ..utils import make_iterable, download_cache_file, CACHE_DIR
 from .utils import (
@@ -73,7 +73,10 @@ AVAILABLE_FIELDS = [
     "nerve",
     "fbbt_id",
     "status",
-] + ["type", "community_annotation"]  # these are special hard-coded cases
+] + [
+    "type",
+    "community_annotation",
+]  # these are special hard-coded cases
 
 __all__ = [
     "get_somas",
@@ -565,7 +568,7 @@ def get_cave_table(
     table_name: str,
     materialization="latest",
     split_positions: bool = False,
-    fill_user_info: bool = True,
+    fill_user_info: Union[bool, str] = "try",
     drop_invalid: bool = True,
     *,
     dataset: Optional[str] = None,
@@ -585,11 +588,17 @@ def get_cave_table(
                         this function will search all of them and concatenate
                         the results (no deduplication).
                         Set to ``False`` to fetch the non-materialized version.
-    fill_user_info :    bool | full
-                        Whether to fill in user information for the table. Only
-                        relevant if table has a `user_id` column. If True,
-                        will add a `user_name` column. If "full", will add
-                        also add a `user_pi` column.
+    fill_user_info :    "try" (default) | bool | "full"
+                        Whether to fill-in user information for the table:
+                         - "try" (default) will add a column with user names;
+                           if the querying user doesn't have the right permission to
+                           see that information it will silently fail and leave the
+                           column empty
+                         - True will try do the same as "try" but will raise an error if
+                           permissions are missing
+                         - "full" will do the same as True but also add a `user_pi`
+                           column with the principal investigator for that user
+                        Ignored if table has no `user_id` column!
     split_positions :   bool
                         Whether to split x/y/z positions into separate columns.
     drop_invalid :      bool
@@ -609,9 +618,9 @@ def get_cave_table(
 
     """
     if isinstance(materialization, (np.ndarray, tuple, list)):
-        assert len(materialization) > 0, (
-            "If you provide a container of materialization versions it must not be empty."
-        )
+        assert (
+            len(materialization) > 0
+        ), "If you provide a container of materialization versions it must not be empty."
         return pd.concat(
             [
                 get_cave_table(
@@ -657,9 +666,20 @@ def get_cave_table(
         )
 
     if fill_user_info and "user_id" in data.columns:
-        user_info = get_user_information(
-            data.user_id.unique(), dataset=dataset, raise_missing=False
-        )
+        try:
+            user_info = get_user_information(
+                data.user_id.unique(), dataset=dataset, raise_missing=False
+            )
+        except Exception as e:
+            # If this is an HTTPError: 403 FORBIDDEN error
+            if (
+                isinstance(e, requests.HTTPError)
+                and e.response.status_code == 403
+                and fill_user_info == "try"
+            ):
+                user_info = {}
+            else:
+                raise
         user_info = {r["id"]: r for r in user_info if "id" in r}
         data["user_name"] = data.user_id.map(
             lambda x: user_info.get(x, {}).get("name", None)
