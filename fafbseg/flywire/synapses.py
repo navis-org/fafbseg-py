@@ -45,6 +45,19 @@ __all__ = [
     "get_synapse_counts",
 ]
 
+_FLYWIRE_DATASETS = (
+    "production",
+    "public",
+    "sandbox",
+    "flat_783",
+    "flat_630",
+    "flat_571",
+    "flywire_fafb_production",
+    "flywire_fafb_public",
+    "flywire_fafb_sandbox",
+
+)
+
 
 @parse_neuroncriteria()
 @inject_dataset(disallowed=["flat_630", "flat_571"])
@@ -397,7 +410,9 @@ def get_synapses(
     dataset :       "public" | "production" | "sandbox", optional
                     Against which FlyWire dataset to query. If ``None`` will fall
                     back to the default dataset (see
-                    :func:`~fafbseg.flywire.set_default_dataset`).
+                    :func:`~fafbseg.flywire.set_default_dataset`). When querying
+                    a non-FlyWire dataset, `neuropils`, `min_score`, `transmitters`,
+                    and `filtered` are quietly ignored!
 
     Returns
     -------
@@ -445,6 +460,14 @@ def get_synapses(
     4             4  346320  154520  151720          142  720575940635161060  pre       30
 
     """
+    # If the user is not requesting any of the FlyWire datasets, we have to
+    # quietly fall back to a vanilla query
+    if dataset not in _FLYWIRE_DATASETS:
+        neuropils = False
+        min_score = None
+        filtered = False
+        transmitters = False
+
     if not pre and not post:
         raise ValueError("`pre` and `post` must not both be False")
 
@@ -488,11 +511,12 @@ def get_synapses(
     columns = [
         "pre_pt_root_id",
         "post_pt_root_id",
-        "cleft_score",
         "pre_pt_position",
         "post_pt_position",
         "id",
     ]
+    if min_score or filtered:
+        columns.append("cleft_score")
     sv_cols = ["pre_pt_supervoxel_id", "post_pt_supervoxel_id"]
 
     if transmitters:
@@ -744,7 +768,9 @@ def get_adjacency(
     dataset :       "public" | "production" | "sandbox", optional
                     Against which FlyWire dataset to query. If ``None`` will fall
                     back to the default dataset (see
-                    :func:`~fafbseg.flywire.set_default_dataset`).
+                    :func:`~fafbseg.flywire.set_default_dataset`). When querying
+                    a non-FlyWire dataset, `neuropils`, `min_score` and `filtered`
+                    are quietly ignored!
 
     Returns
     -------
@@ -773,6 +799,13 @@ def get_adjacency(
     720575940631406673                   5
 
     """
+    # If the user is not requesting any of the FlyWire datasets, we have to
+    # quietly fall back to a vanilla query
+    if dataset not in _FLYWIRE_DATASETS:
+        neuropils = False
+        min_score = None
+        filtered = False
+
     # This avoids some issues with asking "if neuropils"
     if isinstance(neuropils, np.ndarray):
         neuropils = neuropils.tolist()
@@ -815,9 +848,11 @@ def get_adjacency(
     else:
         _check_ids(both, materialization=materialization, dataset=dataset)
 
-    columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"] + (
+    columns = ["pre_pt_root_id", "post_pt_root_id", "id"] + (
         ["neuropil"] if neuropils else []
     )
+    if min_score or filtered:
+        columns.append("cleft_score")
     sv_cols = ["pre_pt_supervoxel_id", "post_pt_supervoxel_id"]
 
     if materialization == "live" and filtered:
@@ -1071,7 +1106,9 @@ def get_connectivity(
     dataset :       "public" | "production" | "sandbox", optional
                     Against which FlyWire dataset to query. If ``None`` will fall
                     back to the default dataset (see
-                    :func:`~fafbseg.flywire.set_default_dataset`).
+                    :func:`~fafbseg.flywire.set_default_dataset`). When querying
+                    a non-FlyWire dataset, `neuropils`, `min_score`, `transmitters`,
+                    `proofread_only` and `filtered` are quietly ignored!
 
     Returns
     -------
@@ -1101,6 +1138,15 @@ def get_connectivity(
     4  720575940603231916  720575940646122804      42
 
     """
+    # If the user is not requesting any of the FlyWire datasets, we have to
+    # quietly fall back to a vanilla query
+    if dataset not in _FLYWIRE_DATASETS:
+        neuropils = False
+        min_score = None
+        filtered = False
+        transmitters = False
+        proofread_only = False
+
     if not upstream and not downstream:
         raise ValueError("`upstream` and `downstream` must not both be False")
 
@@ -1139,7 +1185,9 @@ def get_connectivity(
     else:
         _check_ids(ids, materialization=materialization, dataset=dataset)
 
-    columns = ["pre_pt_root_id", "post_pt_root_id", "cleft_score", "id"]
+    columns = ["pre_pt_root_id", "post_pt_root_id", "id"]
+    if min_score or filtered:
+        columns.append("cleft_score")
     sv_cols = ["pre_pt_supervoxel_id", "post_pt_supervoxel_id"]
 
     if transmitters:
