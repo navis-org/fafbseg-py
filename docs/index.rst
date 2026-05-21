@@ -48,7 +48,7 @@ How to cite
 If you use ``fafbseg`` for your publication, please cite the two FlyWire papers
 and the original FAFB dataset publication.
 
-1. "*Whole-brain annotation and multi-connectome cell typing of Drosophila*" Schlegel *et al.*, Nature (2024); https://doi.org/10.1038/
+1. "*Whole-brain annotation and multi-connectome cell typing of Drosophila*" Schlegel *et al.*, Nature (2024); https://doi.org/10.1038/s41586-024-07686-5
 2. "*Neuronal wiring diagram of an adult brain*" Dorkenwald *et al.*, Nature (2024); https://doi.org/10.1038/s41586-024-07558-y
 3. "*A Complete Electron Microscopy Volume of the Brain of Adult Drosophila melanogaster*" Zheng *et al.*, Cell (2018); https://doi.org/10.1016/j.cell.2018.06.019
 
