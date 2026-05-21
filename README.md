@@ -32,7 +32,7 @@ pip3 install git+https://github.com/flyconnectome/fafbseg-py.git
 ## How to cite
 If you use `fafbseg` for your publication, please cite the two FlyWire papers:
 
-1. "_Whole-brain annotation and multi-connectome cell typing quantifies circuit stereotypy in Drosophila_" Schlegel _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546055
-2. "_Neuronal wiring diagram of an adult brain_" Dorkenwald _et al._, bioRxiv (2023); doi: https://doi.org/10.1101/2023.06.27.546656
+1. "_Whole-brain annotation and multi-connectome cell typing of Drosophila_" Schlegel _et al._, Nature (2024); doi: https://doi.org/10.1038/
+2. "_Neuronal wiring diagram of an adult brain_" Dorkenwald _et al._, Nature (2024); doi: https://doi.org/10.1038/s41586-024-07558-y
 
 Depending on what data you used (e.g. neurotransmitter predictions) you might need to cite additional publications. Please see the [Citation Guidelines](https://codex.flywire.ai/about_flywire) on Codex.
