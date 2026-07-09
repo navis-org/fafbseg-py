@@ -336,29 +336,34 @@ def get_cave_client(*, dataset=None, token=None, check_stale=True, force_new=Fal
 
     datastack = CAVE_DATASETS.get(dataset, dataset)
 
+    # Check if cache is invalid
     if datastack in cave_clients and not force_new and check_stale:
-        # Get the existing client
-        client = cave_clients[datastack]
-        # Get the (likely cached) materialization meta data
-        mds = client.materialize.get_versions_metadata()
-        # Check if any of the versions are expired
         now = pytz.UTC.localize(dt.datetime.utcnow())
-        for v in mds:
-            if v["expires_on"] <= now:
-                force_new = True
-                break
+        if cave_clients[datastack]._expires_on <= now:
+            force_new = True
 
-        # Over the weekend no new versions are materialized. The last version
-        # from Friday will persist into middle of the next week - i.e. not
-        # expire on Monday. Therefore, on Mondays only, we will also
-        # force an update if the client is older than 30 minutes
-        if now.weekday() in (0,) and not force_new:
-            if (dt.datetime.now() - client._created_at) > dt.timedelta(minutes=30):
-                force_new = True
-
+    # Initialize client if not in cache or if cache is stale
     if datastack not in cave_clients or force_new:
-        cave_clients[datastack] = CAVEclient(datastack, auth_token=token)
-        cave_clients[datastack]._created_at = dt.datetime.now()
+        client = CAVEclient(datastack, auth_token=token)
+        client._created_at = dt.datetime.now()
+        meta = client.materialize.get_versions_metadata()
+        client._expires_on = min([v["expires_on"] for v in meta])
+
+        # Timestamp of the first version to expire
+
+        # Add a bit of a cooldown if the latest version is delayed
+        now = pytz.UTC.localize(dt.datetime.utcnow())
+        if client._expires_on <= now:
+            client._expires_on = now + dt.timedelta(minutes=30)
+
+        # Expire after at most 12h
+        now_plus_12h = now + dt.timedelta(hours=12)
+        if client._expires_on > now_plus_12h:
+            client._expires_on = now_plus_12h
+
+        # Only store after we have set all extra properties to avoid
+        # saving an incomplete client in case of an error
+        cave_clients[datastack] = client
 
     # The public datastack configuration currently does not set the .synapse_table
     # That's intentional to avoid people using it - they are supposed to use the filtered view
