@@ -103,6 +103,7 @@ NUC_TABLES = {
     "flywire_fafb_public": "nuclei_v1",
     "flywire_fafb_production": "nuclei_v1",
     "fanc_production_mar2021": "nucleus_mar2022",
+    "wclee_aedes_brain": "nuclei_v1_aedes"
 }
 COMMUNITY_ANNOTATION_TABLE = "neuron_information_v2"
 _annotation_tables = None
