@@ -322,7 +322,7 @@ def get_transmitter_predictions(
             syn = syn[~syn.neuropil.isin(filter_out)]
 
         # Avoid setting-on-copy warning
-        if syn._is_view:
+        if getattr(syn, '_is_view', False):
             syn = syn.copy()
 
     # Process the predictions
@@ -515,7 +515,8 @@ def get_synapses(
         "post_pt_position",
         "id",
     ]
-    if min_score or filtered:
+    # Non-FlyWire synapse tables (e.g. Aedes) don't have a cleft score
+    if dataset in _FLYWIRE_DATASETS:
         columns.append("cleft_score")
     sv_cols = ["pre_pt_supervoxel_id", "post_pt_supervoxel_id"]
 
@@ -635,7 +636,7 @@ def get_synapses(
         syn = syn[(syn.pre != 0) & (syn.post != 0)]
 
     # Avoid copy warning
-    if syn._is_view:
+    if getattr(syn, '_is_view', False):
         syn = syn.copy()
 
     if neuropils:
@@ -653,14 +654,18 @@ def get_synapses(
             presyn = postsyn = pd.DataFrame([])
             add_cols = ["neuropil"] if neuropils else []
             if pre:
-                cols = ["pre_x", "pre_y", "pre_z", "cleft_score", "post"] + add_cols
+                cols = ["pre_x", "pre_y", "pre_z", "post"] + add_cols
+                if "cleft_score" in syn.columns:
+                    cols.insert(3, "cleft_score")
                 presyn = syn.loc[syn.pre == np.int64(n.id), cols].rename(
                     {"pre_x": "x", "pre_y": "y", "pre_z": "z", "post": "partner_id"},
                     axis=1,
                 )
                 presyn["type"] = "pre"
             if post:
-                cols = ["post_x", "post_y", "post_z", "cleft_score", "pre"] + add_cols
+                cols = ["post_x", "post_y", "post_z", "pre"] + add_cols
+                if "cleft_score" in syn.columns:
+                    cols.insert(3, "cleft_score")
                 postsyn = syn.loc[syn.post == np.int64(n.id), cols].rename(
                     {"post_x": "x", "post_y": "y", "post_z": "z", "pre": "partner_id"},
                     axis=1,
@@ -973,7 +978,7 @@ def get_adjacency(
             if filter_out:
                 syn = syn[~syn.neuropil.isin(filter_out)]
 
-            if syn._is_view:
+            if getattr(syn, '_is_view', False):
                 syn = syn.copy()
 
     # Rename some of those columns
@@ -1472,7 +1477,7 @@ def get_supervoxel_synapses(
     #    syn = syn[syn.cleft_score >= min_score]
 
     # Avoid setting-on-copy warnings
-    if syn._is_view:
+    if getattr(syn, '_is_view', False):
         syn = syn.copy()
 
     return syn
