@@ -6,6 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version:
           - "3.11"
@@ -32,7 +33,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install --upgrade pip
-        pip install zstandard==0.16.0
         pip install numpy
         pip install flybrains
         pip install pyarrow
